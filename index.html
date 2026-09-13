@@ -36,12 +36,13 @@ const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABA
 
 const INCENTIVE_PER_DEAL = 30000;
 const STATUS = {
+  '청약대기': { fg: '#6B3FA0', bg: '#F1E6FA', border: '#C9A6E8' },
   '신규': { fg: '#5F5E5A', bg: '#F1EFE8', border: '#D3D1C7' },
   '상담중': { fg: '#0C447C', bg: '#E6F1FB', border: '#85B7EB' },
   '계약완료': { fg: '#085041', bg: '#E1F5EE', border: '#5DCAA5' },
   '보류': { fg: '#854F0B', bg: '#FAEEDA', border: '#EF9F27' },
 };
-const STATUS_ORDER = ['신규', '상담중', '계약완료', '보류'];
+const STATUS_ORDER = ['청약대기', '신규', '상담중', '계약완료', '보류'];
 const STAGES = [
   { key: 'call1', label: '전화', icon: '📞' },
   { key: 'sms2', label: '문자', icon: '✉️' },
@@ -510,6 +511,34 @@ function AccessLogPanel({ logs, onRefresh }) {
   );
 }
 
+function InquiryPanel({ inquiries, onOpen }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {inquiries.length === 0 && (
+        <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <p className="text-sm" style={{ color: '#9B998F' }}>청약대기 중인 신청이 없습니다.</p>
+        </div>
+      )}
+      {inquiries.map(c => (
+        <div key={c.id} onClick={() => onOpen(c)} className="rounded-xl p-3.5 cursor-pointer" style={{ background: '#FFFFFF', border: '1px solid ' + (c.reviewed ? '#E4E2D9' : '#C9A6E8') }}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
+              <StatusBadge status={c.status} />
+              {!c.reviewed && <span style={{ background: '#6B3FA0', color: '#FFFFFF' }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">NEW</span>}
+            </div>
+          </div>
+          {(c.complex || c.unit) && <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>}
+          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[12.5px]" style={{ color: '#6B6A63' }}>
+            <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
+            <span className="flex items-center gap-1">📅 접수 {c.visit_date}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage }) {
   return (
     <div className="flex flex-col gap-2.5">
@@ -859,6 +888,58 @@ function isInLastMonth(dateStr) {
   return d.getFullYear() === lastMonth.getFullYear() && d.getMonth() === lastMonth.getMonth();
 }
 
+function QRCategoryPanel({ qrCodes, onAdd, onDelete }) {
+  const [name, setName] = useState('');
+  const [copiedId, setCopiedId] = useState(null);
+  const baseUrl = `${window.location.origin}${window.location.pathname}`;
+
+  function handleAdd() {
+    if (!name.trim()) return;
+    onAdd(name.trim());
+    setName('');
+  }
+
+  function copyLink(id, link) {
+    navigator.clipboard.writeText(link).then(() => { setCopiedId(id); setTimeout(() => setCopiedId(null), 1500); });
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+        <p className="text-[13px] font-medium mb-2" style={{ color: '#1C2620' }}>새 단지 QR 만들기</p>
+        <div className="flex gap-2">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="아파트 단지명 입력" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none" />
+          <button onClick={handleAdd} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-sm font-medium whitespace-nowrap">추가</button>
+        </div>
+        <p className="text-[11.5px] mt-2" style={{ color: '#B0AEA4' }}>이 목록은 관리자만 추가·삭제할 수 있습니다. 영업사원은 볼 수 없어요.</p>
+      </div>
+
+      <div className="flex flex-col gap-2.5">
+        {qrCodes.length === 0 && <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}><p className="text-sm" style={{ color: '#9B998F' }}>등록된 단지 QR이 없습니다.</p></div>}
+        {qrCodes.map(q => {
+          const link = `${baseUrl}?inquiry=1&apt=${encodeURIComponent(q.complex)}`;
+          const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(link)}`;
+          return (
+            <div key={q.id} className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="font-semibold text-[14px]" style={{ color: '#1C2620' }}>{q.complex}</p>
+                <button onClick={() => { if (confirm('이 QR을 삭제할까요?')) onDelete(q.id); }} className="text-[11.5px] font-medium" style={{ color: '#A32D2D' }}>삭제</button>
+              </div>
+              <div className="flex flex-col items-center gap-2 py-1">
+                <img src={qrImg} alt={`${q.complex} QR 코드`} width={150} height={150} style={{ borderRadius: '8px', border: '1px solid #E4E2D9' }} />
+              </div>
+              <div className="flex gap-2 mt-2">
+                <input readOnly value={link} className="flex-1 text-[11.5px] rounded-lg px-3 py-2 outline-none" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#4A4A45' }} />
+                <button onClick={() => copyLink(q.id, link)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-[12px] font-medium whitespace-nowrap">{copiedId === q.id ? '복사됨' : '복사'}</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Dashboard({ currentUser, onLogout }) {
   const isAdmin = currentUser.role === 'admin';
   const myId = currentUser.id;
@@ -876,6 +957,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [pendingUsers, setPendingUsers] = useState([]);
   const [departedUsers, setDepartedUsers] = useState([]);
   const [accessLogs, setAccessLogs] = useState([]);
+  const [qrCodes, setQrCodes] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [allStaff, setAllStaff] = useState([]);
   const [inboxMessages, setInboxMessages] = useState([]);
@@ -910,6 +992,8 @@ function Dashboard({ currentUser, onLogout }) {
       setDepartedUsers(departedData || []);
       const { data: logData } = await supabase.from('access_logs').select('*').order('created_at', { ascending: false }).limit(500);
       setAccessLogs(logData || []);
+      const { data: qrData } = await supabase.from('qr_codes').select('*').order('created_at', { ascending: false });
+      setQrCodes(qrData || []);
     }
     setLoading(false);
   }
@@ -925,6 +1009,8 @@ function Dashboard({ currentUser, onLogout }) {
   };
   const canEdit = (c) => isAdmin || c.rep_id === myId;
   const departedCustomers = useMemo(() => customers.filter(c => c.rep_id && departedUsers.some(u => u.id === c.rep_id)), [customers, departedUsers]);
+  const inquiryCustomers = useMemo(() => customers.filter(c => c.status === '청약대기').sort((a, b) => new Date(b.visit_date) - new Date(a.visit_date)), [customers]);
+  const unreviewedInquiryCount = useMemo(() => inquiryCustomers.filter(c => !c.reviewed).length, [inquiryCustomers]);
 
   const filtered = useMemo(() => customers.filter(c => {
     if (!c.rep_id) return false;
@@ -947,7 +1033,7 @@ function Dashboard({ currentUser, onLogout }) {
     return true;
   }), [customers, search, statusFilter, repFilter, isAdmin, myDbFilter, myId, marketingFilter, departedUsers]);
 
-  const unassignedCustomers = useMemo(() => customers.filter(c => !c.rep_id), [customers]);
+  const unassignedCustomers = useMemo(() => customers.filter(c => !c.rep_id && c.status !== '청약대기'), [customers]);
 
   const scope = isAdmin ? customers.filter(c => c.rep_id) : customers.filter(c => c.rep_id === myId);
   const stats = useMemo(() => {
@@ -982,6 +1068,24 @@ function Dashboard({ currentUser, onLogout }) {
   function openExisting(c) {
     setEditing({ ...c });
     logAccess('조회', c);
+  }
+
+  async function openInquiry(c) {
+    if (!c.reviewed) {
+      await supabase.from('customers').update({ reviewed: true }).eq('id', c.id);
+      setCustomers(prev => prev.map(x => x.id === c.id ? { ...x, reviewed: true } : x));
+    }
+    setEditing({ ...c, reviewed: true });
+    logAccess('조회', c);
+  }
+
+  async function addQrCode(complex) {
+    const { data, error } = await supabase.from('qr_codes').insert({ complex, created_by: myId }).select().single();
+    if (!error) setQrCodes(prev => [data, ...prev]);
+  }
+  async function deleteQrCode(id) {
+    await supabase.from('qr_codes').delete().eq('id', id);
+    setQrCodes(prev => prev.filter(q => q.id !== id));
   }
 
   async function saveCustomer(rawData) {
@@ -1136,10 +1240,14 @@ function Dashboard({ currentUser, onLogout }) {
             <button onClick={() => setTab('unassigned')} style={{ background: tab === 'unassigned' ? '#FFFFFF' : 'transparent', color: tab === 'unassigned' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
               미배정DB {unassignedCustomers.length > 0 && <span style={{ background: '#C98A2E', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{unassignedCustomers.length}</span>}
             </button>
+            <button onClick={() => setTab('inquiry')} style={{ background: tab === 'inquiry' ? '#FFFFFF' : 'transparent', color: tab === 'inquiry' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
+              청약대기 {unreviewedInquiryCount > 0 && <span style={{ background: '#6B3FA0', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{unreviewedInquiryCount}</span>}
+            </button>
             <button onClick={() => setTab('departed')} style={{ background: tab === 'departed' ? '#FFFFFF' : 'transparent', color: tab === 'departed' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
               퇴사원DB {departedCustomers.length > 0 && <span style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{departedCustomers.length}</span>}
             </button>
             <button onClick={() => setTab('logs')} style={{ background: tab === 'logs' ? '#FFFFFF' : 'transparent', color: tab === 'logs' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">접근 로그</button>
+            <button onClick={() => setTab('qr')} style={{ background: tab === 'qr' ? '#FFFFFF' : 'transparent', color: tab === 'qr' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">단지별QR</button>
           </div>
         )}
         {!isAdmin && (
@@ -1166,10 +1274,14 @@ function Dashboard({ currentUser, onLogout }) {
           <ContractCalendar customers={customers} salesUsers={salesUsers} onDeleteContracts={bulkDeleteCustomers} />
         ) : tab === 'unassigned' && isAdmin ? (
           <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} />
+        ) : tab === 'inquiry' && isAdmin ? (
+          <InquiryPanel inquiries={inquiryCustomers} onOpen={openInquiry} />
         ) : tab === 'departed' && isAdmin ? (
           <UnassignedPanel unassigned={departedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} />
         ) : tab === 'logs' && isAdmin ? (
           <AccessLogPanel logs={accessLogs} onRefresh={refreshAccessLogs} />
+        ) : tab === 'qr' && isAdmin ? (
+          <QRCategoryPanel qrCodes={qrCodes} onAdd={addQrCode} onDelete={deleteQrCode} />
         ) : (
           <React.Fragment>
             <div className="flex flex-wrap gap-2.5">
@@ -1707,14 +1819,88 @@ function PublicApplyPage({ token }) {
   );
 }
 
+function PublicInquiryPage({ apt }) {
+  const [form, setForm] = useState({ name: '', phone: '', complex: apt || '', unit: '' });
+  const [privacyConsent, setPrivacyConsent] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
+  const [showPolicy, setShowPolicy] = useState(false);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+
+  useEffect(() => {
+    if (!submitted) return;
+    const timer = setTimeout(() => { window.close(); }, 3000);
+    return () => clearTimeout(timer);
+  }, [submitted]);
+
+  async function handleSubmit() {
+    if (!form.name.trim() || !form.phone.trim()) { setError('이름과 연락처는 필수입니다.'); return; }
+    if (!privacyConsent) { setError('개인정보 수집·이용 동의는 필수입니다.'); return; }
+    setError(''); setSaving(true);
+    const { error: rpcError } = await supabase.rpc('submit_inquiry', {
+      p_name: form.name, p_phone: form.phone, p_complex: form.complex, p_unit: form.unit,
+      p_privacy_consent: privacyConsent, p_marketing_consent: marketingConsent,
+    });
+    setSaving(false);
+    if (rpcError) { setError('접수 중 오류가 발생했습니다. 다시 시도해주세요.'); return; }
+    setSubmitted(true);
+  }
+
+  const shell = (content) => (
+    <div style={{ background: '#1C2620', minHeight: '100vh' }} className="w-full flex items-center justify-center px-5 py-10">
+      <div style={{ background: '#FFFFFF' }} className="w-full max-w-sm rounded-2xl p-6">{content}</div>
+    </div>
+  );
+
+  if (submitted) return shell(
+    <div className="text-center py-6">
+      <div className="text-3xl mb-3">✅</div>
+      <h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>상담 신청이 접수되었습니다</h2>
+      <p className="text-[13px] mt-2" style={{ color: '#6B6A63' }}>담당자가 순차적으로 연락드리겠습니다. 감사합니다.</p>
+      <p className="text-[11.5px] mt-3" style={{ color: '#B0AEA4' }}>잠시 후 이 창이 자동으로 닫힙니다.</p>
+    </div>
+  );
+
+  return shell(
+    <React.Fragment>
+      <p className="text-[11px] tracking-wide uppercase" style={{ color: '#7C9385' }}>방문 세차 정기권</p>
+      <h1 className="text-xl font-semibold mt-1 mb-1" style={{ color: '#1C2620' }}>세차 상담 신청</h1>
+      <p className="text-[12.5px] mb-4" style={{ color: '#6B6A63' }}>간단한 정보만 남겨주시면 담당자가 연락드립니다.</p>
+      <div className="flex flex-col gap-3">
+        <FieldInput label="이름 *" value={form.name} onChange={e => set('name', e.target.value)} placeholder="홍길동" />
+        <FieldInput label="연락처 *" value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} placeholder="010-0000-0000" maxLength={13} />
+        <FieldInput label="아파트 단지" value={form.complex} onChange={e => set('complex', e.target.value)} placeholder="한빛아파트" />
+        <FieldInput label="동/호수" value={form.unit} onChange={e => set('unit', e.target.value)} placeholder="101동 1203호 (선택)" />
+
+        <label className="flex items-start gap-2 text-[12.5px]" style={{ color: '#4A4A45' }}>
+          <input type="checkbox" className="mt-0.5" checked={privacyConsent} onChange={e => setPrivacyConsent(e.target.checked)} />
+          <span>(필수) 수집한 개인정보는 가입신청 및 고객관리 목적 이외에는 사용하지 않는다는 <button type="button" onClick={() => setShowPolicy(true)} style={{ color: '#0C447C', textDecoration: 'underline' }}>개인정보처리방침</button>에 동의합니다</span>
+        </label>
+        <label className="flex items-start gap-2 text-[12.5px]" style={{ color: '#4A4A45' }}>
+          <input type="checkbox" className="mt-0.5" checked={marketingConsent} onChange={e => setMarketingConsent(e.target.checked)} />
+          <span>(선택) 이벤트·할인·무료 실내세차 등 마케팅 정보 수신에 동의합니다</span>
+        </label>
+
+        {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
+        <button onClick={handleSubmit} disabled={saving} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="mt-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{saving ? '접수 중...' : '상담 신청하기'}</button>
+      </div>
+      {showPolicy && <PrivacyPolicyModal onClose={() => setShowPolicy(false)} />}
+    </React.Fragment>
+  );
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authView, setAuthView] = useState('login');
   const [checking, setChecking] = useState(true);
   const applyToken = new URLSearchParams(window.location.search).get('apply');
+  const inquiryParam = new URLSearchParams(window.location.search).get('inquiry');
+  const inquiryApt = new URLSearchParams(window.location.search).get('apt');
 
   useEffect(() => {
-    if (applyToken) { setChecking(false); return; }
+    if (applyToken || inquiryParam) { setChecking(false); return; }
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
@@ -1737,6 +1923,9 @@ function App() {
 
   if (applyToken) {
     return <PublicApplyPage token={applyToken} />;
+  }
+  if (inquiryParam) {
+    return <PublicInquiryPage apt={inquiryApt} />;
   }
 
   if (checking) {
