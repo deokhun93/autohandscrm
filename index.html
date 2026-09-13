@@ -969,7 +969,7 @@ function Dashboard({ currentUser, onLogout }) {
 
   async function loadAll() {
     setLoading(true);
-    const { data: custData } = await supabase.from('customers').select('*').order('visit_date', { ascending: false });
+    const { data: custData } = await supabase.from('customers').select('*').order('created_at', { ascending: false }).limit(5000);
     setCustomers(custData || []);
     const { data: salesData } = await supabase.from('profiles').select('*').eq('role', 'sales').eq('status', '승인');
     setSalesUsers(salesData || []);
