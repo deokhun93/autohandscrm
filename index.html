@@ -732,6 +732,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [statusFilter, setStatusFilter] = useState('전체');
   const [repFilter, setRepFilter] = useState('전체');
   const [myDbFilter, setMyDbFilter] = useState('all');
+  const [bulkSelected, setBulkSelected] = useState({});
   const [editing, setEditing] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [customers, setCustomers] = useState([]);
@@ -816,7 +817,8 @@ function Dashboard({ currentUser, onLogout }) {
     setEditing({ id: null, name: '', phone: '', complex: '', unit: '', visit_date: new Date().toISOString().slice(0, 10), rep_id: isAdmin ? (salesUsers[0] ? salesUsers[0].id : null) : myId, status: '신규', product: '', amount: 0, memo: '', call1: false, sms2: false, recall3: false });
   }
 
-  async function saveCustomer(data) {
+  async function saveCustomer(rawData) {
+    const data = { ...rawData, rep_id: rawData.rep_id || null };
     if (data.id == null) {
       const { id, ...rest } = data;
       const { data: inserted, error } = await supabase.from('customers').insert(rest).select().single();
@@ -904,6 +906,18 @@ function Dashboard({ currentUser, onLogout }) {
       await supabase.from('customers').update({ rep_id: repId }).in('id', batch);
     }
     setCustomers(prev => prev.map(c => ids.includes(c.id) ? { ...c, rep_id: repId } : c));
+  }
+  const bulkSelectedCount = Object.values(bulkSelected).filter(Boolean).length;
+  function toggleBulkSelect(id) { setBulkSelected(prev => ({ ...prev, [id]: !prev[id] })); }
+  async function bulkUnassign() {
+    const ids = Object.keys(bulkSelected).filter(id => bulkSelected[id]).map(Number);
+    if (ids.length === 0) return;
+    if (!confirm(`선택한 ${ids.length}건을 미배정 상태로 되돌릴까요?`)) return;
+    for (const batch of chunkArray(ids, 100)) {
+      await supabase.from('customers').update({ rep_id: null }).in('id', batch);
+    }
+    setCustomers(prev => prev.map(c => ids.includes(c.id) ? { ...c, rep_id: null } : c));
+    setBulkSelected({});
   }
 
   if (loading) {
@@ -1022,30 +1036,43 @@ function Dashboard({ currentUser, onLogout }) {
               {filtered.map(c => {
                 const editable = canEdit(c);
                 return (
-                  <div key={c.id} onClick={() => editable && setEditing({ ...c })} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', opacity: editable ? 1 : 0.75 }} className={"rounded-xl p-3.5 " + (editable ? "cursor-pointer" : "")}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
-                          <StatusBadge status={c.status} />
-                          {!editable && <span className="text-[11px]" style={{ color: '#B0AEA4' }}>· 조회 전용</span>}
+                  <div key={c.id} onClick={() => editable && setEditing({ ...c })} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', opacity: editable ? 1 : 0.75 }} className={"rounded-xl p-3.5 flex items-start gap-2.5 " + (editable ? "cursor-pointer" : "")}>
+                    {isAdmin && (
+                      <input type="checkbox" className="mt-1.5 shrink-0" checked={!!bulkSelected[c.id]} onClick={e => e.stopPropagation()} onChange={() => toggleBulkSelect(c.id)} />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
+                            <StatusBadge status={c.status} />
+                            {!editable && <span className="text-[11px]" style={{ color: '#B0AEA4' }}>· 조회 전용</span>}
+                          </div>
+                          {(c.complex || c.unit) && <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex} · {c.unit}</p>}
                         </div>
-                        {(c.complex || c.unit) && <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex} · {c.unit}</p>}
                       </div>
+                      <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
+                        <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
+                        <span className="flex items-center gap-1">📅 방문 {c.visit_date}</span>
+                        <span className="flex items-center gap-1">👤 {repName(c.rep_id)}</span>
+                        {c.product && <span className="flex items-center gap-1">📦 {c.product}</span>}
+                      </div>
+                      <div className="mt-2.5"><StageTracker customer={c} editable={editable} onToggle={toggleStage} /></div>
+                      {c.status === '계약완료' && c.amount > 0 && <p className="text-[13px] font-medium mt-2" style={{ color: '#085041' }}>월 {currency(c.amount)}</p>}
+                      {c.memo && <p className="text-[12.5px] mt-1.5" style={{ color: '#8B8A80' }}>{c.memo}</p>}
                     </div>
-                    <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
-                      <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
-                      <span className="flex items-center gap-1">📅 방문 {c.visit_date}</span>
-                      <span className="flex items-center gap-1">👤 {repName(c.rep_id)}</span>
-                      {c.product && <span className="flex items-center gap-1">📦 {c.product}</span>}
-                    </div>
-                    <div className="mt-2.5"><StageTracker customer={c} editable={editable} onToggle={toggleStage} /></div>
-                    {c.status === '계약완료' && c.amount > 0 && <p className="text-[13px] font-medium mt-2" style={{ color: '#085041' }}>월 {currency(c.amount)}</p>}
-                    {c.memo && <p className="text-[12.5px] mt-1.5" style={{ color: '#8B8A80' }}>{c.memo}</p>}
                   </div>
                 );
               })}
             </div>
+
+            {isAdmin && bulkSelectedCount > 0 && (
+              <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2" style={{ background: '#1C2620' }}>
+                <span className="text-[12.5px] shrink-0" style={{ color: '#FFFFFF' }}>{bulkSelectedCount}건 선택됨</span>
+                <button onClick={() => setBulkSelected({})} style={{ border: '1px solid #3D4A41', color: '#FFFFFF' }} className="text-[12px] px-3 py-2 rounded-lg whitespace-nowrap">선택 해제</button>
+                <button onClick={bulkUnassign} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">미배정으로 변경</button>
+              </div>
+            )}
           </React.Fragment>
         )}
       </div>
@@ -1118,6 +1145,7 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
             <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>담당 영업사원</label>
             {isAdmin ? (
               <select value={form.rep_id || ''} onChange={e => set('rep_id', e.target.value)} style={inputStyle} className="w-full mt-1 rounded-lg px-3 py-2.5 text-sm outline-none">
+                <option value="">미배정</option>
                 {salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             ) : <p className="mt-1 text-sm py-2.5" style={{ color: '#1C2620' }}>본인 담당</p>}
