@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>아파트 방문 세차 정기권 · 고객관리</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<style>
+  body { margin:0; background:#EFF1EC; font-family:-apple-system, BlinkMacSystemFont, "Malgun Gothic", "Segoe UI", sans-serif; }
+  input, select, textarea, button { font-family: inherit; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- ================================================================
+     설정: 아래 두 값만 본인의 Supabase 프로젝트 값으로 바꾸면 됩니다.
+     Supabase 대시보드 > Project Settings > API 에서 확인 가능합니다.
+     ================================================================ -->
+<script>
+  window.SUPABASE_URL = "https://kkmmfbqiddirhbiqtqsu.supabase.co";
+  window.SUPABASE_ANON_KEY = "sb_publishable_4UNSE0BXfpI5lp4uc-ulxA_EqldYgh-";
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, storageKey: 'carwash-crm-auth' }
+});
+
+const INCENTIVE_PER_DEAL = 30000;
+const STATUS = {
+  '신규': { fg: '#5F5E5A', bg: '#F1EFE8', border: '#D3D1C7' },
+  '상담중': { fg: '#0C447C', bg: '#E6F1FB', border: '#85B7EB' },
+  '계약완료': { fg: '#085041', bg: '#E1F5EE', border: '#5DCAA5' },
+  '보류': { fg: '#854F0B', bg: '#FAEEDA', border: '#EF9F27' },
+};
+const STATUS_ORDER = ['신규', '상담중', '계약완료', '보류'];
+const STAGES = [
+  { key: 'call1', label: '전화', icon: '📞' },
+  { key: 'sms2', label: '문자', icon: '✉️' },
+  { key: 'recall3', label: '재콜', icon: '📲' },
+];
+
+function currency(n) { return (n || 0).toLocaleString('ko-KR') + '원'; }
+function formatPhoneInput(v) {
+  const digits = String(v).replace(/\D/g, '').slice(0, 11);
+  if (digits.length < 4) return digits;
+  if (digits.length < 8) return digits.slice(0, 3) + '-' + digits.slice(3);
+  return digits.slice(0, 3) + '-' + digits.slice(3, 7) + '-' + digits.slice(7);
+}
+const PRICE_TABLE = {
+  '격주': { '소형': 30000, '중형': 40000, '대형': 50000 },
+  '월4회': { '소형': 50000, '중형': 60000, '대형': 70000 },
+};
+
+// ---- 개인정보 마스킹 유틸 ----
+function maskName(name) {
+  if (!name) return '';
+  const chars = Array.from(name);
+  if (chars.length <= 1) return chars.join('');
+  if (chars.length === 2) return chars[0] + '*';
+  return chars[0] + '*'.repeat(chars.length - 2) + chars[chars.length - 1];
+}
+function maskPhone(phone) {
+  if (!phone) return '';
+  const parts = String(phone).split('-');
+  if (parts.length === 3) {
+    const [a, b, c] = parts;
+    const maskedB = '*'.repeat(b.length);
+    const maskedC = c.length > 3 ? '*' + c.slice(1) : c;
+    return `${a}-${maskedB}-${maskedC}`;
+  }
+  const s = String(phone);
+  return s.length > 6 ? s.slice(0, 3) + '*'.repeat(s.length - 6) + s.slice(-3) : s;
+}
+function maskAccount(account) {
+  if (!account) return '';
+  const s = String(account);
+  const digitIdx = [];
+  for (let i = 0; i < s.length; i++) if (/\d/.test(s[i])) digitIdx.push(i);
+  if (digitIdx.length <= 6) return s;
+  const hideSet = new Set(digitIdx.slice(3, digitIdx.length - 3));
+  return s.split('').map((ch, i) => hideSet.has(i) ? '*' : ch).join('');
+}
+function MaskedText({ value, type }) {
+  const [revealed, setRevealed] = useState(false);
+  if (!value) return null;
+  const masked = type === 'name' ? maskName(value) : type === 'phone' ? maskPhone(value) : maskAccount(value);
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span>{revealed ? value : masked}</span>
+      <button type="button" onClick={(e) => { e.stopPropagation(); setRevealed(r => !r); }} className="text-[11px] leading-none" style={{ color: '#9B998F' }} aria-label={revealed ? '가리기' : '보기'}>
+        {revealed ? '🙈' : '👁'}
+      </button>
+    </span>
+  );
+}
+
+function FieldInput({ label, ...props }) {
+  return (
+    <div>
+      <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>{label}</label>
+      <input {...props} style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full mt-1 rounded-lg px-3 py-2.5 text-sm outline-none" />
+    </div>
+  );
+}
+
+function ConfigWarning() {
+  if (window.SUPABASE_URL && !window.SUPABASE_URL.includes('여기에')) return null;
+  return (
+    <div style={{ background: '#FFF4E5', border: '1px solid #EF9F27', color: '#854F0B' }} className="fixed top-0 left-0 right-0 z-50 text-[12.5px] px-4 py-2 text-center">
+      ⚠ 아직 Supabase 연결 정보가 입력되지 않았습니다. 파일 상단의 SUPABASE_URL / SUPABASE_ANON_KEY를 채워주세요.
+    </div>
+  );
+}
+
+function LoginPage({ onLogin, onGotoSignup }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(''); setLoading(true);
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (signInError) {
+      const msg = (signInError.message || '').toLowerCase();
+      if (msg.includes('confirm')) setError('이메일 인증이 필요합니다. 가입 시 받은 메일에서 인증 링크를 눌러주세요.');
+      else setError('이메일 또는 비밀번호가 일치하지 않습니다.');
+      setLoading(false); return;
+    }
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+    if (profileError || !profile) { setError('프로필 정보를 불러오지 못했습니다.'); setLoading(false); return; }
+    if (profile.status === '대기') { setError('관리자 승인 대기 중인 계정입니다. 승인 후 로그인할 수 있습니다.'); await supabase.auth.signOut(); setLoading(false); return; }
+    if (profile.status === '거절') { setError('가입이 거절된 계정입니다. 관리자에게 문의해주세요.'); await supabase.auth.signOut(); setLoading(false); return; }
+    if (profile.status === '탈퇴') { setError('탈퇴 처리된 계정입니다. 관리자에게 문의해주세요.'); await supabase.auth.signOut(); setLoading(false); return; }
+    setLoading(false);
+    onLogin(profile);
+  }
+
+  return (
+    <div style={{ background: '#1C2620', minHeight: '100vh' }} className="w-full flex items-center justify-center px-5">
+      <div style={{ background: '#FFFFFF' }} className="w-full max-w-sm rounded-2xl p-6">
+        <p className="text-[11px] tracking-wide uppercase" style={{ color: '#7C9385' }}>방문 세차 정기권 · 신규고객관리</p>
+        <h1 className="text-xl font-semibold mt-1 mb-6" style={{ color: '#1C2620' }}>로그인</h1>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <FieldInput label="이메일" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" />
+          <FieldInput label="비밀번호" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="비밀번호를 입력하세요" />
+          {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
+          <button type="submit" disabled={loading} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="mt-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{loading ? '로그인 중...' : '로그인'}</button>
+        </form>
+        <button onClick={onGotoSignup} className="w-full text-center text-[13px] mt-4" style={{ color: '#6B6A63' }}>
+          계정이 없으신가요? <span style={{ color: '#2F6B4F', fontWeight: 600 }}>회원가입</span>
+        </button>
+        <div className="mt-5 pt-4 text-[11.5px] leading-relaxed" style={{ borderTop: '1px solid #E4E2D9', color: '#B0AEA4' }}>
+          최초 관리자 계정은 회원가입 후 Supabase Table Editor에서 role을 admin으로 직접 변경해야 합니다.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignupPage({ onGotoLogin }) {
+  const [form, setForm] = useState({ email: '', password: '', passwordConfirm: '', name: '', phone: '', birth: '', bank: '', account: '', address: '' });
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const required = ['email', 'password', 'name', 'phone', 'birth', 'bank', 'account', 'address'];
+    if (required.some(k => !String(form[k]).trim())) { setError('모든 항목을 입력해주세요.'); return; }
+    if (form.password !== form.passwordConfirm) { setError('비밀번호가 일치하지 않습니다.'); return; }
+    setError(''); setLoading(true);
+
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: form.email.trim(),
+      password: form.password,
+      options: { data: { name: form.name, phone: form.phone, birth: form.birth, bank: form.bank, account: form.account, address: form.address } }
+    });
+    setLoading(false);
+    if (signUpError) { setError(signUpError.message || '가입 중 오류가 발생했습니다.'); return; }
+    if (!data.user) { setError('가입 처리 중 오류가 발생했습니다.'); return; }
+    setDone(true);
+  }
+
+  if (done) {
+    return (
+      <div style={{ background: '#1C2620', minHeight: '100vh' }} className="w-full flex items-center justify-center px-5">
+        <div style={{ background: '#FFFFFF' }} className="w-full max-w-sm rounded-2xl p-6 text-center">
+          <div className="text-3xl mb-3">⏳</div>
+          <h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>가입 신청이 완료되었습니다</h2>
+          <p className="text-[13px] mt-2" style={{ color: '#6B6A63' }}>관리자 승인 후 로그인할 수 있습니다. 이메일 인증 안내가 온다면 인증도 완료해주세요.</p>
+          <button onClick={onGotoLogin} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full mt-5 text-sm font-medium py-2.5 rounded-lg">로그인 화면으로</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: '#1C2620', minHeight: '100vh' }} className="w-full flex items-center justify-center px-5 py-10">
+      <div style={{ background: '#FFFFFF' }} className="w-full max-w-sm rounded-2xl p-6">
+        <p className="text-[11px] tracking-wide uppercase" style={{ color: '#7C9385' }}>영업사원 계정 신청</p>
+        <h1 className="text-xl font-semibold mt-1 mb-5" style={{ color: '#1C2620' }}>회원가입</h1>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <FieldInput label="이메일 *" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com" />
+          <div className="grid grid-cols-2 gap-2">
+            <FieldInput label="비밀번호 *" type="password" value={form.password} onChange={e => set('password', e.target.value)} />
+            <FieldInput label="비밀번호 확인 *" type="password" value={form.passwordConfirm} onChange={e => set('passwordConfirm', e.target.value)} />
+          </div>
+          <FieldInput label="이름 *" value={form.name} onChange={e => set('name', e.target.value)} placeholder="홍길동" />
+          <FieldInput label="휴대폰번호 *" value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} placeholder="010-0000-0000" maxLength={13} />
+          <FieldInput label="생년월일 *" type="date" value={form.birth} onChange={e => set('birth', e.target.value)} />
+          <div className="grid grid-cols-2 gap-2">
+            <FieldInput label="은행명 *" value={form.bank} onChange={e => set('bank', e.target.value)} placeholder="국민은행" />
+            <FieldInput label="계좌번호 *" value={form.account} onChange={e => set('account', e.target.value)} placeholder="123-456-789012" />
+          </div>
+          <FieldInput label="집주소 *" value={form.address} onChange={e => set('address', e.target.value)} placeholder="대구광역시 ..." />
+          {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
+          <button type="submit" disabled={loading} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="mt-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{loading ? '처리 중...' : '가입 신청하기'}</button>
+        </form>
+        <button onClick={onGotoLogin} className="w-full text-center text-[13px] mt-4" style={{ color: '#6B6A63' }}>
+          이미 계정이 있으신가요? <span style={{ color: '#2F6B4F', fontWeight: 600 }}>로그인</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  const s = STATUS[status] || STATUS['신규'];
+  return <span style={{ background: s.bg, color: s.fg, border: `1px solid ${s.border}` }} className="text-xs font-medium px-2.5 py-1 rounded-full whitespace-nowrap">{status}</span>;
+}
+
+function StatCard({ emoji, label, value, tint }) {
+  return (
+    <div className="flex-1 min-w-[140px] rounded-xl p-4 flex items-center gap-3" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+      <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 text-lg" style={{ background: tint + '22' }}>{emoji}</div>
+      <div className="min-w-0">
+        <p className="text-[13px] leading-tight" style={{ color: '#6B6A63' }}>{label}</p>
+        <p className="text-xl font-semibold leading-tight" style={{ color: '#1C2620', fontVariantNumeric: 'tabular-nums' }}>{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function StageTracker({ customer, editable, onToggle }) {
+  return (
+    <div className="flex items-center gap-1.5" onClick={e => editable && e.stopPropagation()}>
+      {STAGES.map(s => {
+        const done = customer[s.key];
+        return (
+          <button key={s.key} disabled={!editable} onClick={() => editable && onToggle(customer.id, s.key)}
+            style={{ background: done ? '#2F6B4F' : '#F1EFE8', color: done ? '#FFFFFF' : '#9B998F', border: '1px solid ' + (done ? '#2F6B4F' : '#E4E2D9'), cursor: editable ? 'pointer' : 'default' }}
+            className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium">
+            <span>{done ? '✔' : s.icon}</span>{s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Leaderboard({ salesUsers, customers, currentUserId }) {
+  const rows = salesUsers.map(u => {
+    const deals = customers.filter(c => c.rep_id === u.id && c.status === '계약완료').length;
+    return { id: u.id, name: u.name, deals, incentive: deals * INCENTIVE_PER_DEAL };
+  }).sort((a, b) => b.deals - a.deals);
+  const maxDeals = Math.max(1, ...rows.map(r => r.deals));
+  return (
+    <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+      <div className="flex items-center gap-1.5 mb-2.5">
+        <span className="text-[15px]">🏆</span>
+        <p className="text-[13px] font-medium" style={{ color: '#1C2620' }}>영업사원별 유치완료 현황</p>
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {rows.length === 0 && <p className="text-[12.5px]" style={{ color: '#B0AEA4' }}>승인된 영업사원이 없습니다.</p>}
+        {rows.map((r, i) => {
+          const isMe = r.id === currentUserId;
+          return (
+            <div key={r.id} className="flex items-center gap-2.5">
+              <span className="text-[12px] w-4 text-center shrink-0" style={{ color: i === 0 && r.deals > 0 ? '#C98A2E' : '#B0AEA4' }}>{i + 1}</span>
+              <span className="text-[13px] w-16 shrink-0 font-medium truncate" style={{ color: isMe ? '#2F6B4F' : '#1C2620' }}>{r.name}{isMe ? ' (나)' : ''}</span>
+              <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: '#EFEEE8' }}>
+                <div style={{ width: (r.deals / maxDeals * 100) + '%', background: isMe ? '#2F6B4F' : '#B4B2A9' }} className="h-full rounded-full" />
+              </div>
+              <span className="text-[12px] w-14 text-right shrink-0" style={{ color: '#6B6A63' }}>{r.deals}건</span>
+              <span className="text-[12px] w-20 text-right shrink-0 font-medium" style={{ color: '#854F0B' }}>{currency(r.incentive)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ApprovalPanel({ pendingUsers, onApprove, onReject }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {pendingUsers.length === 0 && (
+        <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <p className="text-sm" style={{ color: '#9B998F' }}>승인 대기 중인 가입 신청이 없습니다.</p>
+        </div>
+      )}
+      {pendingUsers.map(u => (
+        <div key={u.id} className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={u.name} type="name" /></span>
+            <span style={{ background: '#FAEEDA', color: '#854F0B', border: '1px solid #EF9F27' }} className="text-[11px] px-2 py-0.5 rounded-full">승인 대기</span>
+          </div>
+          <div className="mt-2 flex flex-col gap-1 text-[12.5px]" style={{ color: '#6B6A63' }}>
+            <span className="flex items-center gap-1">☎ <MaskedText value={u.phone} type="phone" /> · 생년월일 {u.birth}</span>
+            <span className="flex items-center gap-1">🏦 {u.bank} <MaskedText value={u.account} type="account" /></span>
+            <span>🏠 {u.address}</span>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => onReject(u.id)} style={{ border: '1px solid #F0999540', color: '#A32D2D' }} className="flex-1 text-sm font-medium py-2 rounded-lg">거절</button>
+            <button onClick={() => onApprove(u.id)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-sm font-medium py-2 rounded-lg">승인</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Announcements({ isAdmin, announcements, onPost, onUpdate, onDelete }) {
+  const [text, setText] = useState('');
+  const [showPast, setShowPast] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+  const latest = announcements[0];
+  const past = announcements.slice(1);
+
+  function startEdit(a) { setEditingId(a.id); setEditText(a.content); }
+  function saveEdit() { if (editText.trim()) onUpdate(editingId, editText.trim()); setEditingId(null); }
+
+  function Item({ a, highlight }) {
+    if (editingId === a.id) {
+      return (
+        <div className="rounded-lg p-3" style={{ background: highlight ? '#FFF7E8' : '#F7F6F2', border: '1px solid ' + (highlight ? '#F0D9A0' : '#E4E2D9') }}>
+          <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={2} className="w-full rounded-lg px-2 py-1.5 text-[13px] outline-none" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} />
+          <div className="flex gap-2 mt-2">
+            <button onClick={() => setEditingId(null)} className="flex-1 text-[12px] py-1.5 rounded-lg" style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }}>취소</button>
+            <button onClick={saveEdit} className="flex-1 text-[12px] py-1.5 rounded-lg" style={{ background: '#2F6B4F', color: '#FFFFFF' }}>저장</button>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="rounded-lg p-3" style={{ background: highlight ? '#FFF7E8' : '#F7F6F2', border: '1px solid ' + (highlight ? '#F0D9A0' : '#E4E2D9') }}>
+        <p className="text-[13px] whitespace-pre-wrap" style={{ color: highlight ? '#1C2620' : '#4A4A45' }}>{a.content}</p>
+        <div className="flex items-center justify-between mt-1.5">
+          <p className="text-[11px]" style={{ color: '#B0AEA4' }}>{new Date(a.created_at).toLocaleString('ko-KR')}</p>
+          {isAdmin && (
+            <div className="flex gap-2.5">
+              <button onClick={() => startEdit(a)} className="text-[11px] font-medium" style={{ color: '#0C447C' }}>수정</button>
+              <button onClick={() => { if (confirm('이 공지사항을 삭제할까요?')) onDelete(a.id); }} className="text-[11px] font-medium" style={{ color: '#A32D2D' }}>삭제</button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+      <div className="flex items-center gap-1.5 mb-2.5">
+        <span className="text-[15px]">📢</span>
+        <p className="text-[13px] font-medium" style={{ color: '#1C2620' }}>공지사항</p>
+      </div>
+      {latest ? <Item a={latest} highlight={true} /> : <p className="text-[12.5px]" style={{ color: '#B0AEA4' }}>등록된 공지사항이 없습니다.</p>}
+
+      {isAdmin && (
+        <div className="flex gap-2 mt-2.5">
+          <input value={text} onChange={e => setText(e.target.value)} placeholder="새 공지사항을 입력하세요" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="flex-1 rounded-lg px-3 py-2 text-sm outline-none" />
+          <button onClick={() => { if (text.trim()) { onPost(text.trim()); setText(''); } }} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-sm font-medium">등록</button>
+        </div>
+      )}
+
+      {past.length > 0 && (
+        <button onClick={() => setShowPast(s => !s)} className="text-[12px] mt-3" style={{ color: '#6B6A63' }}>
+          {showPast ? '지난 공지사항 닫기 ▲' : `지난 공지사항 보기 (${past.length}) ▼`}
+        </button>
+      )}
+      {showPast && (
+        <div className="flex flex-col gap-2 mt-2">
+          {past.map(a => <Item key={a.id} a={a} highlight={false} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StaffPanel({ allStaff, onWithdraw, onMessage }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      {allStaff.length === 0 && (
+        <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <p className="text-sm" style={{ color: '#9B998F' }}>활동 중인 직원이 없습니다.</p>
+        </div>
+      )}
+      {allStaff.map(u => (
+        <div key={u.id} className="rounded-xl p-3.5 flex items-center justify-between gap-2" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-semibold text-[15px]" style={{ color: '#1C2620' }}>{u.name}</p>
+              <span style={{ background: u.role === 'admin' ? '#E6F1FB' : '#E1F5EE', color: u.role === 'admin' ? '#0C447C' : '#085041', border: '1px solid ' + (u.role === 'admin' ? '#85B7EB' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{u.role === 'admin' ? '관리자' : '영업사원'}</span>
+            </div>
+            <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={u.phone} type="phone" /></p>
+          </div>
+          <div className="flex gap-1.5 shrink-0">
+            <button onClick={() => onMessage(u)} style={{ border: '1px solid #85B7EB', color: '#0C447C' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">메시지</button>
+            {u.role !== 'admin' && <button onClick={() => onWithdraw(u.id)} style={{ border: '1px solid #F0999540', color: '#A32D2D' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">탈퇴</button>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MessageComposeModal({ target, onClose, onSend }) {
+  const [text, setText] = useState('');
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.5)' }}>
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-4">
+        <h2 className="text-base font-semibold mb-3" style={{ color: '#1C2620' }}>{target.name}님에게 메시지</h2>
+        <textarea value={text} onChange={e => setText(e.target.value)} rows={4} style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none" placeholder="메시지 내용을 입력하세요" />
+        <div className="flex gap-2 mt-3">
+          <button onClick={onClose} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">취소</button>
+          <button onClick={() => { if (text.trim()) onSend(text.trim()); }} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">보내기</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MessageCenter({ received, sent, staff, onMarkRead, onDelete, onClose }) {
+  const [tab, setTab] = useState('received');
+  const nameOf = (id) => (staff.find(u => u.id === id) || {}).name || '알 수 없음';
+  const list = tab === 'received' ? received : sent;
+  const unreadReceived = received.filter(m => !m.is_read).length;
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.5)' }}>
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm max-h-[80vh] overflow-y-auto p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>메시지함</h2>
+          <button onClick={onClose} className="text-lg" style={{ color: '#9B998F' }}>✕</button>
+        </div>
+        <div className="flex gap-2 mb-3">
+          <button onClick={() => setTab('received')} style={{ background: tab === 'received' ? '#1C2620' : '#F7F6F2', color: tab === 'received' ? '#FFFFFF' : '#4A4A45' }} className="flex-1 text-[12.5px] py-2 rounded-lg font-medium">받은 메시지함{unreadReceived > 0 ? ` (${unreadReceived})` : ''}</button>
+          <button onClick={() => setTab('sent')} style={{ background: tab === 'sent' ? '#1C2620' : '#F7F6F2', color: tab === 'sent' ? '#FFFFFF' : '#4A4A45' }} className="flex-1 text-[12.5px] py-2 rounded-lg font-medium">보낸 메시지함</button>
+        </div>
+        {list.length === 0 && <p className="text-sm text-center py-6" style={{ color: '#9B998F' }}>{tab === 'received' ? '받은' : '보낸'} 메시지가 없습니다.</p>}
+        <div className="flex flex-col gap-2">
+          {list.map(m => (
+            <div key={m.id} onClick={() => tab === 'received' && !m.is_read && onMarkRead(m.id)} style={{ background: tab === 'received' && !m.is_read ? '#EAF3DE' : '#F7F6F2', border: '1px solid ' + (tab === 'received' && !m.is_read ? '#C0DD97' : '#E4E2D9') }} className="rounded-lg p-3">
+              {tab === 'sent' ? (
+                <p className="text-[12px] font-medium mb-1" style={{ color: '#0C447C' }}>수신: {nameOf(m.to_user)}</p>
+              ) : (
+                <p className="text-[12px] font-medium mb-1" style={{ color: '#6B6A63' }}>발신: {nameOf(m.from_user)}</p>
+              )}
+              <p className="text-[13px] whitespace-pre-wrap" style={{ color: '#1C2620' }}>{m.content}</p>
+              <div className="flex items-center justify-between mt-1.5">
+                <p className="text-[11px]" style={{ color: '#B0AEA4' }}>{new Date(m.created_at).toLocaleString('ko-KR')}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: m.is_read ? '#E1F5EE' : '#FAEEDA', color: m.is_read ? '#085041' : '#854F0B' }}>{m.is_read ? '읽음' : '안읽음'}</span>
+                  <button onClick={(e) => { e.stopPropagation(); if (confirm('이 메시지를 삭제할까요?')) onDelete(m.id); }} className="text-[11px] font-medium" style={{ color: '#A32D2D' }}>삭제</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScriptAccordion({ id, title, isAdmin, content, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(content || '');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => { setDraft(content || ''); }, [content]);
+
+  function copy() {
+    const text = isAdmin ? draft : (content || '');
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between px-3.5 py-3">
+        <span className="text-[13px] font-medium" style={{ color: '#1C2620' }}>{title}</span>
+        <span style={{ color: '#9B998F' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="px-3.5 pb-3.5 flex flex-col gap-2">
+          {isAdmin ? (
+            <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={5} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} />
+          ) : (
+            <div className="rounded-lg px-3 py-2.5 text-[13px] whitespace-pre-wrap" style={{ background: '#F7F6F2', color: '#1C2620' }}>{content || '등록된 내용이 없습니다.'}</div>
+          )}
+          <div className="flex gap-2">
+            <button onClick={copy} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-[12.5px] py-2 rounded-lg font-medium">{copied ? '복사됨 ✓' : '복사하기'}</button>
+            {isAdmin && <button onClick={() => onSave(id, draft)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-[12.5px] py-2 rounded-lg font-medium">저장</button>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function exportCustomersToExcel(rows, salesUsers, filename) {
+  if (!window.XLSX) { alert('엑셀 내보내기 기능을 불러오지 못했습니다.'); return; }
+  const repName = (id) => (salesUsers.find(u => u.id === id) || {}).name || '';
+  const data = rows.map(c => ({
+    'DB시작일': c.visit_date || '', '계약일': c.contract_date || '', '고객명': c.name || '', '연락처': c.phone || '',
+    '계약자명': c.contractor_name || '', '차량번호': c.car_number || '', '주소': c.address || '', '상세주소': c.address_detail || '',
+    '입금자명': c.depositor_name || '', '주차시간': c.parking_time || '', '상품': c.product || '', '월이용료': c.amount || 0,
+    '담당영업사원': repName(c.rep_id), '상태': c.status || '', '메모': c.memo || '',
+  }));
+  const ws = window.XLSX.utils.json_to_sheet(data);
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, '계약내역');
+  window.XLSX.writeFile(wb, filename);
+}
+
+function getMonthCells(year, month) {
+  const startWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  return cells;
+}
+
+function DayDetailModal({ day, contracts, salesUsers, onClose }) {
+  const repName = (id) => (salesUsers.find(u => u.id === id) || {}).name || '미배정';
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.5)' }}>
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-y-auto p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>{day} 계약 내역 ({contracts.length}건)</h2>
+          <button onClick={onClose} className="text-lg" style={{ color: '#9B998F' }}>✕</button>
+        </div>
+        <button onClick={() => exportCustomersToExcel(contracts, salesUsers, `계약내역_${day}.xlsx`)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full text-[12.5px] py-2 rounded-lg mb-3">이 날짜 엑셀 다운로드</button>
+        <div className="flex flex-col gap-2.5">
+          {contracts.map(c => (
+            <div key={c.id} className="rounded-lg p-3" style={{ background: '#F7F6F2' }}>
+              <p className="font-semibold text-[14px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></p>
+              <div className="mt-1.5 text-[12px] flex flex-col gap-0.5" style={{ color: '#6B6A63' }}>
+                <span>계약자명: {c.contractor_name || '-'}</span>
+                <span>차량번호: {c.car_number || '-'}</span>
+                <span>주소: {c.address || '-'} {c.address_detail}</span>
+                <span>입금자명: {c.depositor_name || '-'}</span>
+                <span>주차시간: {c.parking_time || '-'}</span>
+                <span>상품: {c.product || '-'}</span>
+                <span>월 이용료: {currency(c.amount)}</span>
+                <span>담당: {repName(c.rep_id)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContractCalendar({ customers, salesUsers }) {
+  const [cursor, setCursor] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState(null);
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const contracted = customers.filter(c => c.status === '계약완료' && c.contract_date);
+  const countByDay = {};
+  contracted.forEach(c => { countByDay[c.contract_date] = (countByDay[c.contract_date] || 0) + 1; });
+  const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const monthContracts = contracted.filter(c => c.contract_date.startsWith(monthPrefix));
+  const cells = getMonthCells(year, month);
+  const dayKey = (d) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-xl p-3.5 flex items-center justify-between gap-2" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+        <div>
+          <p className="text-[13px]" style={{ color: '#6B6A63' }}>{year}년 {month + 1}월 계약완료</p>
+          <p className="text-xl font-semibold" style={{ color: '#1C2620' }}>{monthContracts.length}건</p>
+        </div>
+        <button onClick={() => exportCustomersToExcel(contracted, salesUsers, `계약내역_전체.xlsx`)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="text-[12.5px] px-3 py-2 rounded-lg whitespace-nowrap">전체 엑셀 다운로드</button>
+      </div>
+
+      <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => setCursor(new Date(year, month - 1, 1))} style={{ color: '#6B6A63' }}>◀</button>
+          <p className="text-[14px] font-semibold" style={{ color: '#1C2620' }}>{year}년 {month + 1}월</p>
+          <button onClick={() => setCursor(new Date(year, month + 1, 1))} style={{ color: '#6B6A63' }}>▶</button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] mb-1" style={{ color: '#9B998F' }}>
+          {['일', '월', '화', '수', '목', '금', '토'].map(d => <div key={d}>{d}</div>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {cells.map((d, i) => {
+            if (d == null) return <div key={i} />;
+            const key = dayKey(d);
+            const count = countByDay[key] || 0;
+            return (
+              <button key={i} onClick={() => count > 0 && setSelectedDay(key)}
+                style={{ background: count > 0 ? '#EAF3DE' : '#F7F6F2', color: count > 0 ? '#27500A' : '#B0AEA4', cursor: count > 0 ? 'pointer' : 'default', border: '1px solid ' + (count > 0 ? '#C0DD97' : '#E4E2D9') }}
+                className="aspect-square flex flex-col items-center justify-center rounded-lg text-[12px]">
+                <span>{d}</span>
+                {count > 0 && <span className="text-[10px] font-semibold">{count}건</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedDay && <DayDetailModal day={selectedDay} contracts={contracted.filter(c => c.contract_date === selectedDay)} salesUsers={salesUsers} onClose={() => setSelectedDay(null)} />}
+    </div>
+  );
+}
+
+function Dashboard({ currentUser, onLogout }) {
+  const isAdmin = currentUser.role === 'admin';
+  const myId = currentUser.id;
+  const [tab, setTab] = useState('customers');
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('전체');
+  const [repFilter, setRepFilter] = useState('전체');
+  const [editing, setEditing] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [customers, setCustomers] = useState([]);
+  const [salesUsers, setSalesUsers] = useState([]);
+  const [pendingUsers, setPendingUsers] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [allStaff, setAllStaff] = useState([]);
+  const [inboxMessages, setInboxMessages] = useState([]);
+  const [sentMessages, setSentMessages] = useState([]);
+  const [scripts, setScripts] = useState({});
+  const [showInbox, setShowInbox] = useState(false);
+  const [messageTarget, setMessageTarget] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  async function loadAll() {
+    setLoading(true);
+    const { data: custData } = await supabase.from('customers').select('*').order('visit_date', { ascending: false });
+    setCustomers(custData || []);
+    const { data: salesData } = await supabase.from('profiles').select('*').eq('role', 'sales').eq('status', '승인');
+    setSalesUsers(salesData || []);
+    const { data: annData } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+    setAnnouncements(annData || []);
+    const { data: staffData } = await supabase.from('profiles').select('*').eq('status', '승인');
+    setAllStaff(staffData || []);
+    const { data: recvData } = await supabase.from('messages').select('*').eq('to_user', myId).order('created_at', { ascending: false });
+    setInboxMessages(recvData || []);
+    const { data: sentData } = await supabase.from('messages').select('*').eq('from_user', myId).order('created_at', { ascending: false });
+    setSentMessages(sentData || []);
+    const { data: scriptData } = await supabase.from('scripts').select('*');
+    const scriptMap = {};
+    (scriptData || []).forEach(s => { scriptMap[s.id] = s.content; });
+    setScripts(scriptMap);
+    if (isAdmin) {
+      const { data: pendingData } = await supabase.from('profiles').select('*').eq('status', '대기');
+      setPendingUsers(pendingData || []);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => { loadAll(); }, []);
+
+  const repName = (id) => (salesUsers.find(u => u.id === id) || {}).name || '미배정';
+  const canEdit = (c) => isAdmin || c.rep_id === myId;
+
+  const filtered = useMemo(() => customers.filter(c => {
+    if (statusFilter !== '전체' && c.status !== statusFilter) return false;
+    if (isAdmin && repFilter !== '전체' && c.rep_id !== repFilter) return false;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      if (!`${c.name} ${c.phone} ${c.complex} ${c.unit}`.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  }), [customers, search, statusFilter, repFilter, isAdmin]);
+
+  const scope = isAdmin ? customers : customers.filter(c => c.rep_id === myId);
+  const stats = useMemo(() => {
+    const total = scope.length;
+    const contracted = scope.filter(c => c.status === '계약완료').length;
+    const inTalk = scope.filter(c => c.status === '상담중').length;
+    return { total, contracted, inTalk, incentive: contracted * INCENTIVE_PER_DEAL };
+  }, [scope]);
+  const companyIncentive = useMemo(() => customers.filter(c => c.status === '계약완료').length * INCENTIVE_PER_DEAL, [customers]);
+
+  async function toggleStage(id, key) {
+    const target = customers.find(c => c.id === id);
+    const newVal = !target[key];
+    setCustomers(prev => prev.map(c => c.id === id ? { ...c, [key]: newVal } : c));
+    await supabase.from('customers').update({ [key]: newVal }).eq('id', id);
+  }
+
+  function openNew() {
+    setEditing({ id: null, name: '', phone: '', complex: '', unit: '', visit_date: new Date().toISOString().slice(0, 10), rep_id: isAdmin ? (salesUsers[0] ? salesUsers[0].id : null) : myId, status: '신규', product: '', amount: 0, memo: '', call1: false, sms2: false, recall3: false });
+  }
+
+  async function saveCustomer(data) {
+    if (data.id == null) {
+      const { id, ...rest } = data;
+      const { data: inserted, error } = await supabase.from('customers').insert(rest).select().single();
+      if (!error) setCustomers(prev => [inserted, ...prev]);
+    } else {
+      const { id, ...rest } = data;
+      const { error } = await supabase.from('customers').update(rest).eq('id', id);
+      if (!error) setCustomers(prev => prev.map(c => c.id === id ? data : c));
+    }
+    setEditing(null);
+  }
+
+  async function deleteCustomer(id) {
+    await supabase.from('customers').delete().eq('id', id);
+    setCustomers(prev => prev.filter(c => c.id !== id));
+    setConfirmDelete(null);
+  }
+
+  async function approveUser(id) {
+    await supabase.from('profiles').update({ status: '승인' }).eq('id', id);
+    setPendingUsers(prev => prev.filter(u => u.id !== id));
+    loadAll();
+  }
+  async function rejectUser(id) {
+    await supabase.from('profiles').update({ status: '거절' }).eq('id', id);
+    setPendingUsers(prev => prev.filter(u => u.id !== id));
+  }
+  async function withdrawUser(id) {
+    if (!confirm('이 영업사원을 탈퇴 처리할까요? 더 이상 로그인할 수 없게 됩니다.')) return;
+    await supabase.from('profiles').update({ status: '탈퇴' }).eq('id', id);
+    setSalesUsers(prev => prev.filter(u => u.id !== id));
+    setAllStaff(prev => prev.filter(u => u.id !== id));
+  }
+  async function postAnnouncement(content) {
+    const { data, error } = await supabase.from('announcements').insert({ content, created_by: myId }).select().single();
+    if (!error) setAnnouncements(prev => [data, ...prev]);
+  }
+  async function updateAnnouncement(id, content) {
+    await supabase.from('announcements').update({ content }).eq('id', id);
+    setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, content } : a));
+  }
+  async function deleteAnnouncement(id) {
+    await supabase.from('announcements').delete().eq('id', id);
+    setAnnouncements(prev => prev.filter(a => a.id !== id));
+  }
+  async function sendMessage(toId, content) {
+    const { data, error } = await supabase.from('messages').insert({ to_user: toId, from_user: myId, content }).select().single();
+    if (!error) setSentMessages(prev => [data, ...prev]);
+    setMessageTarget(null);
+  }
+  async function markMessageRead(id) {
+    await supabase.from('messages').update({ is_read: true }).eq('id', id);
+    setInboxMessages(prev => prev.map(m => m.id === id ? { ...m, is_read: true } : m));
+  }
+  async function deleteMessage(id) {
+    await supabase.from('messages').delete().eq('id', id);
+    setInboxMessages(prev => prev.filter(m => m.id !== id));
+    setSentMessages(prev => prev.filter(m => m.id !== id));
+  }
+  async function saveScript(id, content) {
+    await supabase.from('scripts').upsert({ id, content, updated_at: new Date().toISOString() });
+    setScripts(prev => ({ ...prev, [id]: content }));
+  }
+
+  if (loading) {
+    return <div style={{ background: '#EFF1EC', minHeight: '100vh' }} className="w-full flex items-center justify-center"><p style={{ color: '#6B6A63' }} className="text-sm">불러오는 중...</p></div>;
+  }
+
+  return (
+    <div style={{ background: '#EFF1EC', minHeight: '100vh' }} className="w-full pb-24">
+      <div style={{ background: '#1C2620' }} className="px-4 pt-5 pb-4 sticky top-0 z-10">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] tracking-wide uppercase" style={{ color: '#8FA89A' }}>방문 세차 정기권 · 신규고객관리</p>
+            <h1 className="text-lg font-semibold" style={{ color: '#FFFFFF' }}>{currentUser.name}{isAdmin ? ' (관리자)' : ' 영업사원'}</h1>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => setShowInbox(true)} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="relative flex items-center justify-center text-sm rounded-lg w-10 h-10">
+              🔔
+              {inboxMessages.some(m => !m.is_read) && <span style={{ background: '#C98A2E' }} className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full" />}
+            </button>
+            <button onClick={onLogout} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="flex items-center gap-1.5 text-sm rounded-lg px-3 py-2">↩ 로그아웃</button>
+          </div>
+        </div>
+        {isAdmin && (
+          <div className="flex gap-2 mt-4 overflow-x-auto">
+            <button onClick={() => setTab('customers')} style={{ background: tab === 'customers' ? '#FFFFFF' : 'transparent', color: tab === 'customers' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">고객 관리</button>
+            <button onClick={() => setTab('approvals')} style={{ background: tab === 'approvals' ? '#FFFFFF' : 'transparent', color: tab === 'approvals' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
+              가입 승인 {pendingUsers.length > 0 && <span style={{ background: '#C98A2E', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{pendingUsers.length}</span>}
+            </button>
+            <button onClick={() => setTab('staff')} style={{ background: tab === 'staff' ? '#FFFFFF' : 'transparent', color: tab === 'staff' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">직원 관리</button>
+            <button onClick={() => setTab('stats')} style={{ background: tab === 'stats' ? '#FFFFFF' : 'transparent', color: tab === 'stats' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">계약 현황</button>
+          </div>
+        )}
+      </div>
+
+      <div className="px-4 pt-4 flex flex-col gap-4 max-w-3xl mx-auto">
+        {tab === 'approvals' && isAdmin ? (
+          <ApprovalPanel pendingUsers={pendingUsers} onApprove={approveUser} onReject={rejectUser} />
+        ) : tab === 'staff' && isAdmin ? (
+          <StaffPanel allStaff={allStaff} onWithdraw={withdrawUser} onMessage={setMessageTarget} />
+        ) : tab === 'stats' && isAdmin ? (
+          <ContractCalendar customers={customers} salesUsers={salesUsers} />
+        ) : (
+          <React.Fragment>
+            <div className="flex flex-wrap gap-2.5">
+              <StatCard emoji="👥" label={isAdmin ? '전체 고객' : '내 담당 고객'} value={stats.total} tint="#2F6B4F" />
+              <StatCard emoji="💬" label="상담 진행중" value={stats.inTalk} tint="#3B6FA0" />
+              <StatCard emoji="✅" label="유치완료" value={stats.contracted} tint="#2F6B4F" />
+              {isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(stats.incentive)} tint="#C98A2E" />}
+            </div>
+
+            {!isAdmin && (
+              <div className="rounded-xl p-3.5 flex items-center justify-between" style={{ background: '#EAF3DE', border: '1px solid #C0DD97' }}>
+                <div>
+                  <p className="text-[12.5px]" style={{ color: '#3B6D11' }}>건당 인센티브 {currency(INCENTIVE_PER_DEAL)} · 유치완료 {stats.contracted}건</p>
+                  <p className="text-[22px] font-semibold mt-0.5" style={{ color: '#27500A', fontVariantNumeric: 'tabular-nums' }}>{currency(stats.incentive)}</p>
+                </div>
+                <span className="text-3xl">💰</span>
+              </div>
+            )}
+
+            <Leaderboard salesUsers={salesUsers} customers={customers} currentUserId={myId} />
+
+            <Announcements isAdmin={isAdmin} announcements={announcements} onPost={postAnnouncement} onUpdate={updateAnnouncement} onDelete={deleteAnnouncement} />
+
+            <ScriptAccordion id="customer_script" title="고객영업문자 스크립트" isAdmin={isAdmin} content={scripts.customer_script} onSave={saveScript} />
+            <ScriptAccordion id="application_script" title="신청서 스크립트" isAdmin={isAdmin} content={scripts.application_script} onSave={saveScript} />
+
+            <div className="flex flex-col gap-2">
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#9B998F' }}>🔍</span>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름, 연락처, 단지명으로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-0.5">
+                {['전체', ...STATUS_ORDER].map(s => (
+                  <button key={s} onClick={() => setStatusFilter(s)} style={{ background: statusFilter === s ? '#1C2620' : '#FFFFFF', color: statusFilter === s ? '#FFFFFF' : '#4A4A45', border: '1px solid ' + (statusFilter === s ? '#1C2620' : '#E4E2D9') }} className="text-xs font-medium px-3 py-1.5 rounded-full whitespace-nowrap shrink-0">{s}</button>
+                ))}
+              </div>
+              {isAdmin && (
+                <select value={repFilter} onChange={e => setRepFilter(e.target.value)} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="text-sm rounded-lg px-3 py-2 self-start">
+                  <option value="전체">담당자: 전체</option>
+                  {salesUsers.map(u => <option key={u.id} value={u.id}>담당자: {u.name}</option>)}
+                </select>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2.5">
+              {filtered.length === 0 && <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}><p className="text-sm" style={{ color: '#9B998F' }}>조건에 맞는 고객이 없습니다.</p></div>}
+              {filtered.map(c => {
+                const editable = canEdit(c);
+                return (
+                  <div key={c.id} onClick={() => editable && setEditing({ ...c })} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', opacity: editable ? 1 : 0.75 }} className={"rounded-xl p-3.5 " + (editable ? "cursor-pointer" : "")}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
+                          <StatusBadge status={c.status} />
+                          {!editable && <span className="text-[11px]" style={{ color: '#B0AEA4' }}>· 조회 전용</span>}
+                        </div>
+                        {(c.complex || c.unit) && <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex} · {c.unit}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
+                      <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
+                      <span className="flex items-center gap-1">📅 방문 {c.visit_date}</span>
+                      <span className="flex items-center gap-1">👤 {repName(c.rep_id)}</span>
+                      {c.product && <span className="flex items-center gap-1">📦 {c.product}</span>}
+                    </div>
+                    <div className="mt-2.5"><StageTracker customer={c} editable={editable} onToggle={toggleStage} /></div>
+                    {c.status === '계약완료' && c.amount > 0 && <p className="text-[13px] font-medium mt-2" style={{ color: '#085041' }}>월 {currency(c.amount)}</p>}
+                    {c.memo && <p className="text-[12.5px] mt-1.5" style={{ color: '#8B8A80' }}>{c.memo}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+
+      {tab === 'customers' && (
+        <button onClick={openNew} style={{ background: '#2F6B4F' }} className="fixed bottom-5 right-5 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg text-2xl" aria-label="신규DB 등록">＋</button>
+      )}
+
+      {editing && <EditModal data={editing} isAdmin={isAdmin} salesUsers={salesUsers} isNew={editing.id == null} onClose={() => setEditing(null)} onSave={saveCustomer} onDelete={(id) => setConfirmDelete(id)} />}
+
+      {confirmDelete != null && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center px-6" style={{ background: 'rgba(28,38,32,0.5)' }}>
+          <div style={{ background: '#FFFFFF' }} className="rounded-xl p-5 w-full max-w-xs">
+            <p className="text-sm font-medium" style={{ color: '#1C2620' }}>이 고객 정보를 삭제할까요?</p>
+            <p className="text-[13px] mt-1" style={{ color: '#6B6A63' }}>삭제하면 되돌릴 수 없습니다.</p>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => setConfirmDelete(null)} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm py-2 rounded-lg">취소</button>
+              <button onClick={() => deleteCustomer(confirmDelete)} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="flex-1 text-sm py-2 rounded-lg">삭제</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showInbox && <MessageCenter received={inboxMessages} sent={sentMessages} staff={allStaff} onMarkRead={markMessageRead} onDelete={deleteMessage} onClose={() => setShowInbox(false)} />}
+      {messageTarget && <MessageComposeModal target={messageTarget} onClose={() => setMessageTarget(null)} onSend={(text) => sendMessage(messageTarget.id, text)} />}
+    </div>
+  );
+}
+
+function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete }) {
+  const [form, setForm] = useState(data);
+  const [error, setError] = useState('');
+  const [showApplication, setShowApplication] = useState(false);
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const toggleStage = (key) => setForm(prev => ({ ...prev, [key]: !prev[key] }));
+  function handleSave() {
+    if (!form.name.trim() || !form.phone.trim()) { setError('고객명, 연락처는 필수입니다.'); return; }
+    onSave(form);
+  }
+  const inputStyle = { background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' };
+  const repName = (salesUsers.find(u => u.id === form.rep_id) || {}).name || '';
+  return (
+    <div className="fixed inset-0 z-20 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.5)' }}>
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[88vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 pt-4 pb-2 sticky top-0" style={{ background: '#FFFFFF' }}>
+          <h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>{isNew ? '신규DB' : 'DB 수정'}</h2>
+          <button onClick={onClose} aria-label="닫기" className="text-lg" style={{ color: '#9B998F' }}>✕</button>
+        </div>
+        <div className="px-4 pb-5 flex flex-col gap-3">
+          <FieldInput label="DB시작일" type="date" value={form.visit_date || ''} onChange={e => set('visit_date', e.target.value)} />
+          <FieldInput label="고객명 *" value={form.name} onChange={e => set('name', e.target.value)} placeholder="홍길동" />
+          <FieldInput label="연락처 *" value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} placeholder="010-0000-0000" maxLength={13} />
+          <div>
+            <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>영업 진행 단계</label>
+            <div className="flex gap-2 mt-1.5">
+              {STAGES.map(s => { const done = form[s.key]; return (
+                <button key={s.key} type="button" onClick={() => toggleStage(s.key)} style={{ background: done ? '#2F6B4F' : '#F7F6F2', color: done ? '#FFFFFF' : '#6B6A63', border: '1px solid ' + (done ? '#2F6B4F' : '#E4E2D9') }} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12.5px] font-medium">
+                  <span>{done ? '✔' : s.icon}</span>{s.label}
+                </button>
+              );})}
+            </div>
+          </div>
+          <div>
+            <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>상태</label>
+            <select value={form.status} onChange={e => set('status', e.target.value)} style={inputStyle} className="w-full mt-1 rounded-lg px-3 py-2.5 text-sm outline-none">
+              {STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>담당 영업사원</label>
+            {isAdmin ? (
+              <select value={form.rep_id || ''} onChange={e => set('rep_id', e.target.value)} style={inputStyle} className="w-full mt-1 rounded-lg px-3 py-2.5 text-sm outline-none">
+                {salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            ) : <p className="mt-1 text-sm py-2.5" style={{ color: '#1C2620' }}>본인 담당</p>}
+          </div>
+          <div>
+            <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>상담 메모</label>
+            <textarea value={form.memo || ''} onChange={e => set('memo', e.target.value)} style={inputStyle} rows={3} className="w-full mt-1 rounded-lg px-3 py-2.5 text-sm outline-none resize-none" placeholder="상담 내용을 기록하세요" />
+          </div>
+          {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
+          <div className="flex gap-2 mt-1">
+            {!isNew && <button onClick={() => onDelete(form.id)} style={{ border: '1px solid #F0999540', color: '#A32D2D' }} className="px-3.5 py-2.5 rounded-lg">🗑</button>}
+            <button onClick={onClose} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">취소</button>
+            <button onClick={() => setShowApplication(true)} style={{ border: '1px solid #2F6B4F', color: '#2F6B4F' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">신청서 작성</button>
+            <button onClick={handleSave} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">저장</button>
+          </div>
+        </div>
+      </div>
+
+      {showApplication && (
+        <ApplicationModal
+          base={form}
+          repName={repName}
+          onClose={() => setShowApplication(false)}
+          onSubmit={(merged) => { setShowApplication(false); onSave(merged); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ApplicationModal({ base, repName, onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    ...base,
+    contractor_name: base.contractor_name || '',
+    car_number: base.car_number || '',
+    address: base.address || '',
+    address_detail: base.address_detail || '',
+    depositor_name: base.depositor_name || '',
+    parking_time: base.parking_time || '',
+  });
+  const [freq, setFreq] = useState('');
+  const [size, setSize] = useState('');
+  const [isForeign, setIsForeign] = useState(false);
+  const [sameAsCustomer, setSameAsCustomer] = useState(false);
+  const [sameAsContractor, setSameAsContractor] = useState(false);
+  const [error, setError] = useState('');
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const inputStyle = { background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' };
+  const currentPrice = (freq && size) ? PRICE_TABLE[freq][size] + (isForeign ? 5000 : 0) : null;
+
+  useEffect(() => {
+    if (sameAsCustomer) set('contractor_name', form.name || '');
+  }, [sameAsCustomer, form.name]);
+
+  useEffect(() => {
+    if (sameAsContractor) set('depositor_name', form.contractor_name || '');
+  }, [sameAsContractor, form.contractor_name]);
+
+  function openAddressSearch() {
+    if (!window.daum || !window.daum.Postcode) {
+      alert('주소 검색 기능을 불러오지 못했습니다. 페이지를 새로고침한 뒤 인터넷 연결 상태에서 다시 시도해주세요.');
+      return;
+    }
+    new window.daum.Postcode({
+      oncomplete: function (data) {
+        const addr = data.roadAddress || data.address;
+        set('address', addr);
+      }
+    }).open();
+  }
+
+  function handleSubmit() {
+    if (!form.contractor_name.trim() || !form.car_number.trim() || !form.address.trim() || !form.depositor_name.trim() || !form.parking_time.trim()) {
+      setError('계약자명, 차량번호, 주소, 입금자명, 주차시간은 필수입니다.');
+      return;
+    }
+    if (!freq || !size) {
+      setError('상품 카테고리(주기·크기)를 선택해주세요.');
+      return;
+    }
+    const amount = PRICE_TABLE[freq][size] + (isForeign ? 5000 : 0);
+    const freqLabel = freq === '격주' ? '월2회(격주)' : '월4회';
+    const sizeLabel = size === '대형' ? '대형(SUV포함)' : size;
+    const product = `${freqLabel} · ${sizeLabel}${isForeign ? ' · 외제차' : ''}`;
+    onSubmit({ ...form, amount, product, status: '계약완료', contract_date: new Date().toISOString().slice(0, 10) });
+  }
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.6)' }}>
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-4 pt-4 pb-2 sticky top-0" style={{ background: '#FFFFFF' }}>
+          <h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>신청서 작성</h2>
+          <button onClick={onClose} aria-label="닫기" className="text-lg" style={{ color: '#9B998F' }}>✕</button>
+        </div>
+        <div className="px-4 pb-5 flex flex-col gap-3">
+          <p className="text-[11.5px] px-3 py-2 rounded-lg" style={{ background: '#F1EFE8', color: '#6B6A63' }}>아래 정보는 신규DB에서 자동으로 불러왔습니다. 필요하면 수정할 수 있어요.</p>
+          <FieldInput label="DB시작일" type="date" value={form.visit_date || ''} onChange={e => set('visit_date', e.target.value)} />
+          <FieldInput label="고객명" value={form.name || ''} onChange={e => set('name', e.target.value)} />
+          <FieldInput label="연락처" value={form.phone || ''} onChange={e => set('phone', formatPhoneInput(e.target.value))} maxLength={13} />
+          <div>
+            <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>담당 영업사원</label>
+            <p className="mt-1 text-sm py-2.5" style={{ color: '#1C2620' }}>{repName || '미배정'}</p>
+          </div>
+          <div>
+            <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>상담 메모</label>
+            <textarea value={form.memo || ''} onChange={e => set('memo', e.target.value)} style={inputStyle} rows={2} className="w-full mt-1 rounded-lg px-3 py-2.5 text-sm outline-none resize-none" />
+          </div>
+
+          <div className="h-px my-1" style={{ background: '#E4E2D9' }} />
+
+          <FieldInput label="계약자명 *" value={form.contractor_name} onChange={e => set('contractor_name', e.target.value)} placeholder="계약 당사자 이름" disabled={sameAsCustomer} />
+          <label className="flex items-center gap-2 -mt-1.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
+            <input type="checkbox" checked={sameAsCustomer} onChange={e => setSameAsCustomer(e.target.checked)} />
+            고객명과 계약자명이 동일합니다
+          </label>
+          <FieldInput label="차량번호 *" value={form.car_number} onChange={e => set('car_number', e.target.value)} placeholder="12가 3456" />
+          <div>
+            <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>주소 *</label>
+            <div className="flex gap-2 mt-1">
+              <input value={form.address} onChange={e => set('address', e.target.value)} placeholder="주소찾기를 누르거나 직접 입력하세요" style={inputStyle} className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none" />
+              <button type="button" onClick={openAddressSearch} style={{ background: '#2A362E', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-sm font-medium whitespace-nowrap">주소찾기</button>
+            </div>
+          </div>
+          <FieldInput label="상세주소" value={form.address_detail} onChange={e => set('address_detail', e.target.value)} placeholder="동/호수 등 상세주소" />
+          <FieldInput label="입금자명 *" value={form.depositor_name} onChange={e => set('depositor_name', e.target.value)} placeholder="입금자명" disabled={sameAsContractor} />
+          <label className="flex items-center gap-2 -mt-1.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
+            <input type="checkbox" checked={sameAsContractor} onChange={e => setSameAsContractor(e.target.checked)} />
+            계약자명과 입금자명이 동일합니까
+          </label>
+          <FieldInput label="주차시간 *" value={form.parking_time} onChange={e => set('parking_time', e.target.value)} placeholder="예: 평일 저녁 7시 이후" />
+
+          <div className="h-px my-1" style={{ background: '#E4E2D9' }} />
+
+          <div>
+            <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>상품 카테고리 *</label>
+            <div className="flex gap-2 mt-1.5">
+              {['격주', '월4회'].map(f => (
+                <button key={f} type="button" onClick={() => { setFreq(f); setSize(''); }} style={{ background: freq === f ? '#2F6B4F' : '#F7F6F2', color: freq === f ? '#FFFFFF' : '#6B6A63', border: '1px solid ' + (freq === f ? '#2F6B4F' : '#E4E2D9') }} className="flex-1 rounded-lg py-2 text-[12.5px] font-medium">
+                  {f === '격주' ? '월2회 (격주)' : '월4회'}
+                </button>
+              ))}
+            </div>
+            {freq && (
+              <div className="flex gap-2 mt-2">
+                {['소형', '중형', '대형'].map(s => (
+                  <button key={s} type="button" onClick={() => setSize(s)} style={{ background: size === s ? '#2F6B4F' : '#F7F6F2', color: size === s ? '#FFFFFF' : '#6B6A63', border: '1px solid ' + (size === s ? '#2F6B4F' : '#E4E2D9') }} className="flex-1 rounded-lg py-2 text-[12px] font-medium">
+                    {s === '대형' ? '대형(SUV)' : s}
+                  </button>
+                ))}
+              </div>
+            )}
+            {freq && size && (
+              <label className="flex items-center gap-2 mt-2.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
+                <input type="checkbox" checked={isForeign} onChange={e => setIsForeign(e.target.checked)} />
+                외제차 (+5,000원)
+              </label>
+            )}
+            {currentPrice != null && (
+              <p className="text-[14px] font-semibold mt-2" style={{ color: '#085041' }}>월 이용료: {currency(currentPrice)}</p>
+            )}
+          </div>
+
+          {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
+          <div className="flex gap-2 mt-1">
+            <button onClick={onClose} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">취소</button>
+            <button onClick={handleSubmit} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">신청서 저장</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authView, setAuthView] = useState('login');
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.session.user.id).single();
+        if (profile && profile.status === '승인') setCurrentUser(profile);
+      }
+      setChecking(false);
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') setCurrentUser(null);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setCurrentUser(null);
+    setAuthView('login');
+  }
+
+  if (checking) {
+    return <div style={{ background: '#1C2620', minHeight: '100vh' }} className="w-full flex items-center justify-center"><p style={{ color: '#8FA89A' }} className="text-sm">불러오는 중...</p></div>;
+  }
+
+  return (
+    <React.Fragment>
+      <ConfigWarning />
+      {!currentUser ? (
+        authView === 'login'
+          ? <LoginPage onLogin={setCurrentUser} onGotoSignup={() => setAuthView('signup')} />
+          : <SignupPage onGotoLogin={() => setAuthView('login')} />
+      ) : (
+        <Dashboard currentUser={currentUser} onLogout={handleLogout} />
+      )}
+    </React.Fragment>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
