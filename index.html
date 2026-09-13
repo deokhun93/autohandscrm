@@ -1262,6 +1262,11 @@ function Dashboard({ currentUser, onLogout }) {
     }
     setCustomers(prev => prev.map(c => ids.includes(c.id) ? { ...c, rep_id: repId } : c));
   }
+  async function assignLinkCopier(customerId, repId) {
+    if (customerId == null) return;
+    await supabase.from('customers').update({ rep_id: repId }).eq('id', customerId);
+    setCustomers(prev => prev.map(c => c.id === customerId ? { ...c, rep_id: repId } : c));
+  }
   const bulkSelectedCount = Object.values(bulkSelected).filter(Boolean).length;
   function toggleBulkSelect(id) { setBulkSelected(prev => ({ ...prev, [id]: !prev[id] })); }
   async function bulkUnassign() {
@@ -1473,7 +1478,7 @@ function Dashboard({ currentUser, onLogout }) {
         <button onClick={openNew} style={{ background: '#2F6B4F' }} className="fixed bottom-5 right-5 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg text-2xl" aria-label="신규DB 등록">＋</button>
       )}
 
-      {editing && <EditModal data={editing} isAdmin={isAdmin} salesUsers={salesUsers} isNew={editing.id == null} onClose={() => setEditing(null)} onSave={saveCustomer} onDelete={(id) => setConfirmDelete(id)} />}
+      {editing && <EditModal data={editing} isAdmin={isAdmin} salesUsers={isAdmin ? allStaff : salesUsers} isNew={editing.id == null} onClose={() => setEditing(null)} onSave={saveCustomer} onDelete={(id) => setConfirmDelete(id)} currentUserId={myId} onAssignSelf={assignLinkCopier} />}
 
       {confirmDelete != null && (
         <div className="fixed inset-0 z-30 flex items-center justify-center px-6" style={{ background: 'rgba(28,38,32,0.5)' }}>
@@ -1494,7 +1499,7 @@ function Dashboard({ currentUser, onLogout }) {
   );
 }
 
-function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete }) {
+function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete, currentUserId, onAssignSelf }) {
   const [form, setForm] = useState(data);
   const [error, setError] = useState('');
   const [showApplication, setShowApplication] = useState(false);
@@ -1508,7 +1513,14 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
   function copyApplyLink() {
     if (!form.apply_token) { alert('신청서 링크를 사용할 수 없습니다. (이미 신청 완료되었거나 링크가 없는 건입니다)'); return; }
     const link = `${window.location.origin}${window.location.pathname}?apply=${form.apply_token}`;
-    navigator.clipboard.writeText(link).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); });
+    navigator.clipboard.writeText(link).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1800);
+      if (currentUserId && form.rep_id !== currentUserId) {
+        onAssignSelf(form.id, currentUserId);
+        setForm(prev => ({ ...prev, rep_id: currentUserId }));
+      }
+    });
   }
   const inputStyle = { background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' };
   const repName = (salesUsers.find(u => u.id === form.rep_id) || {}).name || '';
@@ -1544,7 +1556,7 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
             {isAdmin ? (
               <select value={form.rep_id || ''} onChange={e => set('rep_id', e.target.value)} style={inputStyle} className="w-full mt-1 rounded-lg px-3 py-2.5 text-sm outline-none">
                 <option value="">미배정</option>
-                {salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                {salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}{u.role === 'admin' ? ' (관리자)' : ''}</option>)}
               </select>
             ) : <p className="mt-1 text-sm py-2.5" style={{ color: '#1C2620' }}>본인 담당</p>}
           </div>
@@ -1561,6 +1573,7 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
               {linkCopied ? '링크 복사됨 ✓' : '📋 고객용 신청서 링크 복사'}
             </button>
           )}
+          {!isNew && <p className="text-[11px] -mt-1.5" style={{ color: '#B0AEA4' }}>링크를 복사하면 이 고객의 담당자가 자동으로 본인으로 지정됩니다.</p>}
           <div className="flex gap-2 mt-1">
             {!isNew && (
               form.status === '계약완료'
