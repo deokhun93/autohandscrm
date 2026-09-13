@@ -1466,6 +1466,12 @@ function PublicApplyPage({ token }) {
   useEffect(() => { if (sameAsCustomer && customer) set('contractor_name', customer.name || ''); }, [sameAsCustomer, customer]);
   useEffect(() => { if (sameAsContractor) set('depositor_name', form.contractor_name || ''); }, [sameAsContractor, form.contractor_name]);
 
+  useEffect(() => {
+    if (!submitted) return;
+    const timer = setTimeout(() => { window.close(); }, 3000);
+    return () => clearTimeout(timer);
+  }, [submitted]);
+
   function openAddressSearch() {
     if (!window.daum || !window.daum.Postcode) { alert('주소 검색 기능을 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.'); return; }
     new window.daum.Postcode({ oncomplete: (data) => set('address', data.roadAddress || data.address) }).open();
@@ -1501,7 +1507,7 @@ function PublicApplyPage({ token }) {
 
   if (loading) return shell(<p className="text-sm text-center py-10" style={{ color: '#6B6A63' }}>불러오는 중...</p>);
   if (notFound) return shell(<div className="text-center py-6"><div className="text-3xl mb-3">⚠️</div><p className="text-sm" style={{ color: '#4A4A45' }}>유효하지 않거나 이미 제출된 링크입니다.<br />담당 영업사원에게 새 링크를 요청해주세요.</p></div>);
-  if (submitted) return shell(<div className="text-center py-6"><div className="text-3xl mb-3">✅</div><h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>신청이 완료되었습니다</h2><p className="text-[13px] mt-2" style={{ color: '#6B6A63' }}>담당 영업사원이 확인 후 순차적으로 안내드리겠습니다. 감사합니다.</p></div>);
+  if (submitted) return shell(<div className="text-center py-6"><div className="text-3xl mb-3">✅</div><h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>신청이 완료되었습니다</h2><p className="text-[13px] mt-2" style={{ color: '#6B6A63' }}>담당 영업사원이 확인 후 순차적으로 안내드리겠습니다. 감사합니다.</p><p className="text-[11.5px] mt-3" style={{ color: '#B0AEA4' }}>잠시 후 이 창이 자동으로 닫힙니다.</p></div>);
 
   return shell(
     <React.Fragment>
