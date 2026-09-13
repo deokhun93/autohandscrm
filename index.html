@@ -999,6 +999,10 @@ function Dashboard({ currentUser, onLogout }) {
   }
 
   useEffect(() => { loadAll(); }, []);
+  useEffect(() => {
+    const interval = setInterval(() => { loadAll(); }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const repName = (id) => {
     const active = salesUsers.find(u => u.id === id);
@@ -1222,6 +1226,9 @@ function Dashboard({ currentUser, onLogout }) {
             <h1 className="text-lg font-semibold" style={{ color: '#FFFFFF' }}>{currentUser.name}{isAdmin ? ' (관리자)' : ' 영업사원'}</h1>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button onClick={loadAll} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="flex items-center justify-center text-sm rounded-lg w-10 h-10" aria-label="새로고침">
+              🔄
+            </button>
             <button onClick={() => setShowInbox(true)} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="relative flex items-center justify-center text-sm rounded-lg w-10 h-10">
               🔔
               {inboxMessages.some(m => !m.is_read) && <span style={{ background: '#C98A2E' }} className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full" />}
