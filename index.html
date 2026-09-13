@@ -538,7 +538,7 @@ function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail }) {
     if (!c.rep_id || !selectedStaff[c.rep_id]) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return `${c.name} ${c.phone} ${c.complex} ${c.memo || ''}`.toLowerCase().includes(q);
+    return `${c.name} ${c.phone} ${c.complex} ${c.memo || ''} ${c.car_number || ''}`.toLowerCase().includes(q);
   }).sort((a, b) => new Date(b.contract_date || b.visit_date) - new Date(a.contract_date || a.visit_date));
 
   return (
@@ -563,7 +563,7 @@ function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail }) {
 
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#9B998F' }}>🔍</span>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름, 연락처, 단지명으로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름, 연락처, 단지명, 차량번호로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
       </div>
 
       <p className="text-[12.5px]" style={{ color: '#6B6A63' }}>선택한 담당자 계약완료 <span className="font-semibold" style={{ color: '#1C2620' }}>{list.length}건</span></p>
@@ -864,7 +864,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, o
   const list = unassigned.filter(c => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return `${c.name} ${c.phone} ${c.complex} ${c.memo || ''}`.toLowerCase().includes(q);
+    return `${c.name} ${c.phone} ${c.complex} ${c.memo || ''} ${c.car_number || ''}`.toLowerCase().includes(q);
   });
   const selectedIds = Object.keys(selected).filter(id => selected[id]);
   const selectedCount = selectedIds.length;
@@ -893,7 +893,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, o
 
       <div className="relative">
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#9B998F' }}>🔍</span>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름, 연락처, 단지명으로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름, 연락처, 단지명, 차량번호로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
       </div>
 
       <div className="flex items-center gap-2">
@@ -1099,7 +1099,7 @@ function Dashboard({ currentUser, onLogout }) {
     if (isAdmin && marketingFilter === '미동의' && c.marketing_consent) return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      if (!`${c.name} ${c.phone} ${c.complex} ${c.unit} ${c.memo || ''}`.toLowerCase().includes(q)) return false;
+      if (!`${c.name} ${c.phone} ${c.complex} ${c.unit} ${c.memo || ''} ${c.car_number || ''}`.toLowerCase().includes(q)) return false;
     }
     return true;
   }), [customers, search, statusFilter, repFilter, isAdmin, myDbFilter, myId, marketingFilter, departedUsers]);
@@ -1405,7 +1405,7 @@ function Dashboard({ currentUser, onLogout }) {
             <div className="flex flex-col gap-2">
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#9B998F' }}>🔍</span>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름, 연락처, 단지명으로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름, 연락처, 단지명, 차량번호로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
               </div>
               <div className="flex gap-2 overflow-x-auto pb-0.5">
                 {['전체', ...STATUS_ORDER].map(s => (
