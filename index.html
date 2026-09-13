@@ -62,7 +62,7 @@ const PRICE_TABLE = {
 
 const PRIVACY_POLICY_TEXT = `개인정보처리방침 (초안)
 
-[회사명](이하 "회사")은 「개인정보 보호법」 등 관련 법령을 준수하며, 이용자의 개인정보를 안전하게 처리하기 위해 다음과 같이 개인정보처리방침을 수립·공개합니다.
+오토핸즈(이하 "회사")은 「개인정보 보호법」 등 관련 법령을 준수하며, 이용자의 개인정보를 안전하게 처리하기 위해 다음과 같이 개인정보처리방침을 수립·공개합니다.
 
 1. 수집하는 개인정보 항목
 - 영업사원(직원) 가입 시: 이름, 휴대폰번호, 생년월일, 은행명, 계좌번호, 주소, 이메일, 아이디/비밀번호
@@ -96,12 +96,12 @@ const PRIVACY_POLICY_TEXT = `개인정보처리방침 (초안)
 - 접근 권한 관리(담당자만 열람·수정 가능), 화면상 개인정보 마스킹 처리 등 기술적·관리적 조치를 시행하고 있습니다.
 
 9. 개인정보 보호책임자
-- 성명: [담당자명] / 연락처: [연락처] / 이메일: [이메일]
+- 성명: 정연중 / 연락처: 010-7476-6323
 
 10. 부칙
-- 본 방침은 [시행일자]부터 적용됩니다.
+- 본 방침은 2026-09-14부터 적용됩니다.
 
-※ 본 문서는 초안이며, 실제 사업자 정보와 시행일자, 보관기간 등 세부 사항을 확인·보완한 후 사용하시기 바랍니다. 법적 검토를 권장합니다.`;
+※ 본 문서는 초안입니다. 보관기간, 위탁 범위 등 세부 사항은 사업 운영 방식에 맞춰 개인정보보호 전문가의 법적 검토를 받으시길 권장합니다.`;
 
 function PrivacyPolicyModal({ onClose }) {
   return (
@@ -466,6 +466,46 @@ function Announcements({ isAdmin, announcements, onPost, onUpdate, onDelete }) {
           {past.map(a => <Item key={a.id} a={a} highlight={false} />)}
         </div>
       )}
+    </div>
+  );
+}
+
+function AccessLogPanel({ logs, onRefresh }) {
+  const [search, setSearch] = useState('');
+  const list = logs.filter(l => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return `${l.actor_name} ${l.customer_name}`.toLowerCase().includes(q);
+  });
+  const actionColor = (a) => a === '수정' ? { bg: '#FAEEDA', fg: '#854F0B' } : a === '등록' ? { bg: '#E1F5EE', fg: '#085041' } : { bg: '#E6F1FB', fg: '#0C447C' };
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-xl p-3.5 flex items-center justify-between gap-2" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+        <div>
+          <p className="text-[12.5px]" style={{ color: '#6B6A63' }}>개인정보 접근 로그</p>
+          <p className="text-[11.5px] mt-0.5" style={{ color: '#B0AEA4' }}>최근 500건 · 누가 언제 어떤 고객정보를 열람·등록·수정했는지 기록됩니다</p>
+        </div>
+        <button onClick={onRefresh} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">🔄 새로고침</button>
+      </div>
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#9B998F' }}>🔍</span>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="직원 이름 또는 고객명으로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
+      </div>
+      <div className="flex flex-col gap-2">
+        {list.length === 0 && <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}><p className="text-sm" style={{ color: '#9B998F' }}>기록이 없습니다.</p></div>}
+        {list.map(l => {
+          const c = actionColor(l.action);
+          return (
+            <div key={l.id} className="rounded-lg p-3 flex items-center justify-between gap-2" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+              <div className="min-w-0">
+                <p className="text-[13px]" style={{ color: '#1C2620' }}><span className="font-semibold">{l.actor_name || '알 수 없음'}</span>님이 <span className="font-semibold">{l.customer_name || '삭제된 고객'}</span> 정보를</p>
+                <p className="text-[11px] mt-0.5" style={{ color: '#B0AEA4' }}>{new Date(l.created_at).toLocaleString('ko-KR')}</p>
+              </div>
+              <span className="text-[11px] px-2 py-1 rounded-full shrink-0" style={{ background: c.bg, color: c.fg }}>{l.action}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -835,6 +875,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [salesUsers, setSalesUsers] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
   const [departedUsers, setDepartedUsers] = useState([]);
+  const [accessLogs, setAccessLogs] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [allStaff, setAllStaff] = useState([]);
   const [inboxMessages, setInboxMessages] = useState([]);
@@ -867,6 +908,8 @@ function Dashboard({ currentUser, onLogout }) {
       setPendingUsers(pendingData || []);
       const { data: departedData } = await supabase.from('profiles').select('*').eq('status', '탈퇴');
       setDepartedUsers(departedData || []);
+      const { data: logData } = await supabase.from('access_logs').select('*').order('created_at', { ascending: false }).limit(500);
+      setAccessLogs(logData || []);
     }
     setLoading(false);
   }
@@ -922,8 +965,23 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('customers').update({ [key]: newVal }).eq('id', id);
   }
 
+  async function logAccess(action, customer) {
+    try {
+      await supabase.from('access_logs').insert({ actor_id: myId, actor_name: currentUser.name, action, customer_id: customer.id, customer_name: customer.name });
+    } catch (e) { /* 로그 실패는 조용히 무시 */ }
+  }
+  async function refreshAccessLogs() {
+    const { data: logData } = await supabase.from('access_logs').select('*').order('created_at', { ascending: false }).limit(500);
+    setAccessLogs(logData || []);
+  }
+
   function openNew() {
     setEditing({ id: null, name: '', phone: '', complex: '', unit: '', visit_date: new Date().toISOString().slice(0, 10), rep_id: isAdmin ? (salesUsers[0] ? salesUsers[0].id : null) : myId, status: '신규', product: '', amount: 0, memo: '', call1: false, sms2: false, recall3: false });
+  }
+
+  function openExisting(c) {
+    setEditing({ ...c });
+    logAccess('조회', c);
   }
 
   async function saveCustomer(rawData) {
@@ -931,11 +989,11 @@ function Dashboard({ currentUser, onLogout }) {
     if (data.id == null) {
       const { id, ...rest } = data;
       const { data: inserted, error } = await supabase.from('customers').insert(rest).select().single();
-      if (!error) setCustomers(prev => [inserted, ...prev]);
+      if (!error) { setCustomers(prev => [inserted, ...prev]); logAccess('등록', inserted); }
     } else {
       const { id, ...rest } = data;
       const { error } = await supabase.from('customers').update(rest).eq('id', id);
-      if (!error) setCustomers(prev => prev.map(c => c.id === id ? data : c));
+      if (!error) { setCustomers(prev => prev.map(c => c.id === id ? data : c)); logAccess('수정', data); }
     }
     setEditing(null);
   }
@@ -1081,6 +1139,7 @@ function Dashboard({ currentUser, onLogout }) {
             <button onClick={() => setTab('departed')} style={{ background: tab === 'departed' ? '#FFFFFF' : 'transparent', color: tab === 'departed' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
               퇴사원DB {departedCustomers.length > 0 && <span style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{departedCustomers.length}</span>}
             </button>
+            <button onClick={() => setTab('logs')} style={{ background: tab === 'logs' ? '#FFFFFF' : 'transparent', color: tab === 'logs' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">접근 로그</button>
           </div>
         )}
         {!isAdmin && (
@@ -1109,6 +1168,8 @@ function Dashboard({ currentUser, onLogout }) {
           <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} />
         ) : tab === 'departed' && isAdmin ? (
           <UnassignedPanel unassigned={departedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} />
+        ) : tab === 'logs' && isAdmin ? (
+          <AccessLogPanel logs={accessLogs} onRefresh={refreshAccessLogs} />
         ) : (
           <React.Fragment>
             <div className="flex flex-wrap gap-2.5">
@@ -1175,7 +1236,7 @@ function Dashboard({ currentUser, onLogout }) {
               {filtered.map(c => {
                 const editable = canEdit(c);
                 return (
-                  <div key={c.id} onClick={() => editable && setEditing({ ...c })} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', opacity: editable ? 1 : 0.75 }} className={"rounded-xl p-3.5 flex items-start gap-2.5 " + (editable ? "cursor-pointer" : "")}>
+                  <div key={c.id} onClick={() => editable && openExisting(c)} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', opacity: editable ? 1 : 0.75 }} className={"rounded-xl p-3.5 flex items-start gap-2.5 " + (editable ? "cursor-pointer" : "")}>
                     {isAdmin && (
                       <input type="checkbox" className="mt-1.5 shrink-0" checked={!!bulkSelected[c.id]} onClick={e => e.stopPropagation()} onChange={() => toggleBulkSelect(c.id)} />
                     )}
