@@ -613,8 +613,17 @@ function getMonthCells(year, month) {
   return cells;
 }
 
-function DayDetailModal({ day, contracts, salesUsers, onClose }) {
+function DayDetailModal({ day, contracts, salesUsers, onClose, onDelete }) {
   const repName = (id) => (salesUsers.find(u => u.id === id) || {}).name || '미배정';
+  const [selected, setSelected] = useState({});
+  const selectedIds = Object.keys(selected).filter(id => selected[id]).map(Number);
+  function toggle(id) { setSelected(prev => ({ ...prev, [id]: !prev[id] })); }
+  function handleDelete() {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`선택한 ${selectedIds.length}건을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    onDelete(selectedIds);
+    setSelected({});
+  }
   return (
     <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.5)' }}>
       <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-y-auto p-4">
@@ -625,27 +634,33 @@ function DayDetailModal({ day, contracts, salesUsers, onClose }) {
         <button onClick={() => exportCustomersToExcel(contracts, salesUsers, `계약내역_${day}.xlsx`)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full text-[12.5px] py-2 rounded-lg mb-3">이 날짜 엑셀 다운로드</button>
         <div className="flex flex-col gap-2.5">
           {contracts.map(c => (
-            <div key={c.id} className="rounded-lg p-3" style={{ background: '#F7F6F2' }}>
-              <p className="font-semibold text-[14px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></p>
-              <div className="mt-1.5 text-[12px] flex flex-col gap-0.5" style={{ color: '#6B6A63' }}>
-                <span>계약자명: {c.contractor_name || '-'}</span>
-                <span>차량번호: {c.car_number || '-'}</span>
-                <span>주소: {c.address || '-'} {c.address_detail}</span>
-                <span>입금자명: {c.depositor_name || '-'}</span>
-                <span>입차시간: {c.entry_time || '-'} / 출차시간: {c.exit_time || '-'}</span>
-                <span>상품: {c.product || '-'}</span>
-                <span>월 이용료: {currency(c.amount)}</span>
-                <span>담당: {repName(c.rep_id)}</span>
+            <label key={c.id} className="rounded-lg p-3 flex items-start gap-2.5" style={{ background: selected[c.id] ? '#FBE9E7' : '#F7F6F2' }}>
+              <input type="checkbox" className="mt-1" checked={!!selected[c.id]} onChange={() => toggle(c.id)} />
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-[14px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></p>
+                <div className="mt-1.5 text-[12px] flex flex-col gap-0.5" style={{ color: '#6B6A63' }}>
+                  <span>계약자명: {c.contractor_name || '-'}</span>
+                  <span>차량번호: {c.car_number || '-'}</span>
+                  <span>주소: {c.address || '-'} {c.address_detail}</span>
+                  <span>입금자명: {c.depositor_name || '-'}</span>
+                  <span>입차시간: {c.entry_time || '-'} / 출차시간: {c.exit_time || '-'}</span>
+                  <span>상품: {c.product || '-'}</span>
+                  <span>월 이용료: {currency(c.amount)}</span>
+                  <span>담당: {repName(c.rep_id)}</span>
+                </div>
               </div>
-            </div>
+            </label>
           ))}
         </div>
+        {selectedIds.length > 0 && (
+          <button onClick={handleDelete} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="w-full text-[12.5px] font-medium py-2.5 rounded-lg mt-3">선택 {selectedIds.length}건 삭제하기</button>
+        )}
       </div>
     </div>
   );
 }
 
-function ContractCalendar({ customers, salesUsers }) {
+function ContractCalendar({ customers, salesUsers, onDeleteContracts }) {
   const [cursor, setCursor] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState(null);
   const year = cursor.getFullYear();
@@ -694,7 +709,15 @@ function ContractCalendar({ customers, salesUsers }) {
         </div>
       </div>
 
-      {selectedDay && <DayDetailModal day={selectedDay} contracts={contracted.filter(c => c.contract_date === selectedDay)} salesUsers={salesUsers} onClose={() => setSelectedDay(null)} />}
+      {selectedDay && (
+        <DayDetailModal
+          day={selectedDay}
+          contracts={contracted.filter(c => c.contract_date === selectedDay)}
+          salesUsers={salesUsers}
+          onClose={() => setSelectedDay(null)}
+          onDelete={(ids) => { onDeleteContracts(ids); }}
+        />
+      )}
     </div>
   );
 }
@@ -992,6 +1015,12 @@ function Dashboard({ currentUser, onLogout }) {
     setCustomers(prev => prev.map(c => ids.includes(c.id) ? { ...c, rep_id: null } : c));
     setBulkSelected({});
   }
+  async function bulkDeleteCustomers(ids) {
+    for (const batch of chunkArray(ids, 100)) {
+      await supabase.from('customers').delete().in('id', batch);
+    }
+    setCustomers(prev => prev.filter(c => !ids.includes(c.id)));
+  }
 
   if (loading) {
     return <div style={{ background: '#EFF1EC', minHeight: '100vh' }} className="w-full flex items-center justify-center"><p style={{ color: '#6B6A63' }} className="text-sm">불러오는 중...</p></div>;
@@ -1047,7 +1076,7 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'staff' && isAdmin ? (
           <StaffPanel allStaff={allStaff} onWithdraw={withdrawUser} onMessage={setMessageTarget} />
         ) : tab === 'stats' && isAdmin ? (
-          <ContractCalendar customers={customers} salesUsers={salesUsers} />
+          <ContractCalendar customers={customers} salesUsers={salesUsers} onDeleteContracts={bulkDeleteCustomers} />
         ) : tab === 'unassigned' && isAdmin ? (
           <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={distributeLeads} />
         ) : (
