@@ -792,7 +792,7 @@ function ContractCalendar({ customers, salesUsers, onDeleteContracts }) {
   );
 }
 
-function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, title = '미배정 DB', repLabel }) {
+function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, onOpenDetail, title = '미배정 DB', repLabel }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState({});
   const [targetRep, setTargetRep] = useState(salesUsers[0] ? salesUsers[0].id : '');
@@ -841,8 +841,8 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, t
       <div className="flex flex-col gap-2" style={{ maxHeight: '55vh', overflowY: 'auto' }}>
         {list.length === 0 && <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}><p className="text-sm" style={{ color: '#9B998F' }}>{title}가 없습니다.</p></div>}
         {list.map(c => (
-          <label key={c.id} className="rounded-lg p-3 flex items-start gap-2.5" style={{ background: selected[c.id] ? '#EAF3DE' : '#FFFFFF', border: '1px solid ' + (selected[c.id] ? '#C0DD97' : '#E4E2D9') }}>
-            <input type="checkbox" className="mt-1" checked={!!selected[c.id]} onChange={() => toggle(c.id)} />
+          <div key={c.id} onClick={() => onOpenDetail(c)} className="rounded-lg p-3 flex items-start gap-2.5 cursor-pointer" style={{ background: selected[c.id] ? '#EAF3DE' : '#FFFFFF', border: '1px solid ' + (selected[c.id] ? '#C0DD97' : '#E4E2D9') }}>
+            <input type="checkbox" className="mt-1" checked={!!selected[c.id]} onClick={e => e.stopPropagation()} onChange={() => toggle(c.id)} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-[14px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
@@ -853,7 +853,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, t
               {repLabel && <p className="text-[11.5px] mt-0.5" style={{ color: '#854F0B' }}>이전 담당: {repLabel(c)}</p>}
               {c.memo && <p className="text-[11.5px] mt-0.5" style={{ color: '#8B8A80' }}>{c.memo}</p>}
             </div>
-          </label>
+          </div>
         ))}
       </div>
 
@@ -1000,7 +1000,7 @@ function Dashboard({ currentUser, onLogout }) {
 
   useEffect(() => { loadAll(); }, []);
   useEffect(() => {
-    const interval = setInterval(() => { loadAll(); }, 30000);
+    const interval = setInterval(() => { loadAll(); }, 3600000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1110,6 +1110,7 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('customers').delete().eq('id', id);
     setCustomers(prev => prev.filter(c => c.id !== id));
     setConfirmDelete(null);
+    setEditing(null);
   }
 
   async function approveUser(id) {
@@ -1280,11 +1281,11 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'stats' && isAdmin ? (
           <ContractCalendar customers={customers} salesUsers={salesUsers} onDeleteContracts={bulkDeleteCustomers} />
         ) : tab === 'unassigned' && isAdmin ? (
-          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} />
+          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} onOpenDetail={openExisting} />
         ) : tab === 'inquiry' && isAdmin ? (
           <InquiryPanel inquiries={inquiryCustomers} onOpen={openInquiry} />
         ) : tab === 'departed' && isAdmin ? (
-          <UnassignedPanel unassigned={departedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} />
+          <UnassignedPanel unassigned={departedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} onOpenDetail={openExisting} />
         ) : tab === 'logs' && isAdmin ? (
           <AccessLogPanel logs={accessLogs} onRefresh={refreshAccessLogs} />
         ) : tab === 'qr' && isAdmin ? (
