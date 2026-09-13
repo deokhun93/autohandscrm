@@ -629,6 +629,83 @@ function ContractCalendar({ customers, salesUsers }) {
   );
 }
 
+function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly }) {
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState({});
+  const [targetRep, setTargetRep] = useState(salesUsers[0] ? salesUsers[0].id : '');
+
+  const list = unassigned.filter(c => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return `${c.name} ${c.phone} ${c.complex}`.toLowerCase().includes(q);
+  });
+  const selectedIds = Object.keys(selected).filter(id => selected[id]);
+  const selectedCount = selectedIds.length;
+
+  function toggle(id) { setSelected(prev => ({ ...prev, [id]: !prev[id] })); }
+  function selectAll() { const next = {}; list.forEach(c => { next[c.id] = true; }); setSelected(next); }
+  function clearAll() { setSelected({}); }
+
+  function send() {
+    if (selectedCount === 0 || !targetRep) return;
+    const repName = (salesUsers.find(u => u.id === targetRep) || {}).name || '';
+    if (!confirm(`선택한 ${selectedCount}건을 ${repName}님에게 전송할까요?`)) return;
+    onSend(selectedIds.map(id => Number(id)), targetRep);
+    clearAll();
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-xl p-3.5 flex items-center justify-between gap-2" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+        <div>
+          <p className="text-[12.5px]" style={{ color: '#6B6A63' }}>미배정 DB</p>
+          <p className="text-xl font-semibold" style={{ color: '#1C2620' }}>{unassigned.length}건</p>
+        </div>
+        <button onClick={onDistributeEvenly} style={{ border: '1px solid #2F6B4F', color: '#2F6B4F' }} className="text-[12.5px] px-3 py-2 rounded-lg whitespace-nowrap font-medium">영업사원에게 균등 배분</button>
+      </div>
+
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: '#9B998F' }}>🔍</span>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름, 연락처, 단지명으로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button onClick={selectAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">현재 목록 전체 선택</button>
+        <button onClick={clearAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">선택 해제</button>
+        <span className="text-[12px] ml-auto" style={{ color: '#6B6A63' }}>{selectedCount}건 선택됨</span>
+      </div>
+
+      <div className="flex flex-col gap-2" style={{ maxHeight: '55vh', overflowY: 'auto' }}>
+        {list.length === 0 && <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}><p className="text-sm" style={{ color: '#9B998F' }}>미배정 DB가 없습니다.</p></div>}
+        {list.map(c => (
+          <label key={c.id} className="rounded-lg p-3 flex items-start gap-2.5" style={{ background: selected[c.id] ? '#EAF3DE' : '#FFFFFF', border: '1px solid ' + (selected[c.id] ? '#C0DD97' : '#E4E2D9') }}>
+            <input type="checkbox" className="mt-1" checked={!!selected[c.id]} onChange={() => toggle(c.id)} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-[14px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
+                <StatusBadge status={c.status} />
+              </div>
+              <p className="text-[12px] mt-0.5" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>
+              <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={c.phone} type="phone" /></p>
+              {c.memo && <p className="text-[11.5px] mt-0.5" style={{ color: '#8B8A80' }}>{c.memo}</p>}
+            </div>
+          </label>
+        ))}
+      </div>
+
+      {selectedCount > 0 && (
+        <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2" style={{ background: '#1C2620' }}>
+          <span className="text-[12.5px] shrink-0" style={{ color: '#FFFFFF' }}>{selectedCount}건 →</span>
+          <select value={targetRep} onChange={e => setTargetRep(e.target.value)} className="flex-1 text-sm rounded-lg px-2 py-2 outline-none" style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }}>
+            {salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <button onClick={send} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">전송</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Dashboard({ currentUser, onLogout }) {
   const isAdmin = currentUser.role === 'admin';
   const myId = currentUser.id;
@@ -681,6 +758,7 @@ function Dashboard({ currentUser, onLogout }) {
   const canEdit = (c) => isAdmin || c.rep_id === myId;
 
   const filtered = useMemo(() => customers.filter(c => {
+    if (!c.rep_id) return false;
     if (statusFilter !== '전체' && c.status !== statusFilter) return false;
     if (isAdmin && repFilter !== '전체' && c.rep_id !== repFilter) return false;
     if (search.trim()) {
@@ -690,7 +768,9 @@ function Dashboard({ currentUser, onLogout }) {
     return true;
   }), [customers, search, statusFilter, repFilter, isAdmin]);
 
-  const scope = isAdmin ? customers : customers.filter(c => c.rep_id === myId);
+  const unassignedCustomers = useMemo(() => customers.filter(c => !c.rep_id), [customers]);
+
+  const scope = isAdmin ? customers.filter(c => c.rep_id) : customers.filter(c => c.rep_id === myId);
   const stats = useMemo(() => {
     const total = scope.length;
     const contracted = scope.filter(c => c.status === '계약완료').length;
@@ -774,6 +854,31 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('scripts').upsert({ id, content, updated_at: new Date().toISOString() });
     setScripts(prev => ({ ...prev, [id]: content }));
   }
+  function chunkArray(arr, size) {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  }
+  async function distributeLeads() {
+    if (salesUsers.length === 0) { alert('승인된 영업사원이 없습니다.'); return; }
+    if (unassignedCustomers.length === 0) return;
+    if (!confirm(`미배정 고객 ${unassignedCustomers.length}명을 영업사원 ${salesUsers.length}명에게 균등하게 나눠 배분할까요?`)) return;
+    const groups = salesUsers.map(() => []);
+    unassignedCustomers.forEach((c, i) => groups[i % salesUsers.length].push(c.id));
+    for (let i = 0; i < salesUsers.length; i++) {
+      for (const batch of chunkArray(groups[i], 100)) {
+        if (batch.length === 0) continue;
+        await supabase.from('customers').update({ rep_id: salesUsers[i].id }).in('id', batch);
+      }
+    }
+    await loadAll();
+  }
+  async function assignToRep(ids, repId) {
+    for (const batch of chunkArray(ids, 100)) {
+      await supabase.from('customers').update({ rep_id: repId }).in('id', batch);
+    }
+    setCustomers(prev => prev.map(c => ids.includes(c.id) ? { ...c, rep_id: repId } : c));
+  }
 
   if (loading) {
     return <div style={{ background: '#EFF1EC', minHeight: '100vh' }} className="w-full flex items-center justify-center"><p style={{ color: '#6B6A63' }} className="text-sm">불러오는 중...</p></div>;
@@ -803,6 +908,9 @@ function Dashboard({ currentUser, onLogout }) {
             </button>
             <button onClick={() => setTab('staff')} style={{ background: tab === 'staff' ? '#FFFFFF' : 'transparent', color: tab === 'staff' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">직원 관리</button>
             <button onClick={() => setTab('stats')} style={{ background: tab === 'stats' ? '#FFFFFF' : 'transparent', color: tab === 'stats' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">계약 현황</button>
+            <button onClick={() => setTab('unassigned')} style={{ background: tab === 'unassigned' ? '#FFFFFF' : 'transparent', color: tab === 'unassigned' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
+              미배정DB {unassignedCustomers.length > 0 && <span style={{ background: '#C98A2E', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{unassignedCustomers.length}</span>}
+            </button>
           </div>
         )}
       </div>
@@ -814,6 +922,8 @@ function Dashboard({ currentUser, onLogout }) {
           <StaffPanel allStaff={allStaff} onWithdraw={withdrawUser} onMessage={setMessageTarget} />
         ) : tab === 'stats' && isAdmin ? (
           <ContractCalendar customers={customers} salesUsers={salesUsers} />
+        ) : tab === 'unassigned' && isAdmin ? (
+          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={distributeLeads} />
         ) : (
           <React.Fragment>
             <div className="flex flex-wrap gap-2.5">
@@ -839,6 +949,16 @@ function Dashboard({ currentUser, onLogout }) {
 
             <ScriptAccordion id="customer_script" title="고객영업문자 스크립트" isAdmin={isAdmin} content={scripts.customer_script} onSave={saveScript} />
             <ScriptAccordion id="application_script" title="신청서 스크립트" isAdmin={isAdmin} content={scripts.application_script} onSave={saveScript} />
+
+            {isAdmin && unassignedCustomers.length > 0 && (
+              <div className="rounded-xl p-3.5 flex items-center justify-between gap-2" style={{ background: '#FFF4E5', border: '1px solid #EF9F27' }}>
+                <div>
+                  <p className="text-[12.5px]" style={{ color: '#854F0B' }}>담당자 미배정 고객</p>
+                  <p className="text-lg font-semibold" style={{ color: '#1C2620' }}>{unassignedCustomers.length}명</p>
+                </div>
+                <button onClick={() => setTab('unassigned')} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="text-[12.5px] px-3 py-2 rounded-lg whitespace-nowrap font-medium">미배정DB 관리하기</button>
+              </div>
+            )}
 
             <div className="flex flex-col gap-2">
               <div className="relative">
