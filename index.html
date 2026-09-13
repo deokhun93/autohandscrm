@@ -60,6 +60,64 @@ const PRICE_TABLE = {
   '월4회': { '소형': 50000, '중형': 60000, '대형': 70000 },
 };
 
+const PRIVACY_POLICY_TEXT = `개인정보처리방침 (초안)
+
+[회사명](이하 "회사")은 「개인정보 보호법」 등 관련 법령을 준수하며, 이용자의 개인정보를 안전하게 처리하기 위해 다음과 같이 개인정보처리방침을 수립·공개합니다.
+
+1. 수집하는 개인정보 항목
+- 영업사원(직원) 가입 시: 이름, 휴대폰번호, 생년월일, 은행명, 계좌번호, 주소, 이메일, 아이디/비밀번호
+- 고객(신청서) 작성 시: 이름, 연락처, 계약자명, 차량번호, 주소, 상세주소, 입금자명, 입차·출차시간
+
+2. 개인정보의 수집 및 이용 목적
+- 직원: 계정 생성 및 승인, 인센티브 지급, 담당 고객 배정 및 업무 관리
+- 고객: 세차 정기권 상담·계약 체결 및 이행, 계약금 확인(입금자명), 서비스 제공(주차 시간 확인), 고객관리
+- 마케팅 수신에 별도 동의한 경우에 한해 이벤트·할인 등 마케팅 정보 안내
+
+3. 개인정보의 보유 및 이용 기간
+- 원칙적으로 수집 및 이용 목적이 달성되면 지체 없이 파기합니다.
+- 다만 계약 또는 청약철회 등에 관한 기록은 관련 법령(전자상거래 등에서의 소비자보호에 관한 법률 등)에 따라 일정 기간 보관할 수 있습니다.
+- 직원이 탈퇴 처리된 경우, 법령상 보관 의무가 없는 정보(계좌번호, 주소, 생년월일 등)는 합리적인 기간 내 파기합니다.
+
+4. 개인정보의 제3자 제공
+- 회사는 이용자의 동의 없이 개인정보를 제3자에게 제공하지 않습니다. 다만 법령에 특별한 규정이 있는 경우는 예외로 합니다.
+
+5. 개인정보 처리 위탁
+- 회사는 원활한 서비스 제공을 위해 데이터베이스 호스팅 업무를 외부 업체(Supabase Inc.)에 위탁하고 있으며, 위탁받는 자와 위탁업무 내용은 다음과 같습니다.
+  - 수탁자: Supabase Inc. / 위탁업무: 데이터베이스 저장 및 관리
+
+6. 마케팅 정보 수신 동의
+- 고객은 신청서 작성 시 마케팅 정보(이벤트, 할인, 무료 서비스 안내 등) 수신 여부를 선택할 수 있으며, 동의하지 않아도 서비스 이용에 제한이 없습니다.
+- 동의한 고객에 한해 문자(SMS) 등으로 마케팅 정보를 발송하며, 언제든지 수신 거부를 요청할 수 있습니다.
+
+7. 정보주체의 권리와 행사 방법
+- 정보주체는 언제든지 자신의 개인정보 열람, 정정, 삭제, 처리정지를 요구할 수 있습니다.
+
+8. 개인정보의 안전성 확보 조치
+- 접근 권한 관리(담당자만 열람·수정 가능), 화면상 개인정보 마스킹 처리 등 기술적·관리적 조치를 시행하고 있습니다.
+
+9. 개인정보 보호책임자
+- 성명: [담당자명] / 연락처: [연락처] / 이메일: [이메일]
+
+10. 부칙
+- 본 방침은 [시행일자]부터 적용됩니다.
+
+※ 본 문서는 초안이며, 실제 사업자 정보와 시행일자, 보관기간 등 세부 사항을 확인·보완한 후 사용하시기 바랍니다. 법적 검토를 권장합니다.`;
+
+function PrivacyPolicyModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.6)' }}>
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>개인정보처리방침</h2>
+          <button onClick={onClose} className="text-lg" style={{ color: '#9B998F' }}>✕</button>
+        </div>
+        <pre className="text-[12.5px] whitespace-pre-wrap" style={{ color: '#4A4A45', fontFamily: 'inherit', lineHeight: '1.6' }}>{PRIVACY_POLICY_TEXT}</pre>
+        <button onClick={onClose} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full mt-4 text-sm font-medium py-2.5 rounded-lg">닫기</button>
+      </div>
+    </div>
+  );
+}
+
 // ---- 개인정보 마스킹 유틸 ----
 function maskName(name) {
   if (!name) return '';
@@ -170,6 +228,8 @@ function LoginPage({ onLogin, onGotoSignup }) {
 
 function SignupPage({ onGotoLogin }) {
   const [form, setForm] = useState({ email: '', password: '', passwordConfirm: '', name: '', phone: '', birth: '', bank: '', account: '', address: '' });
+  const [privacyConsent, setPrivacyConsent] = useState(false);
+  const [showPolicy, setShowPolicy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -180,12 +240,13 @@ function SignupPage({ onGotoLogin }) {
     const required = ['email', 'password', 'name', 'phone', 'birth', 'bank', 'account', 'address'];
     if (required.some(k => !String(form[k]).trim())) { setError('모든 항목을 입력해주세요.'); return; }
     if (form.password !== form.passwordConfirm) { setError('비밀번호가 일치하지 않습니다.'); return; }
+    if (!privacyConsent) { setError('개인정보처리방침에 동의해야 가입할 수 있습니다.'); return; }
     setError(''); setLoading(true);
 
     const { data, error: signUpError } = await supabase.auth.signUp({
       email: form.email.trim(),
       password: form.password,
-      options: { data: { name: form.name, phone: form.phone, birth: form.birth, bank: form.bank, account: form.account, address: form.address } }
+      options: { data: { name: form.name, phone: form.phone, birth: form.birth, bank: form.bank, account: form.account, address: form.address, privacy_consent: true } }
     });
     setLoading(false);
     if (signUpError) { setError(signUpError.message || '가입 중 오류가 발생했습니다.'); return; }
@@ -225,6 +286,14 @@ function SignupPage({ onGotoLogin }) {
             <FieldInput label="계좌번호 *" value={form.account} onChange={e => set('account', e.target.value)} placeholder="123-456-789012" />
           </div>
           <FieldInput label="집주소 *" value={form.address} onChange={e => set('address', e.target.value)} placeholder="대구광역시 ..." />
+
+          <label className="flex items-start gap-2 text-[12.5px]" style={{ color: '#4A4A45' }}>
+            <input type="checkbox" className="mt-0.5" checked={privacyConsent} onChange={e => setPrivacyConsent(e.target.checked)} />
+            <span>
+              (필수) <button type="button" onClick={() => setShowPolicy(true)} style={{ color: '#0C447C', textDecoration: 'underline' }}>개인정보처리방침</button>에 동의합니다
+            </span>
+          </label>
+
           {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
           <button type="submit" disabled={loading} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="mt-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{loading ? '처리 중...' : '가입 신청하기'}</button>
         </form>
@@ -232,6 +301,7 @@ function SignupPage({ onGotoLogin }) {
           이미 계정이 있으신가요? <span style={{ color: '#2F6B4F', fontWeight: 600 }}>로그인</span>
         </button>
       </div>
+      {showPolicy && <PrivacyPolicyModal onClose={() => setShowPolicy(false)} />}
     </div>
   );
 }
@@ -525,7 +595,7 @@ function exportCustomersToExcel(rows, salesUsers, filename) {
   const data = rows.map(c => ({
     'DB시작일': c.visit_date || '', '계약일': c.contract_date || '', '고객명': c.name || '', '연락처': c.phone || '',
     '계약자명': c.contractor_name || '', '차량번호': c.car_number || '', '주소': c.address || '', '상세주소': c.address_detail || '',
-    '입금자명': c.depositor_name || '', '주차시간': c.parking_time || '', '상품': c.product || '', '월이용료': c.amount || 0,
+    '입금자명': c.depositor_name || '', '입차시간': c.entry_time || '', '출차시간': c.exit_time || '', '상품': c.product || '', '월이용료': c.amount || 0,
     '담당영업사원': repName(c.rep_id), '상태': c.status || '', '메모': c.memo || '',
   }));
   const ws = window.XLSX.utils.json_to_sheet(data);
@@ -562,7 +632,7 @@ function DayDetailModal({ day, contracts, salesUsers, onClose }) {
                 <span>차량번호: {c.car_number || '-'}</span>
                 <span>주소: {c.address || '-'} {c.address_detail}</span>
                 <span>입금자명: {c.depositor_name || '-'}</span>
-                <span>주차시간: {c.parking_time || '-'}</span>
+                <span>입차시간: {c.entry_time || '-'} / 출차시간: {c.exit_time || '-'}</span>
                 <span>상품: {c.product || '-'}</span>
                 <span>월 이용료: {currency(c.amount)}</span>
                 <span>담당: {repName(c.rep_id)}</span>
@@ -731,6 +801,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('전체');
   const [repFilter, setRepFilter] = useState('전체');
+  const [marketingFilter, setMarketingFilter] = useState('전체');
   const [myDbFilter, setMyDbFilter] = useState('all');
   const [bulkSelected, setBulkSelected] = useState({});
   const [editing, setEditing] = useState(null);
@@ -788,12 +859,14 @@ function Dashboard({ currentUser, onLogout }) {
     }
     if (statusFilter !== '전체' && c.status !== statusFilter) return false;
     if (isAdmin && repFilter !== '전체' && c.rep_id !== repFilter) return false;
+    if (isAdmin && marketingFilter === '동의' && !c.marketing_consent) return false;
+    if (isAdmin && marketingFilter === '미동의' && c.marketing_consent) return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       if (!`${c.name} ${c.phone} ${c.complex} ${c.unit}`.toLowerCase().includes(q)) return false;
     }
     return true;
-  }), [customers, search, statusFilter, repFilter, isAdmin, myDbFilter, myId]);
+  }), [customers, search, statusFilter, repFilter, isAdmin, myDbFilter, myId, marketingFilter]);
 
   const unassignedCustomers = useMemo(() => customers.filter(c => !c.rep_id), [customers]);
 
@@ -1024,10 +1097,17 @@ function Dashboard({ currentUser, onLogout }) {
                 ))}
               </div>
               {isAdmin && (
-                <select value={repFilter} onChange={e => setRepFilter(e.target.value)} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="text-sm rounded-lg px-3 py-2 self-start">
-                  <option value="전체">담당자: 전체</option>
-                  {salesUsers.map(u => <option key={u.id} value={u.id}>담당자: {u.name}</option>)}
-                </select>
+                <div className="flex gap-2">
+                  <select value={repFilter} onChange={e => setRepFilter(e.target.value)} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="text-sm rounded-lg px-3 py-2">
+                    <option value="전체">담당자: 전체</option>
+                    {salesUsers.map(u => <option key={u.id} value={u.id}>담당자: {u.name}</option>)}
+                  </select>
+                  <select value={marketingFilter} onChange={e => setMarketingFilter(e.target.value)} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="text-sm rounded-lg px-3 py-2">
+                    <option value="전체">마케팅 동의: 전체</option>
+                    <option value="동의">마케팅 동의: 동의함</option>
+                    <option value="미동의">마케팅 동의: 동의안함</option>
+                  </select>
+                </div>
               )}
             </div>
 
@@ -1046,6 +1126,7 @@ function Dashboard({ currentUser, onLogout }) {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
                             <StatusBadge status={c.status} />
+                            {c.marketing_consent && <span style={{ background: '#F1E6FA', color: '#6B3FA0', border: '1px solid #C9A6E8' }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">📣 마케팅동의</span>}
                             {!editable && <span className="text-[11px]" style={{ color: '#B0AEA4' }}>· 조회 전용</span>}
                           </div>
                           {(c.complex || c.unit) && <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex} · {c.unit}</p>}
@@ -1106,11 +1187,17 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
   const [form, setForm] = useState(data);
   const [error, setError] = useState('');
   const [showApplication, setShowApplication] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const toggleStage = (key) => setForm(prev => ({ ...prev, [key]: !prev[key] }));
   function handleSave() {
     if (!form.name.trim() || !form.phone.trim()) { setError('고객명, 연락처는 필수입니다.'); return; }
     onSave(form);
+  }
+  function copyApplyLink() {
+    if (!form.apply_token) { alert('신청서 링크를 사용할 수 없습니다. (이미 신청 완료되었거나 링크가 없는 건입니다)'); return; }
+    const link = `${window.location.origin}${window.location.pathname}?apply=${form.apply_token}`;
+    navigator.clipboard.writeText(link).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); });
   }
   const inputStyle = { background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' };
   const repName = (salesUsers.find(u => u.id === form.rep_id) || {}).name || '';
@@ -1155,6 +1242,11 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
             <textarea value={form.memo || ''} onChange={e => set('memo', e.target.value)} style={inputStyle} rows={3} className="w-full mt-1 rounded-lg px-3 py-2.5 text-sm outline-none resize-none" placeholder="상담 내용을 기록하세요" />
           </div>
           {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
+          {!isNew && (
+            <button onClick={copyApplyLink} style={{ border: '1px solid #85B7EB', color: '#0C447C' }} className="text-[12.5px] font-medium py-2.5 rounded-lg">
+              {linkCopied ? '링크 복사됨 ✓' : '📋 고객용 신청서 링크 복사'}
+            </button>
+          )}
           <div className="flex gap-2 mt-1">
             {!isNew && <button onClick={() => onDelete(form.id)} style={{ border: '1px solid #F0999540', color: '#A32D2D' }} className="px-3.5 py-2.5 rounded-lg">🗑</button>}
             <button onClick={onClose} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">취소</button>
@@ -1184,13 +1276,17 @@ function ApplicationModal({ base, repName, onClose, onSubmit }) {
     address: base.address || '',
     address_detail: base.address_detail || '',
     depositor_name: base.depositor_name || '',
-    parking_time: base.parking_time || '',
+    entry_time: base.entry_time || '',
+    exit_time: base.exit_time || '',
   });
   const [freq, setFreq] = useState('');
   const [size, setSize] = useState('');
   const [isForeign, setIsForeign] = useState(false);
   const [sameAsCustomer, setSameAsCustomer] = useState(false);
   const [sameAsContractor, setSameAsContractor] = useState(false);
+  const [privacyConsent, setPrivacyConsent] = useState(!!base.privacy_consent);
+  const [marketingConsent, setMarketingConsent] = useState(!!base.marketing_consent);
+  const [showPolicy, setShowPolicy] = useState(false);
   const [error, setError] = useState('');
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const inputStyle = { background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' };
@@ -1218,19 +1314,23 @@ function ApplicationModal({ base, repName, onClose, onSubmit }) {
   }
 
   function handleSubmit() {
-    if (!form.contractor_name.trim() || !form.car_number.trim() || !form.address.trim() || !form.depositor_name.trim() || !form.parking_time.trim()) {
-      setError('계약자명, 차량번호, 주소, 입금자명, 주차시간은 필수입니다.');
+    if (!form.contractor_name.trim() || !form.car_number.trim() || !form.address.trim() || !form.depositor_name.trim() || !form.entry_time || !form.exit_time) {
+      setError('계약자명, 차량번호, 주소, 입금자명, 입차시간, 출차시간은 필수입니다.');
       return;
     }
     if (!freq || !size) {
       setError('상품 카테고리(주기·크기)를 선택해주세요.');
       return;
     }
+    if (!privacyConsent) {
+      setError('개인정보 수집·이용 동의는 필수입니다.');
+      return;
+    }
     const amount = PRICE_TABLE[freq][size] + (isForeign ? 5000 : 0);
     const freqLabel = freq === '격주' ? '월2회(격주)' : '월4회';
     const sizeLabel = size === '대형' ? '대형(SUV포함)' : size;
     const product = `${freqLabel} · ${sizeLabel}${isForeign ? ' · 외제차' : ''}`;
-    onSubmit({ ...form, amount, product, status: '계약완료', contract_date: new Date().toISOString().slice(0, 10) });
+    onSubmit({ ...form, amount, product, status: '계약완료', contract_date: new Date().toISOString().slice(0, 10), privacy_consent: privacyConsent, marketing_consent: marketingConsent });
   }
 
   return (
@@ -1275,7 +1375,10 @@ function ApplicationModal({ base, repName, onClose, onSubmit }) {
             <input type="checkbox" checked={sameAsContractor} onChange={e => setSameAsContractor(e.target.checked)} />
             계약자명과 입금자명이 동일합니까
           </label>
-          <FieldInput label="주차시간 *" value={form.parking_time} onChange={e => set('parking_time', e.target.value)} placeholder="예: 평일 저녁 7시 이후" />
+          <div className="grid grid-cols-2 gap-2">
+            <FieldInput label="입차시간 *" type="time" value={form.entry_time} onChange={e => set('entry_time', e.target.value)} />
+            <FieldInput label="출차시간 *" type="time" value={form.exit_time} onChange={e => set('exit_time', e.target.value)} />
+          </div>
 
           <div className="h-px my-1" style={{ background: '#E4E2D9' }} />
 
@@ -1308,6 +1411,17 @@ function ApplicationModal({ base, repName, onClose, onSubmit }) {
             )}
           </div>
 
+          <div className="h-px my-1" style={{ background: '#E4E2D9' }} />
+
+          <label className="flex items-start gap-2 text-[12.5px]" style={{ color: '#4A4A45' }}>
+            <input type="checkbox" className="mt-0.5" checked={privacyConsent} onChange={e => setPrivacyConsent(e.target.checked)} />
+            <span>(필수) 수집한 개인정보는 가입신청 및 고객관리 목적 이외에는 사용하지 않는다는 <button type="button" onClick={() => setShowPolicy(true)} style={{ color: '#0C447C', textDecoration: 'underline' }}>개인정보처리방침</button>에 동의합니다</span>
+          </label>
+          <label className="flex items-start gap-2 text-[12.5px]" style={{ color: '#4A4A45' }}>
+            <input type="checkbox" className="mt-0.5" checked={marketingConsent} onChange={e => setMarketingConsent(e.target.checked)} />
+            <span>(선택) 이벤트·할인·무료 실내세차 등 마케팅 정보 수신에 동의합니다</span>
+          </label>
+
           {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
           <div className="flex gap-2 mt-1">
             <button onClick={onClose} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">취소</button>
@@ -1315,7 +1429,155 @@ function ApplicationModal({ base, repName, onClose, onSubmit }) {
           </div>
         </div>
       </div>
+      {showPolicy && <PrivacyPolicyModal onClose={() => setShowPolicy(false)} />}
     </div>
+  );
+}
+
+function PublicApplyPage({ token }) {
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [customer, setCustomer] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({ contractor_name: '', car_number: '', address: '', address_detail: '', depositor_name: '', entry_time: '', exit_time: '' });
+  const [freq, setFreq] = useState('');
+  const [size, setSize] = useState('');
+  const [isForeign, setIsForeign] = useState(false);
+  const [sameAsCustomer, setSameAsCustomer] = useState(false);
+  const [sameAsContractor, setSameAsContractor] = useState(false);
+  const [privacyConsent, setPrivacyConsent] = useState(false);
+  const [marketingConsent, setMarketingConsent] = useState(false);
+  const [showPolicy, setShowPolicy] = useState(false);
+  const inputStyle = { background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' };
+  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const currentPrice = (freq && size) ? PRICE_TABLE[freq][size] + (isForeign ? 5000 : 0) : null;
+
+  useEffect(() => {
+    (async () => {
+      const { data, error: rpcError } = await supabase.rpc('get_application_by_token', { p_token: token });
+      if (rpcError || !data) { setNotFound(true); setLoading(false); return; }
+      setCustomer(data);
+      setLoading(false);
+    })();
+  }, [token]);
+
+  useEffect(() => { if (sameAsCustomer && customer) set('contractor_name', customer.name || ''); }, [sameAsCustomer, customer]);
+  useEffect(() => { if (sameAsContractor) set('depositor_name', form.contractor_name || ''); }, [sameAsContractor, form.contractor_name]);
+
+  function openAddressSearch() {
+    if (!window.daum || !window.daum.Postcode) { alert('주소 검색 기능을 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.'); return; }
+    new window.daum.Postcode({ oncomplete: (data) => set('address', data.roadAddress || data.address) }).open();
+  }
+
+  async function handleSubmit() {
+    if (!form.contractor_name.trim() || !form.car_number.trim() || !form.address.trim() || !form.depositor_name.trim() || !form.entry_time || !form.exit_time) {
+      setError('계약자명, 차량번호, 주소, 입금자명, 입차시간, 출차시간을 모두 입력해주세요.'); return;
+    }
+    if (!freq || !size) { setError('상품 카테고리(주기·크기)를 선택해주세요.'); return; }
+    if (!privacyConsent) { setError('개인정보 수집·이용 동의는 필수입니다.'); return; }
+    setError(''); setSaving(true);
+    const amount = PRICE_TABLE[freq][size] + (isForeign ? 5000 : 0);
+    const freqLabel = freq === '격주' ? '월2회(격주)' : '월4회';
+    const sizeLabel = size === '대형' ? '대형(SUV포함)' : size;
+    const product = `${freqLabel} · ${sizeLabel}${isForeign ? ' · 외제차' : ''}`;
+    const { error: rpcError } = await supabase.rpc('submit_application', {
+      p_token: token, p_contractor_name: form.contractor_name, p_car_number: form.car_number,
+      p_address: form.address, p_address_detail: form.address_detail, p_depositor_name: form.depositor_name,
+      p_entry_time: form.entry_time, p_exit_time: form.exit_time, p_product: product, p_amount: amount,
+      p_privacy_consent: privacyConsent, p_marketing_consent: marketingConsent,
+    });
+    setSaving(false);
+    if (rpcError) { setError('제출 중 오류가 발생했습니다. 다시 시도해주세요.'); return; }
+    setSubmitted(true);
+  }
+
+  const shell = (content) => (
+    <div style={{ background: '#1C2620', minHeight: '100vh' }} className="w-full flex items-center justify-center px-5 py-10">
+      <div style={{ background: '#FFFFFF' }} className="w-full max-w-sm rounded-2xl p-6">{content}</div>
+    </div>
+  );
+
+  if (loading) return shell(<p className="text-sm text-center py-10" style={{ color: '#6B6A63' }}>불러오는 중...</p>);
+  if (notFound) return shell(<div className="text-center py-6"><div className="text-3xl mb-3">⚠️</div><p className="text-sm" style={{ color: '#4A4A45' }}>유효하지 않거나 이미 제출된 링크입니다.<br />담당 영업사원에게 새 링크를 요청해주세요.</p></div>);
+  if (submitted) return shell(<div className="text-center py-6"><div className="text-3xl mb-3">✅</div><h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>신청이 완료되었습니다</h2><p className="text-[13px] mt-2" style={{ color: '#6B6A63' }}>담당 영업사원이 확인 후 순차적으로 안내드리겠습니다. 감사합니다.</p></div>);
+
+  return shell(
+    <React.Fragment>
+      <p className="text-[11px] tracking-wide uppercase" style={{ color: '#7C9385' }}>방문 세차 정기권</p>
+      <h1 className="text-xl font-semibold mt-1 mb-1" style={{ color: '#1C2620' }}>신청서 작성</h1>
+      <p className="text-[12.5px] mb-4" style={{ color: '#6B6A63' }}>{customer.name}님, 아래 정보를 입력해주세요.</p>
+      <div className="flex flex-col gap-3">
+        <FieldInput label="계약자명 *" value={form.contractor_name} onChange={e => set('contractor_name', e.target.value)} placeholder="계약 당사자 이름" disabled={sameAsCustomer} />
+        <label className="flex items-center gap-2 -mt-1.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
+          <input type="checkbox" checked={sameAsCustomer} onChange={e => setSameAsCustomer(e.target.checked)} />
+          신청자 본인과 계약자명이 동일합니다
+        </label>
+        <FieldInput label="차량번호 *" value={form.car_number} onChange={e => set('car_number', e.target.value)} placeholder="12가 3456" />
+        <div>
+          <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>주소 *</label>
+          <div className="flex gap-2 mt-1">
+            <input value={form.address} onChange={e => set('address', e.target.value)} placeholder="주소찾기를 누르거나 직접 입력하세요" style={inputStyle} className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none" />
+            <button type="button" onClick={openAddressSearch} style={{ background: '#2A362E', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-sm font-medium whitespace-nowrap">주소찾기</button>
+          </div>
+        </div>
+        <FieldInput label="상세주소" value={form.address_detail} onChange={e => set('address_detail', e.target.value)} placeholder="동/호수 등 상세주소" />
+        <FieldInput label="입금자명 *" value={form.depositor_name} onChange={e => set('depositor_name', e.target.value)} placeholder="입금자명" disabled={sameAsContractor} />
+        <label className="flex items-center gap-2 -mt-1.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
+          <input type="checkbox" checked={sameAsContractor} onChange={e => setSameAsContractor(e.target.checked)} />
+          계약자명과 입금자명이 동일합니다
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <FieldInput label="입차시간 *" type="time" value={form.entry_time} onChange={e => set('entry_time', e.target.value)} />
+          <FieldInput label="출차시간 *" type="time" value={form.exit_time} onChange={e => set('exit_time', e.target.value)} />
+        </div>
+
+        <div className="h-px my-1" style={{ background: '#E4E2D9' }} />
+
+        <div>
+          <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>상품 카테고리 *</label>
+          <div className="flex gap-2 mt-1.5">
+            {['격주', '월4회'].map(f => (
+              <button key={f} type="button" onClick={() => { setFreq(f); setSize(''); }} style={{ background: freq === f ? '#2F6B4F' : '#F7F6F2', color: freq === f ? '#FFFFFF' : '#6B6A63', border: '1px solid ' + (freq === f ? '#2F6B4F' : '#E4E2D9') }} className="flex-1 rounded-lg py-2 text-[12.5px] font-medium">
+                {f === '격주' ? '월2회 (격주)' : '월4회'}
+              </button>
+            ))}
+          </div>
+          {freq && (
+            <div className="flex gap-2 mt-2">
+              {['소형', '중형', '대형'].map(s => (
+                <button key={s} type="button" onClick={() => setSize(s)} style={{ background: size === s ? '#2F6B4F' : '#F7F6F2', color: size === s ? '#FFFFFF' : '#6B6A63', border: '1px solid ' + (size === s ? '#2F6B4F' : '#E4E2D9') }} className="flex-1 rounded-lg py-2 text-[12px] font-medium">
+                  {s === '대형' ? '대형(SUV)' : s}
+                </button>
+              ))}
+            </div>
+          )}
+          {freq && size && (
+            <label className="flex items-center gap-2 mt-2.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
+              <input type="checkbox" checked={isForeign} onChange={e => setIsForeign(e.target.checked)} />
+              외제차 (+5,000원)
+            </label>
+          )}
+          {currentPrice != null && <p className="text-[14px] font-semibold mt-2" style={{ color: '#085041' }}>월 이용료: {currency(currentPrice)}</p>}
+        </div>
+
+        <div className="h-px my-1" style={{ background: '#E4E2D9' }} />
+
+        <label className="flex items-start gap-2 text-[12.5px]" style={{ color: '#4A4A45' }}>
+          <input type="checkbox" className="mt-0.5" checked={privacyConsent} onChange={e => setPrivacyConsent(e.target.checked)} />
+          <span>(필수) 수집한 개인정보는 가입신청 및 고객관리 목적 이외에는 사용하지 않는다는 <button type="button" onClick={() => setShowPolicy(true)} style={{ color: '#0C447C', textDecoration: 'underline' }}>개인정보처리방침</button>에 동의합니다</span>
+        </label>
+        <label className="flex items-start gap-2 text-[12.5px]" style={{ color: '#4A4A45' }}>
+          <input type="checkbox" className="mt-0.5" checked={marketingConsent} onChange={e => setMarketingConsent(e.target.checked)} />
+          <span>(선택) 이벤트·할인·무료 실내세차 등 마케팅 정보 수신에 동의합니다</span>
+        </label>
+
+        {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
+        <button onClick={handleSubmit} disabled={saving} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="mt-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{saving ? '제출 중...' : '신청서 제출하기'}</button>
+      </div>
+      {showPolicy && <PrivacyPolicyModal onClose={() => setShowPolicy(false)} />}
+    </React.Fragment>
   );
 }
 
@@ -1323,8 +1585,10 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authView, setAuthView] = useState('login');
   const [checking, setChecking] = useState(true);
+  const applyToken = new URLSearchParams(window.location.search).get('apply');
 
   useEffect(() => {
+    if (applyToken) { setChecking(false); return; }
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
@@ -1343,6 +1607,10 @@ function App() {
     await supabase.auth.signOut();
     setCurrentUser(null);
     setAuthView('login');
+  }
+
+  if (applyToken) {
+    return <PublicApplyPage token={applyToken} />;
   }
 
   if (checking) {
