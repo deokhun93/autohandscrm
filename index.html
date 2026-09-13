@@ -538,7 +538,7 @@ function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail }) {
     if (!c.rep_id || !selectedStaff[c.rep_id]) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return `${c.name} ${c.phone} ${c.complex}`.toLowerCase().includes(q);
+    return `${c.name} ${c.phone} ${c.complex} ${c.memo || ''}`.toLowerCase().includes(q);
   }).sort((a, b) => new Date(b.contract_date || b.visit_date) - new Date(a.contract_date || a.visit_date));
 
   return (
@@ -864,7 +864,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, o
   const list = unassigned.filter(c => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
-    return `${c.name} ${c.phone} ${c.complex}`.toLowerCase().includes(q);
+    return `${c.name} ${c.phone} ${c.complex} ${c.memo || ''}`.toLowerCase().includes(q);
   });
   const selectedIds = Object.keys(selected).filter(id => selected[id]);
   const selectedCount = selectedIds.length;
@@ -1099,7 +1099,7 @@ function Dashboard({ currentUser, onLogout }) {
     if (isAdmin && marketingFilter === '미동의' && c.marketing_consent) return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      if (!`${c.name} ${c.phone} ${c.complex} ${c.unit}`.toLowerCase().includes(q)) return false;
+      if (!`${c.name} ${c.phone} ${c.complex} ${c.unit} ${c.memo || ''}`.toLowerCase().includes(q)) return false;
     }
     return true;
   }), [customers, search, statusFilter, repFilter, isAdmin, myDbFilter, myId, marketingFilter, departedUsers]);
