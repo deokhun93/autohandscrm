@@ -723,7 +723,7 @@ function ContractCalendar({ customers, salesUsers, onDeleteContracts }) {
   );
 }
 
-function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly }) {
+function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, title = '미배정 DB', repLabel }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState({});
   const [targetRep, setTargetRep] = useState(salesUsers[0] ? salesUsers[0].id : '');
@@ -752,7 +752,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly })
     <div className="flex flex-col gap-3">
       <div className="rounded-xl p-3.5 flex items-center justify-between gap-2" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
         <div>
-          <p className="text-[12.5px]" style={{ color: '#6B6A63' }}>미배정 DB</p>
+          <p className="text-[12.5px]" style={{ color: '#6B6A63' }}>{title}</p>
           <p className="text-xl font-semibold" style={{ color: '#1C2620' }}>{unassigned.length}건</p>
         </div>
         <button onClick={onDistributeEvenly} style={{ border: '1px solid #2F6B4F', color: '#2F6B4F' }} className="text-[12.5px] px-3 py-2 rounded-lg whitespace-nowrap font-medium">영업사원에게 균등 배분</button>
@@ -770,7 +770,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly })
       </div>
 
       <div className="flex flex-col gap-2" style={{ maxHeight: '55vh', overflowY: 'auto' }}>
-        {list.length === 0 && <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}><p className="text-sm" style={{ color: '#9B998F' }}>미배정 DB가 없습니다.</p></div>}
+        {list.length === 0 && <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}><p className="text-sm" style={{ color: '#9B998F' }}>{title}가 없습니다.</p></div>}
         {list.map(c => (
           <label key={c.id} className="rounded-lg p-3 flex items-start gap-2.5" style={{ background: selected[c.id] ? '#EAF3DE' : '#FFFFFF', border: '1px solid ' + (selected[c.id] ? '#C0DD97' : '#E4E2D9') }}>
             <input type="checkbox" className="mt-1" checked={!!selected[c.id]} onChange={() => toggle(c.id)} />
@@ -781,6 +781,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly })
               </div>
               <p className="text-[12px] mt-0.5" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>
               <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={c.phone} type="phone" /></p>
+              {repLabel && <p className="text-[11.5px] mt-0.5" style={{ color: '#854F0B' }}>이전 담당: {repLabel(c)}</p>}
               {c.memo && <p className="text-[11.5px] mt-0.5" style={{ color: '#8B8A80' }}>{c.memo}</p>}
             </div>
           </label>
@@ -833,6 +834,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [customers, setCustomers] = useState([]);
   const [salesUsers, setSalesUsers] = useState([]);
   const [pendingUsers, setPendingUsers] = useState([]);
+  const [departedUsers, setDepartedUsers] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [allStaff, setAllStaff] = useState([]);
   const [inboxMessages, setInboxMessages] = useState([]);
@@ -863,17 +865,27 @@ function Dashboard({ currentUser, onLogout }) {
     if (isAdmin) {
       const { data: pendingData } = await supabase.from('profiles').select('*').eq('status', '대기');
       setPendingUsers(pendingData || []);
+      const { data: departedData } = await supabase.from('profiles').select('*').eq('status', '탈퇴');
+      setDepartedUsers(departedData || []);
     }
     setLoading(false);
   }
 
   useEffect(() => { loadAll(); }, []);
 
-  const repName = (id) => (salesUsers.find(u => u.id === id) || {}).name || '미배정';
+  const repName = (id) => {
+    const active = salesUsers.find(u => u.id === id);
+    if (active) return active.name;
+    const departed = departedUsers.find(u => u.id === id);
+    if (departed) return `${departed.name} (퇴사원)`;
+    return '미배정';
+  };
   const canEdit = (c) => isAdmin || c.rep_id === myId;
+  const departedCustomers = useMemo(() => customers.filter(c => c.rep_id && departedUsers.some(u => u.id === c.rep_id)), [customers, departedUsers]);
 
   const filtered = useMemo(() => customers.filter(c => {
     if (!c.rep_id) return false;
+    if (departedUsers.some(u => u.id === c.rep_id)) return false;
     if (!isAdmin && myDbFilter !== 'all') {
       if (c.rep_id !== myId) return false;
       if (myDbFilter === 'today') { if (c.visit_date !== new Date().toISOString().slice(0, 10)) return false; }
@@ -890,7 +902,7 @@ function Dashboard({ currentUser, onLogout }) {
       if (!`${c.name} ${c.phone} ${c.complex} ${c.unit}`.toLowerCase().includes(q)) return false;
     }
     return true;
-  }), [customers, search, statusFilter, repFilter, isAdmin, myDbFilter, myId, marketingFilter]);
+  }), [customers, search, statusFilter, repFilter, isAdmin, myDbFilter, myId, marketingFilter, departedUsers]);
 
   const unassignedCustomers = useMemo(() => customers.filter(c => !c.rep_id), [customers]);
 
@@ -945,9 +957,11 @@ function Dashboard({ currentUser, onLogout }) {
   }
   async function withdrawUser(id) {
     if (!confirm('이 영업사원을 탈퇴 처리할까요? 더 이상 로그인할 수 없게 되고, 저장된 개인정보(연락처·생년월일·계좌·주소)는 자동으로 파기됩니다.')) return;
+    const departedUser = salesUsers.find(u => u.id === id) || allStaff.find(u => u.id === id);
     await supabase.from('profiles').update({ status: '탈퇴' }).eq('id', id);
     setSalesUsers(prev => prev.filter(u => u.id !== id));
     setAllStaff(prev => prev.filter(u => u.id !== id));
+    if (departedUser) setDepartedUsers(prev => [...prev, { ...departedUser, status: '탈퇴' }]);
   }
   async function deleteAccountCompletely(user) {
     if (!confirm(`${user.name}님의 로그인 계정을 완전히 삭제할까요?\n이메일/비밀번호를 포함한 모든 정보가 영구 삭제되며 되돌릴 수 없습니다.`)) return;
@@ -994,12 +1008,12 @@ function Dashboard({ currentUser, onLogout }) {
     for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
     return out;
   }
-  async function distributeLeads() {
+  async function distributeAmongReps(list, label) {
     if (salesUsers.length === 0) { alert('승인된 영업사원이 없습니다.'); return; }
-    if (unassignedCustomers.length === 0) return;
-    if (!confirm(`미배정 고객 ${unassignedCustomers.length}명을 영업사원 ${salesUsers.length}명에게 균등하게 나눠 배분할까요?`)) return;
+    if (list.length === 0) return;
+    if (!confirm(`${label} ${list.length}명을 영업사원 ${salesUsers.length}명에게 균등하게 나눠 배분할까요?`)) return;
     const groups = salesUsers.map(() => []);
-    unassignedCustomers.forEach((c, i) => groups[i % salesUsers.length].push(c.id));
+    list.forEach((c, i) => groups[i % salesUsers.length].push(c.id));
     for (let i = 0; i < salesUsers.length; i++) {
       for (const batch of chunkArray(groups[i], 100)) {
         if (batch.length === 0) continue;
@@ -1064,6 +1078,9 @@ function Dashboard({ currentUser, onLogout }) {
             <button onClick={() => setTab('unassigned')} style={{ background: tab === 'unassigned' ? '#FFFFFF' : 'transparent', color: tab === 'unassigned' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
               미배정DB {unassignedCustomers.length > 0 && <span style={{ background: '#C98A2E', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{unassignedCustomers.length}</span>}
             </button>
+            <button onClick={() => setTab('departed')} style={{ background: tab === 'departed' ? '#FFFFFF' : 'transparent', color: tab === 'departed' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
+              퇴사원DB {departedCustomers.length > 0 && <span style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{departedCustomers.length}</span>}
+            </button>
           </div>
         )}
         {!isAdmin && (
@@ -1089,7 +1106,9 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'stats' && isAdmin ? (
           <ContractCalendar customers={customers} salesUsers={salesUsers} onDeleteContracts={bulkDeleteCustomers} />
         ) : tab === 'unassigned' && isAdmin ? (
-          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={distributeLeads} />
+          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} />
+        ) : tab === 'departed' && isAdmin ? (
+          <UnassignedPanel unassigned={departedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} />
         ) : (
           <React.Fragment>
             <div className="flex flex-wrap gap-2.5">
