@@ -618,7 +618,7 @@ function InquiryPanel({ inquiries, onOpen }) {
   );
 }
 
-function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage }) {
+function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage, onChangeRole }) {
   return (
     <div className="flex flex-col gap-2.5">
       {allStaff.length === 0 && (
@@ -631,17 +631,74 @@ function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage }) {
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="font-semibold text-[15px]" style={{ color: '#1C2620' }}>{u.name}</p>
-              <span style={{ background: u.role === 'admin' ? '#E6F1FB' : '#E1F5EE', color: u.role === 'admin' ? '#0C447C' : '#085041', border: '1px solid ' + (u.role === 'admin' ? '#85B7EB' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{u.role === 'admin' ? '관리자' : '영업사원'}</span>
+              <span style={{ background: u.role === 'admin' ? '#E6F1FB' : u.role === 'field' ? '#F1E6FA' : '#E1F5EE', color: u.role === 'admin' ? '#0C447C' : u.role === 'field' ? '#6B3FA0' : '#085041', border: '1px solid ' + (u.role === 'admin' ? '#85B7EB' : u.role === 'field' ? '#C9A6E8' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{u.role === 'admin' ? '관리자' : u.role === 'field' ? '현장직원' : '영업사원'}</span>
             </div>
             <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={u.phone} type="phone" /></p>
           </div>
           <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
+            {u.role !== 'admin' && (
+              <select value={u.role} onChange={e => onChangeRole(u.id, e.target.value)} className="text-[12px] rounded-lg px-2 py-1.5" style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }}>
+                <option value="sales">영업사원</option>
+                <option value="field">현장직원</option>
+              </select>
+            )}
             <button onClick={() => onMessage(u)} style={{ border: '1px solid #85B7EB', color: '#0C447C' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">메시지</button>
             {u.role !== 'admin' && <button onClick={() => onWithdraw(u.id)} style={{ border: '1px solid #F0999540', color: '#A32D2D' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">탈퇴</button>}
             {u.role !== 'admin' && <button onClick={() => onDeleteAccount(u)} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">계정 완전삭제</button>}
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function SmsComposeModal({ selectedCount, defaultText, onClose, onSend }) {
+  const [text, setText] = useState(defaultText || '');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+
+  async function handleSend() {
+    if (!text.trim()) return;
+    setSending(true);
+    const res = await onSend(text.trim());
+    setSending(false);
+    setResult(res);
+  }
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.5)' }}>
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-4">
+        <h2 className="text-base font-semibold mb-1" style={{ color: '#1C2620' }}>문자 발송</h2>
+        <p className="text-[12px] mb-3" style={{ color: '#6B6A63' }}>선택한 {selectedCount}건 중 <strong>마케팅 수신에 동의한 고객에게만</strong> 자동으로 발송됩니다.</p>
+        <textarea value={text} onChange={e => setText(e.target.value)} rows={5} style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none" placeholder="발송할 문자 내용을 입력하세요" />
+        <p className="text-[11px] mt-1.5" style={{ color: '#B0AEA4' }}>문자 앞에 "(광고)"와 수신거부 안내가 자동으로 추가됩니다.</p>
+        {result && (
+          <p className="text-[12.5px] mt-2 px-3 py-2 rounded-lg" style={{ background: '#E1F5EE', color: '#085041' }}>
+            발송 {result.sent}건 완료{result.skipped > 0 ? ` · 마케팅 미동의로 ${result.skipped}건 제외` : ''}
+          </p>
+        )}
+        <div className="flex gap-2 mt-3">
+          <button onClick={onClose} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">닫기</button>
+          <button onClick={handleSend} disabled={sending} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{sending ? '발송 중...' : '발송하기'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SenderNumberModal({ currentNumber, onClose, onSave }) {
+  const [value, setValue] = useState(currentNumber || '');
+  return (
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.5)' }}>
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-4">
+        <h2 className="text-base font-semibold mb-1" style={{ color: '#1C2620' }}>내 발신번호 설정</h2>
+        <p className="text-[12px] mb-3" style={{ color: '#6B6A63' }}>문자 발송 업체(알리고 등)에 본인이 직접 사전 등록·인증한 번호만 입력해주세요. 등록되지 않은 번호는 발송이 거부됩니다.</p>
+        <input value={value} onChange={e => setValue(formatPhoneInput(e.target.value))} placeholder="010-0000-0000" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none" maxLength={13} />
+        <div className="flex gap-2 mt-3">
+          <button onClick={onClose} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">취소</button>
+          <button onClick={() => onSave(value)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">저장</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -699,6 +756,43 @@ function MessageCenter({ received, sent, staff, onMarkRead, onDelete, onClose })
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MyScriptEditor({ sharedDefault, personalValue, onSave }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(personalValue || sharedDefault || '');
+  const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setDraft(personalValue || sharedDefault || ''); }, [personalValue, sharedDefault]);
+
+  function copy() {
+    navigator.clipboard.writeText(draft).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  }
+  function save() {
+    onSave(draft);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+      <button onClick={() => setOpen(o => !o)} className="w-full flex items-center justify-between px-3.5 py-3">
+        <span className="text-[13px] font-medium" style={{ color: '#1C2620' }}>📱 내 문자 스크립트 (전화번호 등 개인화)</span>
+        <span style={{ color: '#9B998F' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="px-3.5 pb-3.5 flex flex-col gap-2">
+          <p className="text-[11.5px]" style={{ color: '#B0AEA4' }}>기본 스크립트를 그대로 불러왔습니다. 전화번호 등 원하는 부분을 본인 것으로 바꿔서 저장하면, 이후 이 고객영업문자를 보낼 때 나에게만 이 버전이 사용됩니다.</p>
+          <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={6} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} />
+          <div className="flex gap-2">
+            <button onClick={copy} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-[12.5px] py-2 rounded-lg font-medium">{copied ? '복사됨 ✓' : '복사하기'}</button>
+            <button onClick={save} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-[12.5px] py-2 rounded-lg font-medium">{saved ? '저장됨 ✓' : '저장'}</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1014,6 +1108,10 @@ function Dashboard({ currentUser, onLogout }) {
   const [marketingFilter, setMarketingFilter] = useState('전체');
   const [myDbFilter, setMyDbFilter] = useState('all');
   const [bulkSelected, setBulkSelected] = useState({});
+  const [showSmsCompose, setShowSmsCompose] = useState(false);
+  const [showSenderSetting, setShowSenderSetting] = useState(false);
+  const [currentUserSender, setCurrentUserSender] = useState(currentUser.sms_sender_number || '');
+  const [myPersonalScript, setMyPersonalScript] = useState(currentUser.personal_customer_script || '');
   const [editing, setEditing] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [customers, setCustomers] = useState([]);
@@ -1189,6 +1287,31 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('profiles').update({ status: '거절' }).eq('id', id);
     setPendingUsers(prev => prev.filter(u => u.id !== id));
   }
+  async function changeStaffRole(id, role) {
+    await supabase.from('profiles').update({ role }).eq('id', id);
+    setAllStaff(prev => prev.map(u => u.id === id ? { ...u, role } : u));
+    setSalesUsers(prev => role === 'sales' ? prev : prev.filter(u => u.id !== id));
+    await loadAll();
+  }
+  async function sendSmsToSelected(message) {
+    const ids = Object.keys(bulkSelected).filter(id => bulkSelected[id]).map(Number);
+    const { data, error } = await supabase.functions.invoke('send-sms', { body: { customer_ids: ids, message } });
+    if (error || (data && data.error)) {
+      alert('발송 실패: ' + (data && data.error ? data.error : (error ? error.message : '알 수 없는 오류')));
+      return { sent: 0, skipped: 0 };
+    }
+    setBulkSelected({});
+    return data;
+  }
+  async function saveSenderNumber(number) {
+    await supabase.from('profiles').update({ sms_sender_number: number }).eq('id', myId);
+    setCurrentUserSender(number);
+    setShowSenderSetting(false);
+  }
+  async function savePersonalScript(text) {
+    await supabase.from('profiles').update({ personal_customer_script: text }).eq('id', myId);
+    setMyPersonalScript(text);
+  }
   async function withdrawUser(id) {
     if (!confirm('이 영업사원을 탈퇴 처리할까요? 더 이상 로그인할 수 없게 되고, 저장된 개인정보(연락처·생년월일·계좌·주소)는 자동으로 파기됩니다.')) return;
     const departedUser = salesUsers.find(u => u.id === id) || allStaff.find(u => u.id === id);
@@ -1302,6 +1425,9 @@ function Dashboard({ currentUser, onLogout }) {
             <button onClick={loadAll} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="flex items-center justify-center text-sm rounded-lg w-10 h-10" aria-label="새로고침">
               🔄
             </button>
+            <button onClick={() => setShowSenderSetting(true)} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="flex items-center justify-center text-sm rounded-lg w-10 h-10" aria-label="발신번호 설정">
+              📱
+            </button>
             <button onClick={() => setShowInbox(true)} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="relative flex items-center justify-center text-sm rounded-lg w-10 h-10">
               🔔
               {inboxMessages.some(m => !m.is_read) && <span style={{ background: '#C98A2E' }} className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full" />}
@@ -1351,7 +1477,7 @@ function Dashboard({ currentUser, onLogout }) {
         {tab === 'approvals' && isAdmin ? (
           <ApprovalPanel pendingUsers={pendingUsers} onApprove={approveUser} onReject={rejectUser} />
         ) : tab === 'staff' && isAdmin ? (
-          <StaffPanel allStaff={allStaff} onWithdraw={withdrawUser} onDeleteAccount={deleteAccountCompletely} onMessage={setMessageTarget} />
+          <StaffPanel allStaff={allStaff} onWithdraw={withdrawUser} onDeleteAccount={deleteAccountCompletely} onMessage={setMessageTarget} onChangeRole={changeStaffRole} />
         ) : tab === 'stats' && isAdmin ? (
           <ContractCalendar customers={customers} salesUsers={salesUsers} />
         ) : tab === 'unassigned' && isAdmin ? (
@@ -1390,6 +1516,7 @@ function Dashboard({ currentUser, onLogout }) {
             <Announcements isAdmin={isAdmin} announcements={announcements} onPost={postAnnouncement} onUpdate={updateAnnouncement} onDelete={deleteAnnouncement} />
 
             <ScriptAccordion id="customer_script" title="고객영업문자 스크립트" isAdmin={isAdmin} content={scripts.customer_script} onSave={saveScript} />
+            <MyScriptEditor sharedDefault={scripts.customer_script} personalValue={myPersonalScript} onSave={savePersonalScript} />
             <ScriptAccordion id="application_script" title="신청서 스크립트" isAdmin={isAdmin} content={scripts.application_script} onSave={saveScript} />
 
             {isAdmin && unassignedCustomers.length > 0 && (
@@ -1433,7 +1560,7 @@ function Dashboard({ currentUser, onLogout }) {
                 const editable = canEdit(c);
                 return (
                   <div key={c.id} onClick={() => editable && openExisting(c)} style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', opacity: editable ? 1 : 0.75 }} className={"rounded-xl p-3.5 flex items-start gap-2.5 " + (editable ? "cursor-pointer" : "")}>
-                    {isAdmin && (
+                    {editable && (
                       <input type="checkbox" className="mt-1.5 shrink-0" checked={!!bulkSelected[c.id]} onClick={e => e.stopPropagation()} onChange={() => toggleBulkSelect(c.id)} />
                     )}
                     <div className="min-w-0 flex-1">
@@ -1463,11 +1590,12 @@ function Dashboard({ currentUser, onLogout }) {
               })}
             </div>
 
-            {isAdmin && bulkSelectedCount > 0 && (
-              <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2" style={{ background: '#1C2620' }}>
+            {bulkSelectedCount > 0 && (
+              <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2 flex-wrap" style={{ background: '#1C2620' }}>
                 <span className="text-[12.5px] shrink-0" style={{ color: '#FFFFFF' }}>{bulkSelectedCount}건 선택됨</span>
                 <button onClick={() => setBulkSelected({})} style={{ border: '1px solid #3D4A41', color: '#FFFFFF' }} className="text-[12px] px-3 py-2 rounded-lg whitespace-nowrap">선택 해제</button>
-                <button onClick={bulkUnassign} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">미배정으로 변경</button>
+                {isAdmin && <button onClick={bulkUnassign} style={{ border: '1px solid #3D4A41', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">미배정으로 변경</button>}
+                <button onClick={() => setShowSmsCompose(true)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">📱 문자 발송</button>
               </div>
             )}
           </React.Fragment>
@@ -1478,7 +1606,7 @@ function Dashboard({ currentUser, onLogout }) {
         <button onClick={openNew} style={{ background: '#2F6B4F' }} className="fixed bottom-5 right-5 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg text-2xl" aria-label="신규DB 등록">＋</button>
       )}
 
-      {editing && <EditModal data={editing} isAdmin={isAdmin} salesUsers={isAdmin ? allStaff : salesUsers} isNew={editing.id == null} onClose={() => setEditing(null)} onSave={saveCustomer} onDelete={(id) => setConfirmDelete(id)} currentUserId={myId} onAssignSelf={assignLinkCopier} />}
+      {editing && <EditModal data={editing} isAdmin={isAdmin} salesUsers={isAdmin ? allStaff : salesUsers} isNew={editing.id == null} onClose={() => setEditing(null)} onSave={saveCustomer} onDelete={(id) => setConfirmDelete(id)} currentUserId={myId} onAssignSelf={assignLinkCopier} effectiveScript={myPersonalScript || scripts.customer_script} />}
 
       {confirmDelete != null && (
         <div className="fixed inset-0 z-30 flex items-center justify-center px-6" style={{ background: 'rgba(28,38,32,0.5)' }}>
@@ -1495,20 +1623,35 @@ function Dashboard({ currentUser, onLogout }) {
 
       {showInbox && <MessageCenter received={inboxMessages} sent={sentMessages} staff={allStaff} onMarkRead={markMessageRead} onDelete={deleteMessage} onClose={() => setShowInbox(false)} />}
       {messageTarget && <MessageComposeModal target={messageTarget} onClose={() => setMessageTarget(null)} onSend={(text) => sendMessage(messageTarget.id, text)} />}
+      {showSmsCompose && <SmsComposeModal selectedCount={bulkSelectedCount} defaultText={scripts.customer_script} onClose={() => setShowSmsCompose(false)} onSend={sendSmsToSelected} />}
+      {showSenderSetting && <SenderNumberModal currentNumber={currentUserSender} onClose={() => setShowSenderSetting(false)} onSave={saveSenderNumber} />}
     </div>
   );
 }
 
-function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete, currentUserId, onAssignSelf }) {
+function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete, currentUserId, onAssignSelf, effectiveScript }) {
   const [form, setForm] = useState(data);
   const [error, setError] = useState('');
   const [showApplication, setShowApplication] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsResult, setSmsResult] = useState('');
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const toggleStage = (key) => setForm(prev => ({ ...prev, [key]: !prev[key] }));
   function handleSave() {
     if (!form.name.trim() || !form.phone.trim()) { setError('고객명, 연락처는 필수입니다.'); return; }
     onSave(form);
+  }
+  async function sendInitialSms() {
+    if (!form.id) { alert('먼저 저장한 뒤에 문자를 보낼 수 있습니다.'); return; }
+    const text = effectiveScript || '';
+    if (!text.trim()) { alert('메인화면의 "고객영업문자 스크립트"에 먼저 내용을 등록해주세요.'); return; }
+    if (!confirm('이 고객에게 고객영업문자를 발송하시겠습니까?')) return;
+    setSmsSending(true); setSmsResult('');
+    const { data: res, error: err } = await supabase.functions.invoke('send-sms', { body: { customer_ids: [form.id], message: text, is_initial_contact: true } });
+    setSmsSending(false);
+    if (err || (res && res.error)) { setSmsResult('발송 실패: ' + (res && res.error ? res.error : (err ? err.message : ''))); return; }
+    setSmsResult(res.skipped > 0 ? '이 고객은 수신거부 상태라 발송되지 않았습니다.' : '문자가 발송되었습니다.');
   }
   function copyApplyLink() {
     if (!form.apply_token) { alert('신청서 링크를 사용할 수 없습니다. (이미 신청 완료되었거나 링크가 없는 건입니다)'); return; }
@@ -1534,7 +1677,22 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
         <div className="px-4 pb-5 flex flex-col gap-3">
           <FieldInput label="DB시작일" type="date" value={form.visit_date || ''} onChange={e => set('visit_date', e.target.value)} />
           <FieldInput label="고객명 *" value={form.name} onChange={e => set('name', e.target.value)} placeholder="홍길동" />
-          <FieldInput label="연락처 *" value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} placeholder="010-0000-0000" maxLength={13} />
+          <div>
+            <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>연락처 *</label>
+            <div className="flex items-center gap-2 mt-1">
+              <input value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} placeholder="010-0000-0000" maxLength={13} style={inputStyle} className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none" />
+              {!isNew && (
+                <button type="button" onClick={sendInitialSms} disabled={smsSending} title="고객영업문자 스크립트 발송" className="text-xl shrink-0 disabled:opacity-40">✉️</button>
+              )}
+            </div>
+            {smsResult && <p className="text-[11.5px] mt-1" style={{ color: smsResult.includes('실패') || smsResult.includes('거부') ? '#A32D2D' : '#085041' }}>{smsResult}</p>}
+            {!isNew && (
+              <label className="flex items-center gap-2 mt-1.5 text-[11.5px]" style={{ color: '#6B6A63' }}>
+                <input type="checkbox" checked={!!form.sms_opt_out} onChange={e => set('sms_opt_out', e.target.checked)} />
+                이 고객은 문자 수신을 거부했습니다 (체크 시 이후 모든 문자 발송에서 자동 제외)
+              </label>
+            )}
+          </div>
           <div>
             <label className="text-[12.5px]" style={{ color: '#6B6A63' }}>영업 진행 단계</label>
             <div className="flex gap-2 mt-1.5">
