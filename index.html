@@ -673,9 +673,15 @@ function SmsComposeModal({ selectedCount, defaultText, onClose, onSend }) {
         <textarea value={text} onChange={e => setText(e.target.value)} rows={5} style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none" placeholder="발송할 문자 내용을 입력하세요" />
         <p className="text-[11px] mt-1.5" style={{ color: '#B0AEA4' }}>문자 앞에 "(광고)"와 수신거부 안내가 자동으로 추가됩니다.</p>
         {result && (
-          <p className="text-[12.5px] mt-2 px-3 py-2 rounded-lg" style={{ background: '#E1F5EE', color: '#085041' }}>
-            발송 {result.sent}건 완료{result.skipped > 0 ? ` · 마케팅 미동의로 ${result.skipped}건 제외` : ''}
-          </p>
+          <div className="mt-2 px-3 py-2 rounded-lg" style={{ background: (result.results || []).some(r => r.status !== '성공') ? '#FAEEDA' : '#E1F5EE' }}>
+            <p className="text-[12.5px]" style={{ color: (result.results || []).some(r => r.status !== '성공') ? '#854F0B' : '#085041' }}>
+              시도 {result.sent || 0}건{result.skipped > 0 ? ` · 마케팅 미동의로 ${result.skipped}건 제외` : ''}
+              {result.results ? ` · 실제 성공 ${result.results.filter(r => r.status === '성공').length}건` : ''}
+            </p>
+            {(result.results || []).filter(r => r.status !== '성공').slice(0, 3).map((r, i) => (
+              <p key={i} className="text-[11.5px] mt-1" style={{ color: '#A32D2D' }}>실패: {r.status}</p>
+            ))}
+          </div>
         )}
         <div className="flex gap-2 mt-3">
           <button onClick={onClose} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">닫기</button>
@@ -950,7 +956,7 @@ function ContractCalendar({ customers, salesUsers }) {
   );
 }
 
-function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, onOpenDetail, title = '미배정 DB', repLabel }) {
+function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, onOpenDetail, onDelete, title = '미배정 DB', repLabel }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState({});
   const [targetRep, setTargetRep] = useState(salesUsers[0] ? salesUsers[0].id : '');
@@ -972,6 +978,13 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, o
     const repName = (salesUsers.find(u => u.id === targetRep) || {}).name || '';
     if (!confirm(`선택한 ${selectedCount}건을 ${repName}님에게 전송할까요?`)) return;
     onSend(selectedIds.map(id => Number(id)), targetRep);
+    clearAll();
+  }
+
+  function handleDelete() {
+    if (selectedCount === 0) return;
+    if (!confirm(`선택한 ${selectedCount}건을 완전히 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    onDelete(selectedIds.map(id => Number(id)));
     clearAll();
   }
 
@@ -1016,12 +1029,13 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, o
       </div>
 
       {selectedCount > 0 && (
-        <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2" style={{ background: '#1C2620' }}>
+        <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2 flex-wrap" style={{ background: '#1C2620' }}>
           <span className="text-[12.5px] shrink-0" style={{ color: '#FFFFFF' }}>{selectedCount}건 →</span>
           <select value={targetRep} onChange={e => setTargetRep(e.target.value)} className="flex-1 text-sm rounded-lg px-2 py-2 outline-none" style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }}>
             {salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
           <button onClick={send} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">전송</button>
+          {onDelete && <button onClick={handleDelete} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">삭제</button>}
         </div>
       )}
     </div>
@@ -1099,7 +1113,9 @@ function QRCategoryPanel({ qrCodes, onAdd, onDelete }) {
 }
 
 function Dashboard({ currentUser, onLogout }) {
-  const isAdmin = currentUser.role === 'admin';
+  const isRealAdmin = currentUser.role === 'admin';
+  const [previewAsSales, setPreviewAsSales] = useState(false);
+  const isAdmin = isRealAdmin && !previewAsSales;
   const myId = currentUser.id;
   const [tab, setTab] = useState('customers');
   const [search, setSearch] = useState('');
@@ -1419,7 +1435,14 @@ function Dashboard({ currentUser, onLogout }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[11px] tracking-wide uppercase" style={{ color: '#8FA89A' }}>방문 세차 정기권 · 신규고객관리</p>
-            <h1 className="text-lg font-semibold" style={{ color: '#FFFFFF' }}>{currentUser.name}{isAdmin ? ' (관리자)' : ' 영업사원'}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg font-semibold" style={{ color: '#FFFFFF' }}>{currentUser.name}{isRealAdmin ? (previewAsSales ? ' (영업사원 화면 미리보기)' : ' (관리자)') : ' 영업사원'}</h1>
+              {isRealAdmin && (
+                <button onClick={() => setPreviewAsSales(v => !v)} style={{ background: previewAsSales ? '#C98A2E' : '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="text-[11px] px-2.5 py-1 rounded-full whitespace-nowrap">
+                  {previewAsSales ? '↩ 관리자 화면으로' : '🔄 사용자 전환'}
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button onClick={loadAll} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="flex items-center justify-center text-sm rounded-lg w-10 h-10" aria-label="새로고침">
@@ -1481,7 +1504,7 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'stats' && isAdmin ? (
           <ContractCalendar customers={customers} salesUsers={salesUsers} />
         ) : tab === 'unassigned' && isAdmin ? (
-          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} onOpenDetail={openExisting} />
+          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} onOpenDetail={openExisting} onDelete={bulkDeleteCustomers} />
         ) : tab === 'inquiry' && isAdmin ? (
           <InquiryPanel inquiries={inquiryCustomers} onOpen={openInquiry} />
         ) : tab === 'departed' && isAdmin ? (
@@ -1657,7 +1680,10 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
     const { data: res, error: err } = await supabase.functions.invoke('clever-endpoint', { body: { customer_ids: [form.id], message: text, is_initial_contact: true } });
     setSmsSending(false);
     if (err || (res && res.error)) { setSmsResult('발송 실패: ' + (res && res.error ? res.error : (err ? err.message : ''))); return; }
-    setSmsResult(res.skipped > 0 ? '이 고객은 수신거부 상태라 발송되지 않았습니다.' : '문자가 발송되었습니다.');
+    if (res.skipped > 0) { setSmsResult('이 고객은 수신거부 상태라 발송되지 않았습니다.'); return; }
+    const detail = (res.results && res.results[0]) || {};
+    if (detail.status && detail.status !== '성공') { setSmsResult('발송 실패: ' + detail.status); return; }
+    setSmsResult('문자가 발송되었습니다.');
   }
   function copyApplyLink() {
     if (!form.apply_token) { alert('신청서 링크를 사용할 수 없습니다. (이미 신청 완료되었거나 링크가 없는 건입니다)'); return; }
