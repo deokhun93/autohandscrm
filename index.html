@@ -403,6 +403,88 @@ function ApprovalPanel({ pendingUsers, onApprove, onReject }) {
   );
 }
 
+function UpdatePopupModal({ updates, lastSeenUpdateId, onClose }) {
+  const unseen = updates.filter(u => u.id > lastSeenUpdateId);
+  const list = unseen.length > 0 ? unseen : updates.slice(0, 1);
+  return (
+    <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.6)' }}>
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm max-h-[80vh] overflow-y-auto p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xl">🆕</span>
+          <h2 className="text-base font-semibold" style={{ color: '#1C2620' }}>새 업데이트 소식</h2>
+        </div>
+        <div className="flex flex-col gap-3">
+          {list.map(u => (
+            <div key={u.id} className="rounded-lg p-3" style={{ background: '#F1E6FA', border: '1px solid #C9A6E8' }}>
+              <p className="text-[13px] font-semibold" style={{ color: '#1C2620' }}>{u.title}</p>
+              <p className="text-[12.5px] mt-1 whitespace-pre-wrap" style={{ color: '#4A4A45' }}>{u.content}</p>
+              <p className="text-[11px] mt-1.5" style={{ color: '#B0AEA4' }}>{new Date(u.created_at).toLocaleString('ko-KR')}</p>
+            </div>
+          ))}
+        </div>
+        <button onClick={onClose} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full mt-4 text-sm font-medium py-2.5 rounded-lg">확인했습니다</button>
+      </div>
+    </div>
+  );
+}
+
+function UpdateLogPanel({ isAdmin, updates, onPost, onEdit, onDelete }) {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+
+  function startEdit(u) { setEditingId(u.id); setEditTitle(u.title); setEditContent(u.content); }
+  function saveEdit() { if (editTitle.trim() && editContent.trim()) onEdit(editingId, editTitle.trim(), editContent.trim()); setEditingId(null); }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {isAdmin && (
+        <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <p className="text-[13px] font-medium mb-2" style={{ color: '#1C2620' }}>새 업데이트 소식 작성</p>
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="제목 (예: 문자 발송 기능 추가)" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full mb-2 rounded-lg px-3 py-2.5 text-sm outline-none" />
+          <textarea value={content} onChange={e => setContent(e.target.value)} rows={3} placeholder="어떤 내용이 바뀌었는지 설명해주세요" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none" />
+          <button onClick={() => { if (title.trim() && content.trim()) { onPost(title.trim(), content.trim()); setTitle(''); setContent(''); } }} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full mt-2 text-sm font-medium py-2.5 rounded-lg">등록</button>
+        </div>
+      )}
+      {updates.length === 0 && (
+        <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <p className="text-sm" style={{ color: '#9B998F' }}>등록된 업데이트 소식이 없습니다.</p>
+        </div>
+      )}
+      {updates.map(u => (
+        <div key={u.id} className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          {editingId === u.id ? (
+            <div className="flex flex-col gap-2">
+              <input value={editTitle} onChange={e => setEditTitle(e.target.value)} style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full rounded-lg px-3 py-2 text-sm outline-none" />
+              <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={3} style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-none" />
+              <div className="flex gap-2">
+                <button onClick={() => setEditingId(null)} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-[12.5px] py-2 rounded-lg">취소</button>
+                <button onClick={saveEdit} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-[12.5px] py-2 rounded-lg">저장</button>
+              </div>
+            </div>
+          ) : (
+            <React.Fragment>
+              <p className="text-[14px] font-semibold" style={{ color: '#1C2620' }}>🆕 {u.title}</p>
+              <p className="text-[13px] mt-1.5 whitespace-pre-wrap" style={{ color: '#4A4A45' }}>{u.content}</p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-[11px]" style={{ color: '#B0AEA4' }}>{new Date(u.created_at).toLocaleString('ko-KR')}</p>
+                {isAdmin && (
+                  <div className="flex gap-2.5">
+                    <button onClick={() => startEdit(u)} className="text-[11px] font-medium" style={{ color: '#0C447C' }}>수정</button>
+                    <button onClick={() => { if (confirm('이 업데이트 소식을 삭제할까요?')) onDelete(u.id); }} className="text-[11px] font-medium" style={{ color: '#A32D2D' }}>삭제</button>
+                  </div>
+                )}
+              </div>
+            </React.Fragment>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Announcements({ isAdmin, announcements, onPost, onUpdate, onDelete }) {
   const [text, setText] = useState('');
   const [showPast, setShowPast] = useState(false);
@@ -1173,6 +1255,9 @@ function Dashboard({ currentUser, onLogout }) {
   const [accessLogs, setAccessLogs] = useState([]);
   const [qrCodes, setQrCodes] = useState([]);
   const [trashedCustomers, setTrashedCustomers] = useState([]);
+  const [updateLogs, setUpdateLogs] = useState([]);
+  const [showUpdatePopup, setShowUpdatePopup] = useState(false);
+  const [lastSeenUpdateId, setLastSeenUpdateId] = useState(currentUser.last_seen_update_id || 0);
   const [staffDirectory, setStaffDirectory] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [allStaff, setAllStaff] = useState([]);
@@ -1203,6 +1288,15 @@ function Dashboard({ currentUser, onLogout }) {
     setScripts(scriptMap);
     const { data: dirData } = await supabase.rpc('list_staff_directory');
     setStaffDirectory(dirData || []);
+    const { data: updateData } = await supabase.from('update_logs').select('*').order('id', { ascending: false });
+    setUpdateLogs(updateData || []);
+    if (updateData && updateData.length > 0) {
+      const latestId = updateData[0].id;
+      const { data: freshProfile } = await supabase.from('profiles').select('last_seen_update_id').eq('id', myId).single();
+      const seenId = (freshProfile && freshProfile.last_seen_update_id) || 0;
+      setLastSeenUpdateId(seenId);
+      if (latestId > seenId) setShowUpdatePopup(true);
+    }
     if (isAdmin) {
       const { data: pendingData } = await supabase.from('profiles').select('*').eq('status', '대기');
       setPendingUsers(pendingData || []);
@@ -1399,6 +1493,24 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('announcements').delete().eq('id', id);
     setAnnouncements(prev => prev.filter(a => a.id !== id));
   }
+  async function postUpdateLog(title, content) {
+    const { data, error } = await supabase.from('update_logs').insert({ title, content, created_by: myId }).select().single();
+    if (!error) setUpdateLogs(prev => [data, ...prev]);
+  }
+  async function editUpdateLog(id, title, content) {
+    await supabase.from('update_logs').update({ title, content }).eq('id', id);
+    setUpdateLogs(prev => prev.map(u => u.id === id ? { ...u, title, content } : u));
+  }
+  async function deleteUpdateLog(id) {
+    await supabase.from('update_logs').delete().eq('id', id);
+    setUpdateLogs(prev => prev.filter(u => u.id !== id));
+  }
+  async function dismissUpdatePopup() {
+    const latestId = updateLogs[0] ? updateLogs[0].id : 0;
+    await supabase.from('profiles').update({ last_seen_update_id: latestId }).eq('id', myId);
+    setLastSeenUpdateId(latestId);
+    setShowUpdatePopup(false);
+  }
   async function sendMessage(toId, content) {
     const { data, error } = await supabase.from('messages').insert({ to_user: toId, from_user: myId, content }).select().single();
     if (!error) setSentMessages(prev => [data, ...prev]);
@@ -1534,6 +1646,7 @@ function Dashboard({ currentUser, onLogout }) {
             <button onClick={() => setTab('trash')} style={{ background: tab === 'trash' ? '#FFFFFF' : 'transparent', color: tab === 'trash' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
               🗑 휴지통 {trashedCustomers.length > 0 && <span style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{trashedCustomers.length}</span>}
             </button>
+            <button onClick={() => setTab('updates')} style={{ background: tab === 'updates' ? '#FFFFFF' : 'transparent', color: tab === 'updates' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">🆕 업데이트 소식</button>
           </div>
         )}
         {!isAdmin && (
@@ -1548,6 +1661,7 @@ function Dashboard({ currentUser, onLogout }) {
               <button key={t.key} onClick={() => { setTab('customers'); setMyDbFilter(t.key); }} style={{ background: tab === 'customers' && myDbFilter === t.key ? '#FFFFFF' : 'transparent', color: tab === 'customers' && myDbFilter === t.key ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">{t.label}</button>
             ))}
             <button onClick={() => setTab('completed')} style={{ background: tab === 'completed' ? '#FFFFFF' : 'transparent', color: tab === 'completed' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">계약완료</button>
+            <button onClick={() => setTab('updates')} style={{ background: tab === 'updates' ? '#FFFFFF' : 'transparent', color: tab === 'updates' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">🆕 업데이트 소식</button>
           </div>
         )}
       </div>
@@ -1571,6 +1685,8 @@ function Dashboard({ currentUser, onLogout }) {
           <QRCategoryPanel qrCodes={qrCodes} onAdd={addQrCode} onDelete={deleteQrCode} />
         ) : tab === 'trash' && isAdmin ? (
           <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} />
+        ) : tab === 'updates' ? (
+          <UpdateLogPanel isAdmin={isAdmin} updates={updateLogs} onPost={postUpdateLog} onEdit={editUpdateLog} onDelete={deleteUpdateLog} />
         ) : tab === 'completed' ? (
           <CompletedDealsPanel customers={customers} staffDirectory={staffDirectory} onOpenDetail={openExisting} />
         ) : (
@@ -1712,6 +1828,7 @@ function Dashboard({ currentUser, onLogout }) {
       {messageTarget && <MessageComposeModal target={messageTarget} onClose={() => setMessageTarget(null)} onSend={(text) => sendMessage(messageTarget.id, text)} />}
       {showSmsCompose && <SmsComposeModal selectedCount={bulkSelectedCount} defaultText={scripts.customer_script} onClose={() => setShowSmsCompose(false)} onSend={sendSmsToSelected} />}
       {showSenderSetting && <SenderNumberModal currentNumber={currentUserSender} onClose={() => setShowSenderSetting(false)} onSave={saveSenderNumber} />}
+      {showUpdatePopup && updateLogs.length > 0 && <UpdatePopupModal updates={updateLogs} lastSeenUpdateId={lastSeenUpdateId} onClose={dismissUpdatePopup} />}
     </div>
   );
 }
