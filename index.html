@@ -1740,30 +1740,34 @@ function Dashboard({ currentUser, onLogout }) {
           <CompletedDealsPanel customers={customers} staffDirectory={staffDirectory} onOpenDetail={openExisting} />
         ) : (
           <React.Fragment>
-            <div className="flex flex-wrap gap-2.5">
-              <StatCard emoji="👥" label={isAdmin ? '전체 고객' : '내 담당 고객'} value={stats.total} tint="#2F6B4F" />
-              <StatCard emoji="💬" label="상담 진행중" value={stats.inTalk} tint="#3B6FA0" />
-              <StatCard emoji="✅" label="유치완료" value={stats.contracted} tint="#2F6B4F" />
-              {isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(stats.incentive)} tint="#C98A2E" />}
-            </div>
-
-            {!isAdmin && (
-              <div className="rounded-xl p-3.5 flex items-center justify-between" style={{ background: '#EAF3DE', border: '1px solid #C0DD97' }}>
-                <div>
-                  <p className="text-[12.5px]" style={{ color: '#3B6D11' }}>건당 인센티브 {currency(INCENTIVE_PER_DEAL)} · 유치완료 {stats.contracted}건</p>
-                  <p className="text-[22px] font-semibold mt-0.5" style={{ color: '#27500A', fontVariantNumeric: 'tabular-nums' }}>{currency(stats.incentive)}</p>
+            {(isAdmin || myDbFilter === 'all') && (
+              <React.Fragment>
+                <div className="flex flex-wrap gap-2.5">
+                  <StatCard emoji="👥" label={isAdmin ? '전체 고객' : '내 담당 고객'} value={stats.total} tint="#2F6B4F" />
+                  <StatCard emoji="💬" label="상담 진행중" value={stats.inTalk} tint="#3B6FA0" />
+                  <StatCard emoji="✅" label="유치완료" value={stats.contracted} tint="#2F6B4F" />
+                  {isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(stats.incentive)} tint="#C98A2E" />}
                 </div>
-                <span className="text-3xl">💰</span>
-              </div>
+
+                {!isAdmin && (
+                  <div className="rounded-xl p-3.5 flex items-center justify-between" style={{ background: '#EAF3DE', border: '1px solid #C0DD97' }}>
+                    <div>
+                      <p className="text-[12.5px]" style={{ color: '#3B6D11' }}>건당 인센티브 {currency(INCENTIVE_PER_DEAL)} · 유치완료 {stats.contracted}건</p>
+                      <p className="text-[22px] font-semibold mt-0.5" style={{ color: '#27500A', fontVariantNumeric: 'tabular-nums' }}>{currency(stats.incentive)}</p>
+                    </div>
+                    <span className="text-3xl">💰</span>
+                  </div>
+                )}
+
+                <Leaderboard salesUsers={salesUsers} customers={customers} currentUserId={myId} />
+
+                <Announcements isAdmin={isAdmin} announcements={announcements} onPost={postAnnouncement} onUpdate={updateAnnouncement} onDelete={deleteAnnouncement} />
+
+                <ScriptAccordion id="customer_script" title="고객영업문자 스크립트" isAdmin={isAdmin} content={scripts.customer_script} onSave={saveScript} />
+                <MyScriptEditor sharedDefault={scripts.customer_script} personalValue={myPersonalScript} onSave={savePersonalScript} />
+                <ScriptAccordion id="application_script" title="신청서 스크립트" isAdmin={isAdmin} content={scripts.application_script} onSave={saveScript} />
+              </React.Fragment>
             )}
-
-            <Leaderboard salesUsers={salesUsers} customers={customers} currentUserId={myId} />
-
-            <Announcements isAdmin={isAdmin} announcements={announcements} onPost={postAnnouncement} onUpdate={updateAnnouncement} onDelete={deleteAnnouncement} />
-
-            <ScriptAccordion id="customer_script" title="고객영업문자 스크립트" isAdmin={isAdmin} content={scripts.customer_script} onSave={saveScript} />
-            <MyScriptEditor sharedDefault={scripts.customer_script} personalValue={myPersonalScript} onSave={savePersonalScript} />
-            <ScriptAccordion id="application_script" title="신청서 스크립트" isAdmin={isAdmin} content={scripts.application_script} onSave={saveScript} />
 
             {isAdmin && unassignedCustomers.length > 0 && (
               <div className="rounded-xl p-3.5 flex items-center justify-between gap-2" style={{ background: '#FFF4E5', border: '1px solid #EF9F27' }}>
