@@ -674,38 +674,67 @@ function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail }) {
   );
 }
 
-function TrashPanel({ trashed, onRestore, onPurge }) {
+function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge }) {
+  const [selected, setSelected] = useState({});
   function daysLeft(deletedAt) {
     const deadline = new Date(deletedAt).getTime() + 30 * 24 * 60 * 60 * 1000;
     const diff = Math.ceil((deadline - Date.now()) / (24 * 60 * 60 * 1000));
     return diff > 0 ? diff : 0;
   }
+  function toggle(id) { setSelected(prev => ({ ...prev, [id]: !prev[id] })); }
+  function selectAll() { const next = {}; trashed.forEach(c => { next[c.id] = true; }); setSelected(next); }
+  function clearAll() { setSelected({}); }
+  const selectedIds = Object.keys(selected).filter(id => selected[id]).map(Number);
+
+  function handleBulkPurge() {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`선택한 ${selectedIds.length}건을 지금 완전히 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    onBulkPurge(selectedIds);
+    clearAll();
+  }
+
   return (
     <div className="flex flex-col gap-2.5">
       <p className="text-[11.5px] px-3 py-2 rounded-lg" style={{ background: '#F1EFE8', color: '#6B6A63' }}>휴지통에 있는 항목은 삭제된 날로부터 30일이 지나면 자동으로 완전히 삭제됩니다.</p>
+      {trashed.length > 0 && (
+        <div className="flex items-center gap-2">
+          <button onClick={selectAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">전체 선택</button>
+          <button onClick={clearAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">선택 해제</button>
+          {selectedIds.length > 0 && <span className="text-[12px] ml-auto" style={{ color: '#6B6A63' }}>{selectedIds.length}건 선택됨</span>}
+        </div>
+      )}
       {trashed.length === 0 && (
         <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
           <p className="text-sm" style={{ color: '#9B998F' }}>휴지통이 비어있습니다.</p>
         </div>
       )}
       {trashed.map(c => (
-        <div key={c.id} className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-[14px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
-              <StatusBadge status={c.status} />
+        <div key={c.id} className="rounded-xl p-3.5 flex items-start gap-2.5" style={{ background: selected[c.id] ? '#FBE9E7' : '#FFFFFF', border: '1px solid ' + (selected[c.id] ? '#F0B0A8' : '#E4E2D9') }}>
+          <input type="checkbox" className="mt-1 shrink-0" checked={!!selected[c.id]} onChange={() => toggle(c.id)} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-[14px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
+                <StatusBadge status={c.status} />
+              </div>
+              <span className="text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap" style={{ background: '#FAEEDA', color: '#854F0B' }}>{daysLeft(c.deleted_at)}일 후 완전삭제</span>
             </div>
-            <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: '#FAEEDA', color: '#854F0B' }}>{daysLeft(c.deleted_at)}일 후 완전삭제</span>
-          </div>
-          <p className="text-[12px] mt-1" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>
-          <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={c.phone} type="phone" /></p>
-          <p className="text-[11px] mt-1" style={{ color: '#B0AEA4' }}>삭제일: {new Date(c.deleted_at).toLocaleString('ko-KR')}</p>
-          <div className="flex gap-2 mt-2.5">
-            <button onClick={() => onRestore(c.id)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-[12.5px] font-medium py-2 rounded-lg">복원</button>
-            <button onClick={() => onPurge(c.id)} style={{ border: '1px solid #F0999540', color: '#A32D2D' }} className="flex-1 text-[12.5px] font-medium py-2 rounded-lg">지금 완전삭제</button>
+            <p className="text-[12px] mt-1" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>
+            <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={c.phone} type="phone" /></p>
+            <p className="text-[11px] mt-1" style={{ color: '#B0AEA4' }}>삭제일: {new Date(c.deleted_at).toLocaleString('ko-KR')}</p>
+            <div className="flex gap-2 mt-2.5">
+              <button onClick={() => onRestore(c.id)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-[12.5px] font-medium py-2 rounded-lg">복원</button>
+              <button onClick={() => onPurge(c.id)} style={{ border: '1px solid #F0999540', color: '#A32D2D' }} className="flex-1 text-[12.5px] font-medium py-2 rounded-lg">지금 완전삭제</button>
+            </div>
           </div>
         </div>
       ))}
+      {selectedIds.length > 0 && (
+        <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2" style={{ background: '#1C2620' }}>
+          <span className="text-[12.5px]" style={{ color: '#FFFFFF' }}>{selectedIds.length}건 선택됨</span>
+          <button onClick={handleBulkPurge} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">선택 항목 완전삭제</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1603,6 +1632,12 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('customers').delete().eq('id', id);
     setTrashedCustomers(prev => prev.filter(c => c.id !== id));
   }
+  async function bulkPurgeNow(ids) {
+    for (const batch of chunkArray(ids, 100)) {
+      await supabase.from('customers').delete().in('id', batch);
+    }
+    setTrashedCustomers(prev => prev.filter(c => !ids.includes(c.id)));
+  }
 
   if (loading) {
     return <div style={{ background: '#EFF1EC', minHeight: '100vh' }} className="w-full flex items-center justify-center"><p style={{ color: '#6B6A63' }} className="text-sm">불러오는 중...</p></div>;
@@ -1698,7 +1733,7 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'qr' && isAdmin ? (
           <QRCategoryPanel qrCodes={qrCodes} onAdd={addQrCode} onDelete={deleteQrCode} />
         ) : tab === 'trash' && isAdmin ? (
-          <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} />
+          <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} onBulkPurge={bulkPurgeNow} />
         ) : tab === 'updates' ? (
           <UpdateLogPanel isAdmin={isAdmin} updates={updateLogs} onPost={postUpdateLog} onEdit={editUpdateLog} onDelete={deleteUpdateLog} />
         ) : tab === 'completed' ? (
