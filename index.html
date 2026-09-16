@@ -35,8 +35,37 @@ const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABA
 });
 
 const INCENTIVE_PER_DEAL = 30000;
-const MANAGER_OVERRIDE_PER_DEAL = 10000;
-const ADMIN_SELF_CLOSE_INCENTIVE = 40000;
+
+// 코드(atNNN) 기반 인센티브 규칙 엔진.
+// rules: [{ min_code, max_code, incentive_per_deal, override_code, override_amount, self_close_incentive }]
+// staffDirectory: [{ id, member_code }] - id -> member_code 매핑용
+function computeIncentiveMap(customers, rules, staffDirectory) {
+  const codeById = {};
+  (staffDirectory || []).forEach(u => { if (u.member_code) codeById[u.id] = u.member_code; });
+  const totals = {};
+  let companyTotal = 0;
+  const add = (code, amount) => {
+    if (!code || !amount) return;
+    totals[code] = (totals[code] || 0) + amount;
+    companyTotal += amount;
+  };
+  const contracted = (customers || []).filter(c => c.status === '계약완료' && c.rep_id);
+  contracted.forEach(c => {
+    const code = codeById[c.rep_id];
+    if (!code) return;
+    const selfRule = (rules || []).find(r => r.override_code === code && r.self_close_incentive != null);
+    if (selfRule) { add(code, selfRule.self_close_incentive); return; }
+    const rangeRule = (rules || []).find(r => code >= r.min_code && code <= r.max_code);
+    if (rangeRule) {
+      add(code, rangeRule.incentive_per_deal);
+      if (rangeRule.override_code && rangeRule.override_amount) add(rangeRule.override_code, rangeRule.override_amount);
+      return;
+    }
+    add(code, INCENTIVE_PER_DEAL);
+  });
+  return { totals, companyTotal };
+}
+
 const STATUS = {
   '청약대기': { fg: '#6B3FA0', bg: '#F1E6FA', border: '#C9A6E8' },
   '신규': { fg: '#5F5E5A', bg: '#F1EFE8', border: '#D3D1C7' },
@@ -343,10 +372,11 @@ function StageTracker({ customer, editable, onToggle }) {
   );
 }
 
-function Leaderboard({ salesUsers, customers, currentUserId }) {
+function Leaderboard({ salesUsers, customers, currentUserId, incentiveMap }) {
   const rows = salesUsers.map(u => {
     const deals = customers.filter(c => c.rep_id === u.id && c.status === '계약완료').length;
-    return { id: u.id, name: u.name, deals, incentive: deals * INCENTIVE_PER_DEAL };
+    const incentive = (incentiveMap && u.member_code) ? (incentiveMap.totals[u.member_code] || 0) : deals * INCENTIVE_PER_DEAL;
+    return { id: u.id, name: u.name, deals, incentive };
   }).sort((a, b) => b.deals - a.deals);
   const maxDeals = Math.max(1, ...rows.map(r => r.deals));
   return (
@@ -767,6 +797,84 @@ function InquiryPanel({ inquiries, onOpen }) {
   );
 }
 
+function IncentiveRulesPanel({ rules, onAdd, onDelete, staffDirectory }) {
+  const [label, setLabel] = useState('');
+  const [minCode, setMinCode] = useState('');
+  const [maxCode, setMaxCode] = useState('');
+  const [perDeal, setPerDeal] = useState('');
+  const [overrideCode, setOverrideCode] = useState('');
+  const [overrideAmount, setOverrideAmount] = useState('');
+  const [selfClose, setSelfClose] = useState('');
+
+  const codeList = (staffDirectory || []).filter(u => u.member_code).sort((a, b) => a.member_code.localeCompare(b.member_code));
+  const nameOf = (code) => { const u = (staffDirectory || []).find(x => x.member_code === code); return u ? u.name : ''; };
+
+  function submit() {
+    if (!minCode.trim() || !maxCode.trim() || !perDeal) { alert('적용 코드 범위와 건당 인센티브는 필수입니다.'); return; }
+    onAdd({
+      label: label.trim() || null,
+      min_code: minCode.trim(),
+      max_code: maxCode.trim(),
+      incentive_per_deal: Number(perDeal),
+      override_code: overrideCode.trim() || null,
+      override_amount: overrideCode.trim() ? Number(overrideAmount || 0) : 0,
+      self_close_incentive: overrideCode.trim() && selfClose ? Number(selfClose) : null,
+    });
+    setLabel(''); setMinCode(''); setMaxCode(''); setPerDeal(''); setOverrideCode(''); setOverrideAmount(''); setSelfClose('');
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+        <p className="text-[13px] font-medium mb-2" style={{ color: '#1C2620' }}>직원 회원코드 목록</p>
+        <div className="flex flex-wrap gap-1.5">
+          {codeList.map(u => (
+            <span key={u.id} className="text-[11.5px] px-2 py-1 rounded-full" style={{ background: '#F7F6F2', color: '#4A4A45' }}>{u.member_code} · {u.name}{u.role === 'admin' ? '(관리자)' : ''}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+        <p className="text-[13px] font-medium mb-2" style={{ color: '#1C2620' }}>새 인센티브 규칙 추가</p>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <FieldInput label="규칙 이름 (선택)" value={label} onChange={e => setLabel(e.target.value)} placeholder="예: 일반 영업팀" />
+          <FieldInput label="건당 인센티브(원)" type="number" value={perDeal} onChange={e => setPerDeal(e.target.value)} placeholder="30000" />
+        </div>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <FieldInput label="적용 시작 코드" value={minCode} onChange={e => setMinCode(e.target.value)} placeholder="at002" />
+          <FieldInput label="적용 끝 코드" value={maxCode} onChange={e => setMaxCode(e.target.value)} placeholder="at020" />
+        </div>
+        <p className="text-[11.5px] mb-2" style={{ color: '#B0AEA4' }}>위 범위의 직원이 유치완료 시킬 때마다 건당 위 금액이 지급됩니다.</p>
+        <div className="h-px my-2" style={{ background: '#E4E2D9' }} />
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <FieldInput label="추가 지급받을 코드 (선택)" value={overrideCode} onChange={e => setOverrideCode(e.target.value)} placeholder="at001" />
+          <FieldInput label="건당 추가 지급액(원)" type="number" value={overrideAmount} onChange={e => setOverrideAmount(e.target.value)} placeholder="10000" disabled={!overrideCode.trim()} />
+        </div>
+        <FieldInput label="위 코드가 본인 계정으로 직접 유치 시 금액(원, 선택)" type="number" value={selfClose} onChange={e => setSelfClose(e.target.value)} placeholder="40000" disabled={!overrideCode.trim()} />
+        <p className="text-[11.5px] mt-2" style={{ color: '#B0AEA4' }}>예: at002~at020 영업사원이 유치완료 시킬 때마다 at001에게 건당 1만원씩 추가 지급, at001이 본인 계정으로 직접 유치하면 그 건은 4만원으로 계산.</p>
+        <button onClick={submit} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full mt-3 text-sm font-medium py-2.5 rounded-lg">규칙 추가</button>
+      </div>
+
+      {rules.length === 0 && (
+        <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <p className="text-sm" style={{ color: '#9B998F' }}>등록된 인센티브 규칙이 없습니다. (규칙이 없으면 전 직원 기본값인 건당 {currency(INCENTIVE_PER_DEAL)}이 적용됩니다)</p>
+        </div>
+      )}
+      {rules.map(r => (
+        <div key={r.id} className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <div className="flex items-center justify-between">
+            <p className="text-[14px] font-semibold" style={{ color: '#1C2620' }}>{r.label || `${r.min_code}~${r.max_code}`}</p>
+            <button onClick={() => { if (confirm('이 규칙을 삭제할까요?')) onDelete(r.id); }} className="text-[11px] font-medium" style={{ color: '#A32D2D' }}>삭제</button>
+          </div>
+          <p className="text-[12.5px] mt-1.5" style={{ color: '#4A4A45' }}>{r.min_code}~{r.max_code} 직원: 건당 {currency(r.incentive_per_deal)}</p>
+          {r.override_code && <p className="text-[12.5px] mt-1" style={{ color: '#4A4A45' }}>→ {r.override_code}({nameOf(r.override_code)})에게 건당 {currency(r.override_amount)} 추가 지급</p>}
+          {r.self_close_incentive != null && <p className="text-[12.5px] mt-1" style={{ color: '#4A4A45' }}>→ {r.override_code} 본인 직접 유치 시 건당 {currency(r.self_close_incentive)}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage, onChangeRole }) {
   return (
     <div className="flex flex-col gap-2.5">
@@ -781,6 +889,7 @@ function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage, onChange
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="font-semibold text-[15px]" style={{ color: '#1C2620' }}>{u.name}</p>
               <span style={{ background: u.role === 'admin' ? '#E6F1FB' : u.role === 'field' ? '#F1E6FA' : '#E1F5EE', color: u.role === 'admin' ? '#0C447C' : u.role === 'field' ? '#6B3FA0' : '#085041', border: '1px solid ' + (u.role === 'admin' ? '#85B7EB' : u.role === 'field' ? '#C9A6E8' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{u.role === 'admin' ? '관리자' : u.role === 'field' ? '현장직원' : '영업사원'}</span>
+              {u.member_code && <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: '#F1EFE8', color: '#6B6A63' }}>{u.member_code}</span>}
             </div>
             <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={u.phone} type="phone" /></p>
           </div>
@@ -1290,6 +1399,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [showUpdatePopup, setShowUpdatePopup] = useState(false);
   const [lastSeenUpdateId, setLastSeenUpdateId] = useState(currentUser.last_seen_update_id || 0);
   const [staffDirectory, setStaffDirectory] = useState([]);
+  const [incentiveRules, setIncentiveRules] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [allStaff, setAllStaff] = useState([]);
   const [inboxMessages, setInboxMessages] = useState([]);
@@ -1319,6 +1429,8 @@ function Dashboard({ currentUser, onLogout }) {
     setScripts(scriptMap);
     const { data: dirData } = await supabase.rpc('list_staff_directory');
     setStaffDirectory(dirData || []);
+    const { data: ruleData } = await supabase.from('incentive_rules').select('*').order('created_at', { ascending: false });
+    setIncentiveRules(ruleData || []);
     const { data: updateData } = await supabase.from('update_logs').select('*').order('id', { ascending: false });
     setUpdateLogs(updateData || []);
     if (updateData && updateData.length > 0) {
@@ -1390,22 +1502,11 @@ function Dashboard({ currentUser, onLogout }) {
     const total = scope.length;
     const contracted = scope.filter(c => c.status === '계약완료').length;
     const inTalk = scope.filter(c => c.status === '상담중').length;
-    return { total, contracted, inTalk, incentive: contracted * INCENTIVE_PER_DEAL };
+    return { total, contracted, inTalk };
   }, [scope]);
-  const incentiveBreakdown = useMemo(() => {
-    const kim = allStaff.find(u => u.role === 'admin' && u.name === '김덕훈');
-    const kimId = kim ? kim.id : null;
-    const contractedCompanyWide = customers.filter(c => c.status === '계약완료' && c.rep_id);
-    const kimSelfClosedCount = kimId ? contractedCompanyWide.filter(c => c.rep_id === kimId).length : 0;
-    const otherClosedCount = contractedCompanyWide.filter(c => c.rep_id !== kimId).length;
-    const repIncentiveTotal = otherClosedCount * INCENTIVE_PER_DEAL;
-    const kimOverrideTotal = kimId ? otherClosedCount * MANAGER_OVERRIDE_PER_DEAL : 0;
-    const kimSelfCloseTotal = kimSelfClosedCount * ADMIN_SELF_CLOSE_INCENTIVE;
-    const kimTotalIncentive = kimOverrideTotal + kimSelfCloseTotal;
-    const companyTotal = repIncentiveTotal + kimTotalIncentive;
-    return { repIncentiveTotal, kimTotalIncentive, companyTotal, kimSelfClosedCount, otherClosedCount };
-  }, [customers, allStaff]);
-  const companyIncentive = incentiveBreakdown.companyTotal;
+  const incentiveMap = useMemo(() => computeIncentiveMap(customers, incentiveRules, staffDirectory), [customers, incentiveRules, staffDirectory]);
+  const myIncentive = incentiveMap.totals[currentUser.member_code] || 0;
+  const companyIncentive = incentiveMap.companyTotal;
 
   async function toggleStage(id, key) {
     const target = customers.find(c => c.id === id);
@@ -1553,6 +1654,15 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('update_logs').delete().eq('id', id);
     setUpdateLogs(prev => prev.filter(u => u.id !== id));
   }
+  async function addIncentiveRule(rule) {
+    const { data, error } = await supabase.from('incentive_rules').insert({ ...rule, created_by: myId }).select().single();
+    if (!error) setIncentiveRules(prev => [data, ...prev]);
+    else alert('규칙 추가 실패: ' + error.message);
+  }
+  async function deleteIncentiveRule(id) {
+    await supabase.from('incentive_rules').delete().eq('id', id);
+    setIncentiveRules(prev => prev.filter(r => r.id !== id));
+  }
   async function dismissUpdatePopup() {
     const latestId = updateLogs[0] ? updateLogs[0].id : 0;
     await supabase.from('profiles').update({ last_seen_update_id: latestId }).eq('id', myId);
@@ -1698,9 +1808,8 @@ function Dashboard({ currentUser, onLogout }) {
             <button onClick={() => setTab('logs')} style={{ background: tab === 'logs' ? '#FFFFFF' : 'transparent', color: tab === 'logs' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">접근 로그</button>
             <button onClick={() => setTab('qr')} style={{ background: tab === 'qr' ? '#FFFFFF' : 'transparent', color: tab === 'qr' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">단지별QR</button>
             <button onClick={() => setTab('trash')} style={{ background: tab === 'trash' ? '#FFFFFF' : 'transparent', color: tab === 'trash' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
-              🗑 휴지통 {trashedCustomers.length > 0 && <span style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{trashedCustomers.length}</span>}
-            </button>
             <button onClick={() => setTab('updates')} style={{ background: tab === 'updates' ? '#FFFFFF' : 'transparent', color: tab === 'updates' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">🆕 업데이트 소식</button>
+            <button onClick={() => setTab('incentiveRules')} style={{ background: tab === 'incentiveRules' ? '#FFFFFF' : 'transparent', color: tab === 'incentiveRules' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">⚙️ 인센티브 설정</button>
           </div>
         )}
         {!isAdmin && (
@@ -1741,6 +1850,8 @@ function Dashboard({ currentUser, onLogout }) {
           <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} onBulkPurge={bulkPurgeNow} />
         ) : tab === 'updates' ? (
           <UpdateLogPanel isAdmin={isAdmin} updates={updateLogs} onPost={postUpdateLog} onEdit={editUpdateLog} onDelete={deleteUpdateLog} />
+        ) : tab === 'incentiveRules' && isAdmin ? (
+          <IncentiveRulesPanel rules={incentiveRules} onAdd={addIncentiveRule} onDelete={deleteIncentiveRule} staffDirectory={staffDirectory} />
         ) : tab === 'completed' ? (
           <CompletedDealsPanel customers={customers} staffDirectory={staffDirectory} onOpenDetail={openExisting} />
         ) : (
@@ -1751,21 +1862,21 @@ function Dashboard({ currentUser, onLogout }) {
                   <StatCard emoji="👥" label={isAdmin ? '전체 고객' : '내 담당 고객'} value={stats.total} tint="#2F6B4F" />
                   <StatCard emoji="💬" label="상담 진행중" value={stats.inTalk} tint="#3B6FA0" />
                   <StatCard emoji="✅" label="유치완료" value={stats.contracted} tint="#2F6B4F" />
-                  {isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(stats.incentive)} tint="#C98A2E" />}
-                  {isAdmin && <StatCard emoji="👑" label="김덕훈 관리자 인센티브" value={currency(incentiveBreakdown.kimTotalIncentive)} tint="#6B3FA0" />}
+                  {isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(myIncentive)} tint="#C98A2E" />}
+                  {isAdmin && <StatCard emoji="👑" label={`내 인센티브 (${currentUser.member_code || '-'})`} value={currency(myIncentive)} tint="#6B3FA0" />}
                 </div>
 
                 {!isAdmin && (
                   <div className="rounded-xl p-3.5 flex items-center justify-between" style={{ background: '#EAF3DE', border: '1px solid #C0DD97' }}>
                     <div>
-                      <p className="text-[12.5px]" style={{ color: '#3B6D11' }}>건당 인센티브 {currency(INCENTIVE_PER_DEAL)} · 유치완료 {stats.contracted}건</p>
-                      <p className="text-[22px] font-semibold mt-0.5" style={{ color: '#27500A', fontVariantNumeric: 'tabular-nums' }}>{currency(stats.incentive)}</p>
+                      <p className="text-[12.5px]" style={{ color: '#3B6D11' }}>내 코드 {currentUser.member_code || '-'} · 유치완료 {stats.contracted}건</p>
+                      <p className="text-[22px] font-semibold mt-0.5" style={{ color: '#27500A', fontVariantNumeric: 'tabular-nums' }}>{currency(myIncentive)}</p>
                     </div>
                     <span className="text-3xl">💰</span>
                   </div>
                 )}
 
-                <Leaderboard salesUsers={salesUsers} customers={customers} currentUserId={myId} />
+                <Leaderboard salesUsers={salesUsers} customers={customers} currentUserId={myId} incentiveMap={incentiveMap} />
 
                 <Announcements isAdmin={isAdmin} announcements={announcements} onPost={postAnnouncement} onUpdate={updateAnnouncement} onDelete={deleteAnnouncement} />
 
