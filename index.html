@@ -1808,6 +1808,8 @@ function Dashboard({ currentUser, onLogout }) {
             <button onClick={() => setTab('logs')} style={{ background: tab === 'logs' ? '#FFFFFF' : 'transparent', color: tab === 'logs' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">접근 로그</button>
             <button onClick={() => setTab('qr')} style={{ background: tab === 'qr' ? '#FFFFFF' : 'transparent', color: tab === 'qr' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">단지별QR</button>
             <button onClick={() => setTab('trash')} style={{ background: tab === 'trash' ? '#FFFFFF' : 'transparent', color: tab === 'trash' ? '#1C2620' : '#8FA89A' }} className="flex items-center gap-1.5 text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">
+              🗑 휴지통 {trashedCustomers.length > 0 && <span style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{trashedCustomers.length}</span>}
+            </button>
             <button onClick={() => setTab('updates')} style={{ background: tab === 'updates' ? '#FFFFFF' : 'transparent', color: tab === 'updates' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">🆕 업데이트 소식</button>
             <button onClick={() => setTab('incentiveRules')} style={{ background: tab === 'incentiveRules' ? '#FFFFFF' : 'transparent', color: tab === 'incentiveRules' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">⚙️ 인센티브 설정</button>
           </div>
