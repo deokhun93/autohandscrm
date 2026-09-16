@@ -81,6 +81,12 @@ const STAGES = [
 ];
 
 function currency(n) { return (n || 0).toLocaleString('ko-KR') + '원'; }
+function roleLabel(role) {
+  if (role === 'master') return '마스터';
+  if (role === 'admin') return '관리자';
+  if (role === 'field') return '현장직원';
+  return '영업사원';
+}
 function formatPhoneInput(v) {
   const digits = String(v).replace(/\D/g, '').slice(0, 11);
   if (digits.length < 4) return digits;
@@ -875,7 +881,7 @@ function IncentiveRulesPanel({ rules, onAdd, onDelete, staffDirectory }) {
   );
 }
 
-function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage, onChangeRole }) {
+function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage, onChangeRole, isMaster }) {
   return (
     <div className="flex flex-col gap-2.5">
       {allStaff.length === 0 && (
@@ -888,21 +894,22 @@ function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage, onChange
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="font-semibold text-[15px]" style={{ color: '#1C2620' }}>{u.name}</p>
-              <span style={{ background: u.role === 'admin' ? '#E6F1FB' : u.role === 'field' ? '#F1E6FA' : '#E1F5EE', color: u.role === 'admin' ? '#0C447C' : u.role === 'field' ? '#6B3FA0' : '#085041', border: '1px solid ' + (u.role === 'admin' ? '#85B7EB' : u.role === 'field' ? '#C9A6E8' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{u.role === 'admin' ? '관리자' : u.role === 'field' ? '현장직원' : '영업사원'}</span>
+              <span style={{ background: u.role === 'master' ? '#FAEEDA' : u.role === 'admin' ? '#E6F1FB' : u.role === 'field' ? '#F1E6FA' : '#E1F5EE', color: u.role === 'master' ? '#854F0B' : u.role === 'admin' ? '#0C447C' : u.role === 'field' ? '#6B3FA0' : '#085041', border: '1px solid ' + (u.role === 'master' ? '#EF9F27' : u.role === 'admin' ? '#85B7EB' : u.role === 'field' ? '#C9A6E8' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{roleLabel(u.role)}</span>
               {u.member_code && <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: '#F1EFE8', color: '#6B6A63' }}>{u.member_code}</span>}
             </div>
             <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={u.phone} type="phone" /></p>
           </div>
           <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
-            {u.role !== 'admin' && (
+            {u.role !== 'master' && (
               <select value={u.role} onChange={e => onChangeRole(u.id, e.target.value)} className="text-[12px] rounded-lg px-2 py-1.5" style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }}>
                 <option value="sales">영업사원</option>
                 <option value="field">현장직원</option>
+                {isMaster && <option value="admin">관리자</option>}
               </select>
             )}
             <button onClick={() => onMessage(u)} style={{ border: '1px solid #85B7EB', color: '#0C447C' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">메시지</button>
-            {u.role !== 'admin' && <button onClick={() => onWithdraw(u.id)} style={{ border: '1px solid #F0999540', color: '#A32D2D' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">탈퇴</button>}
-            {u.role !== 'admin' && <button onClick={() => onDeleteAccount(u)} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">계정 완전삭제</button>}
+            {u.role !== 'master' && <button onClick={() => onWithdraw(u.id)} style={{ border: '1px solid #F0999540', color: '#A32D2D' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">탈퇴</button>}
+            {u.role !== 'master' && <button onClick={() => onDeleteAccount(u)} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">계정 완전삭제</button>}
           </div>
         </div>
       ))}
@@ -1318,7 +1325,7 @@ function isInLastMonth(dateStr) {
   return d.getFullYear() === lastMonth.getFullYear() && d.getMonth() === lastMonth.getMonth();
 }
 
-function QRCategoryPanel({ qrCodes, onAdd, onDelete }) {
+function QRCategoryPanel({ qrCodes, onAdd, onDelete, isMaster }) {
   const [name, setName] = useState('');
   const [copiedId, setCopiedId] = useState(null);
   const baseUrl = `${window.location.origin}${window.location.pathname}`;
@@ -1335,14 +1342,16 @@ function QRCategoryPanel({ qrCodes, onAdd, onDelete }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
-        <p className="text-[13px] font-medium mb-2" style={{ color: '#1C2620' }}>새 단지 QR 만들기</p>
-        <div className="flex gap-2">
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="아파트 단지명 입력" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none" />
-          <button onClick={handleAdd} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-sm font-medium whitespace-nowrap">추가</button>
+      {isMaster && (
+        <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+          <p className="text-[13px] font-medium mb-2" style={{ color: '#1C2620' }}>새 단지 QR 만들기</p>
+          <div className="flex gap-2">
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="아파트 단지명 입력" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none" />
+            <button onClick={handleAdd} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-sm font-medium whitespace-nowrap">추가</button>
+          </div>
+          <p className="text-[11.5px] mt-2" style={{ color: '#B0AEA4' }}>이 목록은 마스터만 추가·삭제할 수 있습니다. 관리자는 조회만 가능합니다.</p>
         </div>
-        <p className="text-[11.5px] mt-2" style={{ color: '#B0AEA4' }}>이 목록은 관리자만 추가·삭제할 수 있습니다. 영업사원은 볼 수 없어요.</p>
-      </div>
+      )}
 
       <div className="flex flex-col gap-2.5">
         {qrCodes.length === 0 && <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}><p className="text-sm" style={{ color: '#9B998F' }}>등록된 단지 QR이 없습니다.</p></div>}
@@ -1353,7 +1362,7 @@ function QRCategoryPanel({ qrCodes, onAdd, onDelete }) {
             <div key={q.id} className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
               <div className="flex items-center justify-between mb-2">
                 <p className="font-semibold text-[14px]" style={{ color: '#1C2620' }}>{q.complex}</p>
-                <button onClick={() => { if (confirm('이 QR을 삭제할까요?')) onDelete(q.id); }} className="text-[11.5px] font-medium" style={{ color: '#A32D2D' }}>삭제</button>
+                {isMaster && <button onClick={() => { if (confirm('이 QR을 삭제할까요?')) onDelete(q.id); }} className="text-[11.5px] font-medium" style={{ color: '#A32D2D' }}>삭제</button>}
               </div>
               <div className="flex flex-col items-center gap-2 py-1">
                 <img src={qrImg} alt={`${q.complex} QR 코드`} width={150} height={150} style={{ borderRadius: '8px', border: '1px solid #E4E2D9' }} />
@@ -1371,9 +1380,12 @@ function QRCategoryPanel({ qrCodes, onAdd, onDelete }) {
 }
 
 function Dashboard({ currentUser, onLogout }) {
-  const isRealAdmin = currentUser.role === 'admin';
-  const [previewAsSales, setPreviewAsSales] = useState(false);
-  const isAdmin = isRealAdmin && !previewAsSales;
+  const isRealMaster = currentUser.role === 'master';
+  const isRealAdmin = currentUser.role === 'admin' || isRealMaster;
+  // previewMode: 'none' | 'admin' | 'sales' - 마스터는 관리자/영업사원 화면을 각각 미리볼 수 있고, 일반 관리자는 영업사원 화면만 미리볼 수 있음
+  const [previewMode, setPreviewMode] = useState('none');
+  const isAdmin = isRealMaster ? (previewMode !== 'sales') : (isRealAdmin && previewMode !== 'sales');
+  const isMaster = isRealMaster && previewMode === 'none';
   const myId = currentUser.id;
   const [tab, setTab] = useState('customers');
   const [search, setSearch] = useState('');
@@ -1765,10 +1777,17 @@ function Dashboard({ currentUser, onLogout }) {
           <div>
             <p className="text-[11px] tracking-wide uppercase" style={{ color: '#8FA89A' }}>방문 세차 정기권 · 신규고객관리</p>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-lg font-semibold" style={{ color: '#FFFFFF' }}>{currentUser.name}{isRealAdmin ? (previewAsSales ? ' (영업사원 화면 미리보기)' : ' (관리자)') : ' 영업사원'}</h1>
-              {isRealAdmin && (
-                <button onClick={() => setPreviewAsSales(v => !v)} style={{ background: previewAsSales ? '#C98A2E' : '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="text-[11px] px-2.5 py-1 rounded-full whitespace-nowrap">
-                  {previewAsSales ? '↩ 관리자 화면으로' : '🔄 사용자 전환'}
+              <h1 className="text-lg font-semibold" style={{ color: '#FFFFFF' }}>{currentUser.name}{currentUser.member_code ? ` (${currentUser.member_code})` : ''} · {previewMode === 'sales' ? '영업사원 화면 미리보기' : previewMode === 'admin' ? '관리자 화면 미리보기' : roleLabel(currentUser.role)}</h1>
+              {isRealMaster && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {previewMode !== 'none' && <button onClick={() => setPreviewMode('none')} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="text-[11px] px-2.5 py-1 rounded-full whitespace-nowrap">↩ 마스터 화면으로</button>}
+                  {previewMode !== 'admin' && <button onClick={() => setPreviewMode('admin')} style={{ background: previewMode === 'admin' ? '#0C447C' : '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="text-[11px] px-2.5 py-1 rounded-full whitespace-nowrap">🔍 관리자 화면 보기</button>}
+                  {previewMode !== 'sales' && <button onClick={() => setPreviewMode('sales')} style={{ background: previewMode === 'sales' ? '#C98A2E' : '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="text-[11px] px-2.5 py-1 rounded-full whitespace-nowrap">🔍 영업사원 화면 보기</button>}
+                </div>
+              )}
+              {isRealAdmin && !isRealMaster && (
+                <button onClick={() => setPreviewMode(m => m === 'sales' ? 'none' : 'sales')} style={{ background: previewMode === 'sales' ? '#C98A2E' : '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="text-[11px] px-2.5 py-1 rounded-full whitespace-nowrap">
+                  {previewMode === 'sales' ? '↩ 관리자 화면으로' : '🔄 사용자 전환'}
                 </button>
               )}
             </div>
@@ -1811,7 +1830,7 @@ function Dashboard({ currentUser, onLogout }) {
               🗑 휴지통 {trashedCustomers.length > 0 && <span style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[10px] px-1.5 py-0.5 rounded-full">{trashedCustomers.length}</span>}
             </button>
             <button onClick={() => setTab('updates')} style={{ background: tab === 'updates' ? '#FFFFFF' : 'transparent', color: tab === 'updates' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">🆕 업데이트 소식</button>
-            <button onClick={() => setTab('incentiveRules')} style={{ background: tab === 'incentiveRules' ? '#FFFFFF' : 'transparent', color: tab === 'incentiveRules' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">⚙️ 인센티브 설정</button>
+            {isMaster && <button onClick={() => setTab('incentiveRules')} style={{ background: tab === 'incentiveRules' ? '#FFFFFF' : 'transparent', color: tab === 'incentiveRules' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">⚙️ 인센티브 설정</button>}
           </div>
         )}
         {!isAdmin && (
@@ -1835,7 +1854,7 @@ function Dashboard({ currentUser, onLogout }) {
         {tab === 'approvals' && isAdmin ? (
           <ApprovalPanel pendingUsers={pendingUsers} onApprove={approveUser} onReject={rejectUser} />
         ) : tab === 'staff' && isAdmin ? (
-          <StaffPanel allStaff={allStaff} onWithdraw={withdrawUser} onDeleteAccount={deleteAccountCompletely} onMessage={setMessageTarget} onChangeRole={changeStaffRole} />
+          <StaffPanel allStaff={allStaff} onWithdraw={withdrawUser} onDeleteAccount={deleteAccountCompletely} onMessage={setMessageTarget} onChangeRole={changeStaffRole} isMaster={isMaster} />
         ) : tab === 'stats' && isAdmin ? (
           <ContractCalendar customers={customers} salesUsers={salesUsers} />
         ) : tab === 'unassigned' && isAdmin ? (
@@ -1847,12 +1866,12 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'logs' && isAdmin ? (
           <AccessLogPanel logs={accessLogs} onRefresh={refreshAccessLogs} />
         ) : tab === 'qr' && isAdmin ? (
-          <QRCategoryPanel qrCodes={qrCodes} onAdd={addQrCode} onDelete={deleteQrCode} />
+          <QRCategoryPanel qrCodes={qrCodes} onAdd={addQrCode} onDelete={deleteQrCode} isMaster={isMaster} />
         ) : tab === 'trash' && isAdmin ? (
           <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} onBulkPurge={bulkPurgeNow} />
         ) : tab === 'updates' ? (
           <UpdateLogPanel isAdmin={isAdmin} updates={updateLogs} onPost={postUpdateLog} onEdit={editUpdateLog} onDelete={deleteUpdateLog} />
-        ) : tab === 'incentiveRules' && isAdmin ? (
+        ) : tab === 'incentiveRules' && isMaster ? (
           <IncentiveRulesPanel rules={incentiveRules} onAdd={addIncentiveRule} onDelete={deleteIncentiveRule} staffDirectory={staffDirectory} />
         ) : tab === 'completed' ? (
           <CompletedDealsPanel customers={customers} staffDirectory={staffDirectory} onOpenDetail={openExisting} />
