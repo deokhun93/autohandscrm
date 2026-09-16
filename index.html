@@ -1392,15 +1392,20 @@ function Dashboard({ currentUser, onLogout }) {
     const inTalk = scope.filter(c => c.status === '상담중').length;
     return { total, contracted, inTalk, incentive: contracted * INCENTIVE_PER_DEAL };
   }, [scope]);
-  const companyIncentive = useMemo(() => {
+  const incentiveBreakdown = useMemo(() => {
+    const kim = allStaff.find(u => u.role === 'admin' && u.name === '김덕훈');
+    const kimId = kim ? kim.id : null;
     const contractedCompanyWide = customers.filter(c => c.status === '계약완료' && c.rep_id);
-    const isRepAdmin = (repId) => allStaff.some(u => u.id === repId && u.role === 'admin');
-    const repClosedCount = contractedCompanyWide.filter(c => !isRepAdmin(c.rep_id)).length;
-    const adminSelfClosedCount = contractedCompanyWide.filter(c => isRepAdmin(c.rep_id)).length;
-    const kimDeokHoonIsManager = allStaff.some(u => u.role === 'admin' && u.name === '김덕훈');
-    const overridePerDeal = kimDeokHoonIsManager ? MANAGER_OVERRIDE_PER_DEAL : 0;
-    return repClosedCount * (INCENTIVE_PER_DEAL + overridePerDeal) + adminSelfClosedCount * ADMIN_SELF_CLOSE_INCENTIVE;
+    const kimSelfClosedCount = kimId ? contractedCompanyWide.filter(c => c.rep_id === kimId).length : 0;
+    const otherClosedCount = contractedCompanyWide.filter(c => c.rep_id !== kimId).length;
+    const repIncentiveTotal = otherClosedCount * INCENTIVE_PER_DEAL;
+    const kimOverrideTotal = kimId ? otherClosedCount * MANAGER_OVERRIDE_PER_DEAL : 0;
+    const kimSelfCloseTotal = kimSelfClosedCount * ADMIN_SELF_CLOSE_INCENTIVE;
+    const kimTotalIncentive = kimOverrideTotal + kimSelfCloseTotal;
+    const companyTotal = repIncentiveTotal + kimTotalIncentive;
+    return { repIncentiveTotal, kimTotalIncentive, companyTotal, kimSelfClosedCount, otherClosedCount };
   }, [customers, allStaff]);
+  const companyIncentive = incentiveBreakdown.companyTotal;
 
   async function toggleStage(id, key) {
     const target = customers.find(c => c.id === id);
@@ -1747,6 +1752,7 @@ function Dashboard({ currentUser, onLogout }) {
                   <StatCard emoji="💬" label="상담 진행중" value={stats.inTalk} tint="#3B6FA0" />
                   <StatCard emoji="✅" label="유치완료" value={stats.contracted} tint="#2F6B4F" />
                   {isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(stats.incentive)} tint="#C98A2E" />}
+                  {isAdmin && <StatCard emoji="👑" label="김덕훈 관리자 인센티브" value={currency(incentiveBreakdown.kimTotalIncentive)} tint="#6B3FA0" />}
                 </div>
 
                 {!isAdmin && (
