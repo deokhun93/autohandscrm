@@ -35,6 +35,8 @@ const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABA
 });
 
 const INCENTIVE_PER_DEAL = 30000;
+const MANAGER_OVERRIDE_PER_DEAL = 10000;
+const ADMIN_SELF_CLOSE_INCENTIVE = 40000;
 const STATUS = {
   '청약대기': { fg: '#6B3FA0', bg: '#F1E6FA', border: '#C9A6E8' },
   '신규': { fg: '#5F5E5A', bg: '#F1EFE8', border: '#D3D1C7' },
@@ -1361,7 +1363,16 @@ function Dashboard({ currentUser, onLogout }) {
     const inTalk = scope.filter(c => c.status === '상담중').length;
     return { total, contracted, inTalk, incentive: contracted * INCENTIVE_PER_DEAL };
   }, [scope]);
-  const companyIncentive = useMemo(() => customers.filter(c => c.status === '계약완료').length * INCENTIVE_PER_DEAL, [customers]);
+  const managerStats = useMemo(() => {
+    const contractedCompanyWide = customers.filter(c => c.status === '계약완료' && c.rep_id);
+    const isRepAdmin = (repId) => allStaff.some(u => u.id === repId && u.role === 'admin');
+    const repClosedCount = contractedCompanyWide.filter(c => !isRepAdmin(c.rep_id)).length;
+    const selfClosedByMe = contractedCompanyWide.filter(c => c.rep_id === myId).length;
+    const salesIncentiveTotal = repClosedCount * INCENTIVE_PER_DEAL;
+    const myAdminIncentive = selfClosedByMe * ADMIN_SELF_CLOSE_INCENTIVE + repClosedCount * MANAGER_OVERRIDE_PER_DEAL;
+    return { repClosedCount, selfClosedByMe, salesIncentiveTotal, myAdminIncentive };
+  }, [customers, allStaff, myId]);
+  const companyIncentive = managerStats.salesIncentiveTotal + customers.filter(c => c.status === '계약완료' && c.rep_id && allStaff.some(u => u.id === c.rep_id && u.role === 'admin')).length * ADMIN_SELF_CLOSE_INCENTIVE;
 
   async function toggleStage(id, key) {
     const target = customers.find(c => c.id === id);
@@ -1701,6 +1712,16 @@ function Dashboard({ currentUser, onLogout }) {
               <StatCard emoji="✅" label="유치완료" value={stats.contracted} tint="#2F6B4F" />
               {isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(stats.incentive)} tint="#C98A2E" />}
             </div>
+
+            {isAdmin && (
+              <div className="rounded-xl p-3.5 flex items-center justify-between" style={{ background: '#F1E6FA', border: '1px solid #C9A6E8' }}>
+                <div>
+                  <p className="text-[12.5px]" style={{ color: '#6B3FA0' }}>영업사원 유치 {managerStats.repClosedCount}건 × 1만원 + 내가 직접 유치 {managerStats.selfClosedByMe}건 × 4만원</p>
+                  <p className="text-[22px] font-semibold mt-0.5" style={{ color: '#4A2A78', fontVariantNumeric: 'tabular-nums' }}>{currency(managerStats.myAdminIncentive)}</p>
+                </div>
+                <span className="text-3xl">👑</span>
+              </div>
+            )}
 
             {!isAdmin && (
               <div className="rounded-xl p-3.5 flex items-center justify-between" style={{ background: '#EAF3DE', border: '1px solid #C0DD97' }}>
