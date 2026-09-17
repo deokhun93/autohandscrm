@@ -110,6 +110,10 @@ function roleLabel(role) {
   if (role === 'field') return '현장직원';
   return '영업사원';
 }
+// 마스터가 아닌 관리자가 보는 화면에서는 다른 사람의 '마스터' 등급이 '관리자'로 위장되어 보이도록 함
+function displayRole(role, viewerIsMaster) {
+  return (role === 'master' && !viewerIsMaster) ? 'admin' : role;
+}
 function formatPhoneInput(v) {
   const digits = String(v).replace(/\D/g, '').slice(0, 11);
   if (digits.length < 4) return digits;
@@ -826,7 +830,7 @@ function InquiryPanel({ inquiries, onOpen }) {
   );
 }
 
-function StaffIncentivePanel({ customers, rules, staffDirectory }) {
+function StaffIncentivePanel({ customers, rules, staffDirectory, isMaster }) {
   const [period, setPeriod] = useState('all');
   const periods = [
     { key: 'all', label: '실시간(전체)' },
@@ -874,7 +878,7 @@ function StaffIncentivePanel({ customers, rules, staffDirectory }) {
               <div className="flex items-center gap-1.5 flex-wrap">
                 <p className="font-semibold text-[14px]" style={{ color: '#1C2620' }}>{r.name}</p>
                 <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: '#F1EFE8', color: '#6B6A63' }}>{r.member_code}</span>
-                <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: r.role === 'master' ? '#FAEEDA' : r.role === 'admin' ? '#E6F1FB' : r.role === 'field' ? '#F1E6FA' : '#E1F5EE', color: r.role === 'master' ? '#854F0B' : r.role === 'admin' ? '#0C447C' : r.role === 'field' ? '#6B3FA0' : '#085041' }}>{roleLabel(r.role)}</span>
+                <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: displayRole(r.role, isMaster) === 'master' ? '#FAEEDA' : displayRole(r.role, isMaster) === 'admin' ? '#E6F1FB' : displayRole(r.role, isMaster) === 'field' ? '#F1E6FA' : '#E1F5EE', color: displayRole(r.role, isMaster) === 'master' ? '#854F0B' : displayRole(r.role, isMaster) === 'admin' ? '#0C447C' : displayRole(r.role, isMaster) === 'field' ? '#6B3FA0' : '#085041' }}>{roleLabel(displayRole(r.role, isMaster))}</span>
               </div>
               <p className="text-[12px] mt-1" style={{ color: '#6B6A63' }}>유치 {r.count}건</p>
             </div>
@@ -977,7 +981,7 @@ function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage, onChange
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="font-semibold text-[15px]" style={{ color: '#1C2620' }}>{u.name}</p>
-              <span style={{ background: u.role === 'master' ? '#FAEEDA' : u.role === 'admin' ? '#E6F1FB' : u.role === 'field' ? '#F1E6FA' : '#E1F5EE', color: u.role === 'master' ? '#854F0B' : u.role === 'admin' ? '#0C447C' : u.role === 'field' ? '#6B3FA0' : '#085041', border: '1px solid ' + (u.role === 'master' ? '#EF9F27' : u.role === 'admin' ? '#85B7EB' : u.role === 'field' ? '#C9A6E8' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{roleLabel(u.role)}</span>
+              <span style={{ background: displayRole(u.role, isMaster) === 'master' ? '#FAEEDA' : displayRole(u.role, isMaster) === 'admin' ? '#E6F1FB' : displayRole(u.role, isMaster) === 'field' ? '#F1E6FA' : '#E1F5EE', color: displayRole(u.role, isMaster) === 'master' ? '#854F0B' : displayRole(u.role, isMaster) === 'admin' ? '#0C447C' : displayRole(u.role, isMaster) === 'field' ? '#6B3FA0' : '#085041', border: '1px solid ' + (displayRole(u.role, isMaster) === 'master' ? '#EF9F27' : displayRole(u.role, isMaster) === 'admin' ? '#85B7EB' : displayRole(u.role, isMaster) === 'field' ? '#C9A6E8' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{roleLabel(displayRole(u.role, isMaster))}</span>
               {u.member_code && <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: '#F1EFE8', color: '#6B6A63' }}>{u.member_code}</span>}
             </div>
             <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={u.phone} type="phone" /></p>
@@ -1958,7 +1962,7 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'incentiveRules' && isMaster ? (
           <IncentiveRulesPanel rules={incentiveRules} onAdd={addIncentiveRule} onDelete={deleteIncentiveRule} staffDirectory={staffDirectory} />
         ) : tab === 'staffIncentive' && isAdmin ? (
-          <StaffIncentivePanel customers={customers} rules={incentiveRules} staffDirectory={staffDirectory} />
+          <StaffIncentivePanel customers={customers} rules={incentiveRules} staffDirectory={staffDirectory} isMaster={isMaster} />
         ) : tab === 'completed' ? (
           <CompletedDealsPanel customers={customers} staffDirectory={staffDirectory} onOpenDetail={openExisting} />
         ) : (
