@@ -831,15 +831,17 @@ function InquiryPanel({ inquiries, onOpen }) {
 }
 
 function StaffIncentivePanel({ customers, rules, staffDirectory, isMaster }) {
-  const [period, setPeriod] = useState('all');
-  const periods = [
-    { key: 'all', label: '실시간(전체)' },
-    { key: 'today', label: '오늘' },
-    { key: 'week', label: '이번주' },
-    { key: 'month', label: '이번달' },
-    { key: 'lastmonth', label: '지난달' },
-  ];
-  const filtered = useMemo(() => filterCustomersByPeriod(customers, period), [customers, period]);
+  const [rangeStart, setRangeStart] = useState('');
+  const [rangeEnd, setRangeEnd] = useState('');
+  const filtered = useMemo(() => {
+    if (!rangeStart && !rangeEnd) return customers;
+    return (customers || []).filter(c => {
+      if (!c.contract_date) return false;
+      if (rangeStart && c.contract_date < rangeStart) return false;
+      if (rangeEnd && c.contract_date > rangeEnd) return false;
+      return true;
+    });
+  }, [customers, rangeStart, rangeEnd]);
   const { totals, closedCounts } = useMemo(() => computeIncentiveMap(filtered, rules, staffDirectory), [filtered, rules, staffDirectory]);
 
   const rows = (staffDirectory || [])
@@ -852,10 +854,22 @@ function StaffIncentivePanel({ customers, rules, staffDirectory, isMaster }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex gap-2 overflow-x-auto pb-0.5">
-        {periods.map(p => (
-          <button key={p.key} onClick={() => setPeriod(p.key)} style={{ background: period === p.key ? '#1C2620' : '#FFFFFF', color: period === p.key ? '#FFFFFF' : '#4A4A45', border: '1px solid ' + (period === p.key ? '#1C2620' : '#E4E2D9') }} className="text-xs font-medium px-3 py-1.5 rounded-full whitespace-nowrap shrink-0">{p.label}</button>
-        ))}
+      <div className="rounded-xl p-3.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+        <p className="text-[12.5px] font-medium mb-2" style={{ color: '#1C2620' }}>기간 설정 (계약일 기준)</p>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11.5px]" style={{ color: '#6B6A63' }}>시작일</label>
+            <input type="date" value={rangeStart} onChange={e => setRangeStart(e.target.value)} style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full mt-1 rounded-lg px-3 py-2 text-sm outline-none" />
+          </div>
+          <div>
+            <label className="text-[11.5px]" style={{ color: '#6B6A63' }}>종료일</label>
+            <input type="date" value={rangeEnd} onChange={e => setRangeEnd(e.target.value)} style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full mt-1 rounded-lg px-3 py-2 text-sm outline-none" />
+          </div>
+        </div>
+        {(rangeStart || rangeEnd) && (
+          <button onClick={() => { setRangeStart(''); setRangeEnd(''); }} className="text-[11.5px] mt-2" style={{ color: '#0C447C' }}>전체 기간 다시 보기</button>
+        )}
+        {!rangeStart && !rangeEnd && <p className="text-[11px] mt-2" style={{ color: '#B0AEA4' }}>날짜를 선택하지 않으면 실시간 전체 기간이 표시됩니다.</p>}
       </div>
 
       <div className="rounded-xl p-3.5 flex items-center justify-between" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
