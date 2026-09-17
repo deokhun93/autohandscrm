@@ -1883,8 +1883,7 @@ function Dashboard({ currentUser, onLogout }) {
                   <StatCard emoji="👥" label={isAdmin ? '전체 고객' : '내 담당 고객'} value={stats.total} tint="#2F6B4F" />
                   <StatCard emoji="💬" label="상담 진행중" value={stats.inTalk} tint="#3B6FA0" />
                   <StatCard emoji="✅" label="유치완료" value={stats.contracted} tint="#2F6B4F" />
-                  {isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(myIncentive)} tint="#C98A2E" />}
-                  {isAdmin && <StatCard emoji="👑" label={`내 인센티브 (${currentUser.member_code || '-'})`} value={currency(myIncentive)} tint="#6B3FA0" />}
+                  {isMaster ? <StatCard emoji="💰" label={`총 지급 인센티브 (${currentUser.member_code || '-'})`} value={currency(myIncentive)} tint="#C98A2E" /> : isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(myIncentive)} tint="#C98A2E" />}
                 </div>
 
                 <Leaderboard salesUsers={salesUsers} customers={customers} currentUserId={myId} incentiveMap={incentiveMap} />
