@@ -43,6 +43,7 @@ function computeIncentiveMap(customers, rules, staffDirectory) {
   const codeById = {};
   (staffDirectory || []).forEach(u => { if (u.member_code) codeById[u.id] = u.member_code; });
   const totals = {};
+  const closedCounts = {};
   let companyTotal = 0;
   const add = (code, amount) => {
     if (!code || !amount) return;
@@ -53,6 +54,7 @@ function computeIncentiveMap(customers, rules, staffDirectory) {
   contracted.forEach(c => {
     const code = codeById[c.rep_id];
     if (!code) return;
+    closedCounts[code] = (closedCounts[code] || 0) + 1;
     const selfRule = (rules || []).find(r => r.override_code === code && r.self_close_incentive != null);
     if (selfRule) { add(code, selfRule.self_close_incentive); return; }
     const rangeRule = (rules || []).find(r => code >= r.min_code && code <= r.max_code);
@@ -63,7 +65,28 @@ function computeIncentiveMap(customers, rules, staffDirectory) {
     }
     add(code, INCENTIVE_PER_DEAL);
   });
-  return { totals, companyTotal };
+  return { totals, companyTotal, closedCounts };
+}
+
+function filterCustomersByPeriod(customers, period) {
+  if (period === 'all') return customers;
+  const now = new Date();
+  return (customers || []).filter(c => {
+    if (!c.contract_date) return false;
+    const d = new Date(c.contract_date);
+    if (isNaN(d)) return false;
+    if (period === 'today') return d.toDateString() === now.toDateString();
+    if (period === 'week') {
+      const start = new Date(now); start.setDate(now.getDate() - now.getDay()); start.setHours(0, 0, 0, 0);
+      return d >= start;
+    }
+    if (period === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    if (period === 'lastmonth') {
+      const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return d.getFullYear() === lm.getFullYear() && d.getMonth() === lm.getMonth();
+    }
+    return true;
+  });
 }
 
 const STATUS = {
@@ -799,6 +822,66 @@ function InquiryPanel({ inquiries, onOpen }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function StaffIncentivePanel({ customers, rules, staffDirectory }) {
+  const [period, setPeriod] = useState('all');
+  const periods = [
+    { key: 'all', label: '실시간(전체)' },
+    { key: 'today', label: '오늘' },
+    { key: 'week', label: '이번주' },
+    { key: 'month', label: '이번달' },
+    { key: 'lastmonth', label: '지난달' },
+  ];
+  const filtered = useMemo(() => filterCustomersByPeriod(customers, period), [customers, period]);
+  const { totals, closedCounts } = useMemo(() => computeIncentiveMap(filtered, rules, staffDirectory), [filtered, rules, staffDirectory]);
+
+  const rows = (staffDirectory || [])
+    .filter(u => u.member_code)
+    .map(u => ({ ...u, count: closedCounts[u.member_code] || 0, incentive: totals[u.member_code] || 0 }))
+    .sort((a, b) => b.incentive - a.incentive || a.member_code.localeCompare(b.member_code));
+
+  const totalIncentive = rows.reduce((sum, r) => sum + r.incentive, 0);
+  const totalCount = rows.reduce((sum, r) => sum + r.count, 0);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-2 overflow-x-auto pb-0.5">
+        {periods.map(p => (
+          <button key={p.key} onClick={() => setPeriod(p.key)} style={{ background: period === p.key ? '#1C2620' : '#FFFFFF', color: period === p.key ? '#FFFFFF' : '#4A4A45', border: '1px solid ' + (period === p.key ? '#1C2620' : '#E4E2D9') }} className="text-xs font-medium px-3 py-1.5 rounded-full whitespace-nowrap shrink-0">{p.label}</button>
+        ))}
+      </div>
+
+      <div className="rounded-xl p-3.5 flex items-center justify-between" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+        <div>
+          <p className="text-[12.5px]" style={{ color: '#6B6A63' }}>선택한 기간 전체 유치 {totalCount}건</p>
+          <p className="text-xl font-semibold" style={{ color: '#1C2620' }}>{currency(totalIncentive)}</p>
+        </div>
+        <span className="text-3xl">📊</span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {rows.length === 0 && (
+          <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+            <p className="text-sm" style={{ color: '#9B998F' }}>직원 정보가 없습니다.</p>
+          </div>
+        )}
+        {rows.map(r => (
+          <div key={r.id} className="rounded-xl p-3.5 flex items-center justify-between gap-2" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="font-semibold text-[14px]" style={{ color: '#1C2620' }}>{r.name}</p>
+                <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: '#F1EFE8', color: '#6B6A63' }}>{r.member_code}</span>
+                <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: r.role === 'master' ? '#FAEEDA' : r.role === 'admin' ? '#E6F1FB' : r.role === 'field' ? '#F1E6FA' : '#E1F5EE', color: r.role === 'master' ? '#854F0B' : r.role === 'admin' ? '#0C447C' : r.role === 'field' ? '#6B3FA0' : '#085041' }}>{roleLabel(r.role)}</span>
+              </div>
+              <p className="text-[12px] mt-1" style={{ color: '#6B6A63' }}>유치 {r.count}건</p>
+            </div>
+            <p className="text-[16px] font-semibold shrink-0" style={{ color: '#C98A2E' }}>{currency(r.incentive)}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1831,6 +1914,7 @@ function Dashboard({ currentUser, onLogout }) {
             </button>
             <button onClick={() => setTab('updates')} style={{ background: tab === 'updates' ? '#FFFFFF' : 'transparent', color: tab === 'updates' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">🆕 업데이트 소식</button>
             {isMaster && <button onClick={() => setTab('incentiveRules')} style={{ background: tab === 'incentiveRules' ? '#FFFFFF' : 'transparent', color: tab === 'incentiveRules' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">⚙️ 인센티브 설정</button>}
+            <button onClick={() => setTab('staffIncentive')} style={{ background: tab === 'staffIncentive' ? '#FFFFFF' : 'transparent', color: tab === 'staffIncentive' ? '#1C2620' : '#8FA89A' }} className="text-[13px] font-medium px-3 py-1.5 rounded-lg whitespace-nowrap">📊 직원별 인센티브</button>
           </div>
         )}
         {!isAdmin && (
@@ -1873,6 +1957,8 @@ function Dashboard({ currentUser, onLogout }) {
           <UpdateLogPanel isAdmin={isAdmin} updates={updateLogs} onPost={postUpdateLog} onEdit={editUpdateLog} onDelete={deleteUpdateLog} />
         ) : tab === 'incentiveRules' && isMaster ? (
           <IncentiveRulesPanel rules={incentiveRules} onAdd={addIncentiveRule} onDelete={deleteIncentiveRule} staffDirectory={staffDirectory} />
+        ) : tab === 'staffIncentive' && isAdmin ? (
+          <StaffIncentivePanel customers={customers} rules={incentiveRules} staffDirectory={staffDirectory} />
         ) : tab === 'completed' ? (
           <CompletedDealsPanel customers={customers} staffDirectory={staffDirectory} onOpenDetail={openExisting} />
         ) : (
@@ -1883,7 +1969,7 @@ function Dashboard({ currentUser, onLogout }) {
                   <StatCard emoji="👥" label={isAdmin ? '전체 고객' : '내 담당 고객'} value={stats.total} tint="#2F6B4F" />
                   <StatCard emoji="💬" label="상담 진행중" value={stats.inTalk} tint="#3B6FA0" />
                   <StatCard emoji="✅" label="유치완료" value={stats.contracted} tint="#2F6B4F" />
-                  {isMaster ? <StatCard emoji="💰" label={`총 지급 인센티브 (${currentUser.member_code || '-'})`} value={currency(myIncentive)} tint="#C98A2E" /> : isAdmin ? <StatCard emoji="💰" label="총 지급 인센티브" value={currency(companyIncentive)} tint="#C98A2E" /> : <StatCard emoji="💰" label="내 인센티브" value={currency(myIncentive)} tint="#C98A2E" />}
+                  <StatCard emoji="💰" label={`내 인센티브 (${currentUser.member_code || '-'})`} value={currency(myIncentive)} tint="#C98A2E" />
                 </div>
 
                 <Leaderboard salesUsers={salesUsers} customers={customers} currentUserId={myId} incentiveMap={incentiveMap} />
