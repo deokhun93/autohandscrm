@@ -1220,6 +1220,8 @@ function DayDetailModal({ day, contracts, salesUsers, onClose, onDelete }) {
   const deletableIds = contracts.filter(c => !c.rep_id).map(c => c.id);
   const selectedIds = Object.keys(selected).filter(id => selected[id]).map(Number);
   function toggle(id) { setSelected(prev => ({ ...prev, [id]: !prev[id] })); }
+  function selectAll() { const next = {}; deletableIds.forEach(id => { next[id] = true; }); setSelected(next); }
+  function clearAll() { setSelected({}); }
   function handleDelete() {
     if (selectedIds.length === 0) return;
     if (!confirm(`선택한 ${selectedIds.length}건을 휴지통으로 이동할까요?`)) return;
@@ -1235,6 +1237,13 @@ function DayDetailModal({ day, contracts, salesUsers, onClose, onDelete }) {
         </div>
         <button onClick={() => exportCustomersToExcel(contracts, salesUsers, `계약내역_${day}.xlsx`)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full text-[12.5px] py-2 rounded-lg mb-3">이 날짜 엑셀 다운로드</button>
         <p className="text-[11px] px-3 py-2 rounded-lg mb-3" style={{ background: '#F1EFE8', color: '#6B6A63' }}>담당자가 있는 정상 계약완료 건은 삭제할 수 없습니다. 담당자가 삭제(탈퇴/완전삭제)되어 "미배정"으로 남은 건만 체크해서 삭제할 수 있어요.</p>
+        {deletableIds.length > 0 && (
+          <div className="flex items-center gap-2 mb-3">
+            <button onClick={selectAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">삭제가능 건 전체 선택</button>
+            <button onClick={clearAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">선택 해제</button>
+            {selectedIds.length > 0 && <span className="text-[12px] ml-auto" style={{ color: '#6B6A63' }}>{selectedIds.length}건 선택됨</span>}
+          </div>
+        )}
         <div className="flex flex-col gap-2.5">
           {contracts.map(c => {
             const deletable = !c.rep_id;
@@ -1676,6 +1685,11 @@ function Dashboard({ currentUser, onLogout }) {
 
   async function saveCustomer(rawData) {
     const data = { ...rawData, rep_id: rawData.rep_id || null };
+    const prevRecord = customers.find(c => c.id === data.id);
+    if (prevRecord && prevRecord.status === '계약완료' && data.status !== '계약완료') {
+      // 계약취소: 계약현황 캘린더에서 자동으로 사라지도록 계약일을 비웁니다.
+      data.contract_date = null;
+    }
     if (data.id == null) {
       const { id, ...rest } = data;
       const { data: inserted, error } = await supabase.from('customers').insert(rest).select().single();
