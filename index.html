@@ -663,13 +663,14 @@ function AccessLogPanel({ logs, onRefresh }) {
   );
 }
 
-function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail }) {
+function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail, onRequestSms }) {
   const [selectedStaff, setSelectedStaff] = useState(() => {
     const init = {};
     staffDirectory.forEach(u => { init[u.id] = true; });
     return init;
   });
   const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState({});
 
   useEffect(() => {
     setSelectedStaff(prev => {
@@ -692,6 +693,11 @@ function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail }) {
     const q = search.trim().toLowerCase();
     return `${c.name} ${c.phone} ${c.complex} ${c.memo || ''} ${c.car_number || ''}`.toLowerCase().includes(q);
   }).sort((a, b) => new Date(b.contract_date || b.visit_date) - new Date(a.contract_date || a.visit_date));
+
+  function toggle(id) { setSelected(prev => ({ ...prev, [id]: !prev[id] })); }
+  function selectAllRows() { const next = {}; list.forEach(c => { next[c.id] = true; }); setSelected(next); }
+  function clearAllRows() { setSelected({}); }
+  const selectedIds = Object.keys(selected).filter(id => selected[id]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -718,23 +724,33 @@ function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail }) {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="이름, 연락처, 단지명, 차량번호로 검색" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full text-sm rounded-lg pl-9 pr-3 py-2.5 outline-none" />
       </div>
 
-      <p className="text-[12.5px]" style={{ color: '#6B6A63' }}>선택한 담당자 계약완료 <span className="font-semibold" style={{ color: '#1C2620' }}>{list.length}건</span></p>
+      <div className="flex items-center gap-2">
+        <p className="text-[12.5px]" style={{ color: '#6B6A63' }}>선택한 담당자 계약완료 <span className="font-semibold" style={{ color: '#1C2620' }}>{list.length}건</span></p>
+        <button onClick={selectAllRows} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg ml-auto">전체 선택</button>
+        <button onClick={clearAllRows} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">선택 해제</button>
+      </div>
+      {selectedIds.length > 0 && (
+        <button onClick={() => onRequestSms(selectedIds.map(id => Number(id)), `${selectedIds.length}건`, clearAllRows)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium">📱 선택 {selectedIds.length}건 문자 발송</button>
+      )}
 
       <div className="flex flex-col gap-2.5">
         {list.length === 0 && <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}><p className="text-sm" style={{ color: '#9B998F' }}>표시할 계약완료 건이 없습니다.</p></div>}
         {list.map(c => (
-          <div key={c.id} onClick={() => onOpenDetail(c)} className="rounded-xl p-3.5 cursor-pointer" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
-              <StatusBadge status={c.status} />
+          <div key={c.id} className="rounded-xl p-3.5 flex items-start gap-2.5" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
+            <input type="checkbox" className="mt-1 shrink-0" checked={!!selected[c.id]} onChange={() => toggle(c.id)} />
+            <div className="min-w-0 flex-1 cursor-pointer" onClick={() => onOpenDetail(c)}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
+                <StatusBadge status={c.status} />
+              </div>
+              <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>
+              <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[12.5px]" style={{ color: '#6B6A63' }}>
+                <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
+                <span className="flex items-center gap-1">📅 계약일 {c.contract_date || c.visit_date}</span>
+                <span className="flex items-center gap-1">👤 {nameOf(c.rep_id)}</span>
+              </div>
+              {c.amount > 0 && <p className="text-[13px] font-medium mt-1.5" style={{ color: '#085041' }}>월 {currency(c.amount)}</p>}
             </div>
-            <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>
-            <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[12.5px]" style={{ color: '#6B6A63' }}>
-              <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
-              <span className="flex items-center gap-1">📅 계약일 {c.contract_date || c.visit_date}</span>
-              <span className="flex items-center gap-1">👤 {nameOf(c.rep_id)}</span>
-            </div>
-            {c.amount > 0 && <p className="text-[13px] font-medium mt-1.5" style={{ color: '#085041' }}>월 {currency(c.amount)}</p>}
           </div>
         ))}
       </div>
@@ -807,27 +823,43 @@ function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge }) {
   );
 }
 
-function InquiryPanel({ inquiries, onOpen }) {
+function InquiryPanel({ inquiries, onOpen, onRequestSms }) {
+  const [selected, setSelected] = useState({});
+  const selectedIds = Object.keys(selected).filter(id => selected[id]);
+  function toggle(id) { setSelected(prev => ({ ...prev, [id]: !prev[id] })); }
+  function selectAll() { const next = {}; inquiries.forEach(c => { next[c.id] = true; }); setSelected(next); }
+  function clearAll() { setSelected({}); }
   return (
     <div className="flex flex-col gap-2.5">
+      {inquiries.length > 0 && (
+        <div className="flex items-center gap-2">
+          <button onClick={selectAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">전체 선택</button>
+          <button onClick={clearAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">선택 해제</button>
+          {selectedIds.length > 0 && <button onClick={() => onRequestSms(selectedIds.map(id => Number(id)), `${selectedIds.length}건`, clearAll)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="text-[12px] px-2.5 py-1.5 rounded-lg font-medium">📱 문자 발송</button>}
+          {selectedIds.length > 0 && <span className="text-[12px] ml-auto" style={{ color: '#6B6A63' }}>{selectedIds.length}건 선택됨</span>}
+        </div>
+      )}
       {inquiries.length === 0 && (
         <div className="text-center py-10 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9' }}>
           <p className="text-sm" style={{ color: '#9B998F' }}>청약대기 중인 신청이 없습니다.</p>
         </div>
       )}
       {inquiries.map(c => (
-        <div key={c.id} onClick={() => onOpen(c)} className="rounded-xl p-3.5 cursor-pointer" style={{ background: '#FFFFFF', border: '1px solid ' + (c.reviewed ? '#E4E2D9' : '#C9A6E8') }}>
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
-              <StatusBadge status={c.status} />
-              {!c.reviewed && <span style={{ background: '#6B3FA0', color: '#FFFFFF' }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">NEW</span>}
+        <div key={c.id} className="rounded-xl p-3.5 flex items-start gap-2.5" style={{ background: '#FFFFFF', border: '1px solid ' + (c.reviewed ? '#E4E2D9' : '#C9A6E8') }}>
+          <input type="checkbox" className="mt-1 shrink-0" checked={!!selected[c.id]} onChange={() => toggle(c.id)} />
+          <div className="min-w-0 flex-1 cursor-pointer" onClick={() => onOpen(c)}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-[15px]" style={{ color: '#1C2620' }}><MaskedText value={c.name} type="name" /></span>
+                <StatusBadge status={c.status} />
+                {!c.reviewed && <span style={{ background: '#6B3FA0', color: '#FFFFFF' }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">NEW</span>}
+              </div>
             </div>
-          </div>
-          {(c.complex || c.unit) && <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>}
-          <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[12.5px]" style={{ color: '#6B6A63' }}>
-            <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
-            <span className="flex items-center gap-1">📅 접수 {c.visit_date}</span>
+            {(c.complex || c.unit) && <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>}
+            <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[12.5px]" style={{ color: '#6B6A63' }}>
+              <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
+              <span className="flex items-center gap-1">📅 접수 {c.visit_date}</span>
+            </div>
           </div>
         </div>
       ))}
@@ -1023,7 +1055,7 @@ function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage, onChange
   );
 }
 
-function SmsComposeModal({ selectedCount, defaultText, onClose, onSend }) {
+function SmsComposeModal({ targetLabel, defaultText, onClose, onSend }) {
   const [text, setText] = useState(defaultText || '');
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState(null);
@@ -1039,15 +1071,21 @@ function SmsComposeModal({ selectedCount, defaultText, onClose, onSend }) {
 
   return (
     <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center" style={{ background: 'rgba(28,38,32,0.5)' }}>
-      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-4">
+      <div style={{ background: '#FFFFFF' }} className="rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm max-h-[88vh] overflow-y-auto p-4">
         <h2 className="text-base font-semibold mb-1" style={{ color: '#1C2620' }}>문자 발송</h2>
-        <p className="text-[12px] mb-3" style={{ color: '#6B6A63' }}>선택한 {selectedCount}건 중 <strong>문자 수신거부를 하지 않은 고객</strong>에게 자동으로 발송됩니다.</p>
+        <p className="text-[12px] mb-3" style={{ color: '#6B6A63' }}><strong>{targetLabel}</strong>에게 아래 내용 그대로 발송됩니다. 수신거부한 고객은 자동으로 제외됩니다.</p>
         <textarea value={text} onChange={e => setText(e.target.value)} rows={5} style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none" placeholder="발송할 문자 내용을 입력하세요" />
         <p className="text-[11px] mt-1.5" style={{ color: '#B0AEA4' }}>문자 앞에 "(광고)"와 수신거부 안내가 자동으로 추가됩니다.</p>
         <label className="flex items-center gap-2 mt-2.5 text-[12.5px] px-3 py-2 rounded-lg" style={{ background: '#F1EFE8', color: '#4A4A45' }}>
           <input type="checkbox" checked={attachImage} onChange={e => setAttachImage(e.target.checked)} />
           🖼️ 오토핸즈 포스터 이미지 첨부해서 MMS로 보내기 (건당 비용이 더 높습니다)
         </label>
+        {attachImage && (
+          <div className="mt-2.5 rounded-lg p-2" style={{ background: '#F7F6F2' }}>
+            <p className="text-[11px] mb-1.5" style={{ color: '#6B6A63' }}>실제 발송될 미리보기</p>
+            <img src={PROMO_POSTER_IMAGE} alt="첨부 이미지 미리보기" className="w-full rounded-lg" style={{ border: '1px solid #E4E2D9', maxHeight: '260px', objectFit: 'contain' }} />
+          </div>
+        )}
         {result && (
           <div className="mt-2 px-3 py-2 rounded-lg" style={{ background: (result.results || []).some(r => r.status !== '성공') ? '#FAEEDA' : '#E1F5EE' }}>
             <p className="text-[12.5px]" style={{ color: (result.results || []).some(r => r.status !== '성공') ? '#854F0B' : '#085041' }}>
@@ -1061,7 +1099,7 @@ function SmsComposeModal({ selectedCount, defaultText, onClose, onSend }) {
         )}
         <div className="flex gap-2 mt-3">
           <button onClick={onClose} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg">닫기</button>
-          <button onClick={handleSend} disabled={sending} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{sending ? '발송 중...' : '발송하기'}</button>
+          <button onClick={handleSend} disabled={sending} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="flex-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{sending ? '발송 중...' : '전송'}</button>
         </div>
       </div>
     </div>
@@ -1369,7 +1407,7 @@ function ContractCalendar({ customers, salesUsers, onDeleteContracts }) {
   );
 }
 
-function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, onOpenDetail, onDelete, title = '미배정 DB', repLabel }) {
+function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, onOpenDetail, onDelete, onRequestSms, title = '미배정 DB', repLabel }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState({});
   const [targetRep, setTargetRep] = useState(salesUsers[0] ? salesUsers[0].id : '');
@@ -1419,6 +1457,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, o
       <div className="flex items-center gap-2">
         <button onClick={selectAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">현재 목록 전체 선택</button>
         <button onClick={clearAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">선택 해제</button>
+        {onRequestSms && selectedCount > 0 && <button onClick={() => { onRequestSms(selectedIds.map(id => Number(id)), `${selectedCount}건`, clearAll); }} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="text-[12px] px-2.5 py-1.5 rounded-lg font-medium">📱 문자 발송</button>}
         <span className="text-[12px] ml-auto" style={{ color: '#6B6A63' }}>{selectedCount}건 선택됨</span>
       </div>
 
@@ -1542,7 +1581,7 @@ function Dashboard({ currentUser, onLogout }) {
   const [marketingFilter, setMarketingFilter] = useState('전체');
   const [myDbFilter, setMyDbFilter] = useState('all');
   const [bulkSelected, setBulkSelected] = useState({});
-  const [showSmsCompose, setShowSmsCompose] = useState(false);
+  const [smsRequest, setSmsRequest] = useState(null);
   const [showSenderSetting, setShowSenderSetting] = useState(false);
   const [currentUserSender, setCurrentUserSender] = useState(currentUser.sms_sender_number || '');
   const [myPersonalScript, setMyPersonalScript] = useState(currentUser.personal_customer_script || '');
@@ -1754,8 +1793,7 @@ function Dashboard({ currentUser, onLogout }) {
     setSalesUsers(prev => role === 'sales' ? prev : prev.filter(u => u.id !== id));
     await loadAll();
   }
-  async function sendSmsToSelected(message, attachImage) {
-    const ids = Object.keys(bulkSelected).filter(id => bulkSelected[id]).map(Number);
+  async function sendSmsToIds(ids, message, attachImage) {
     const body = { customer_ids: ids, message };
     if (attachImage) { body.image_base64 = PROMO_POSTER_IMAGE; body.image_filename = '오토핸즈_포스터.png'; }
     const { data, error } = await supabase.functions.invoke('clever-endpoint', { body });
@@ -1763,8 +1801,11 @@ function Dashboard({ currentUser, onLogout }) {
       alert('발송 실패: ' + (data && data.error ? data.error : (error ? error.message : '알 수 없는 오류')));
       return { sent: 0, skipped: 0 };
     }
-    setBulkSelected({});
     return data;
+  }
+  function requestSms(ids, targetLabel, onSent) {
+    if (!ids || ids.length === 0) return;
+    setSmsRequest({ ids, targetLabel: targetLabel || `${ids.length}건`, onSent });
   }
   async function saveSenderNumber(number) {
     await supabase.from('profiles').update({ sms_sender_number: number }).eq('id', myId);
@@ -2014,11 +2055,11 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'stats' && isAdmin ? (
           <ContractCalendar customers={customers} salesUsers={salesUsers} onDeleteContracts={bulkDeleteCustomers} />
         ) : tab === 'unassigned' && isAdmin ? (
-          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} onOpenDetail={openExisting} onDelete={bulkDeleteCustomers} />
+          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} onOpenDetail={openExisting} onDelete={bulkDeleteCustomers} onRequestSms={requestSms} />
         ) : tab === 'inquiry' && isAdmin ? (
-          <InquiryPanel inquiries={inquiryCustomers} onOpen={openInquiry} />
+          <InquiryPanel inquiries={inquiryCustomers} onOpen={openInquiry} onRequestSms={requestSms} />
         ) : tab === 'departed' && isAdmin ? (
-          <UnassignedPanel unassigned={departedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} onOpenDetail={openExisting} />
+          <UnassignedPanel unassigned={departedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} onOpenDetail={openExisting} onRequestSms={requestSms} />
         ) : tab === 'logs' && isAdmin ? (
           <AccessLogPanel logs={accessLogs} onRefresh={refreshAccessLogs} />
         ) : tab === 'qr' && isAdmin ? (
@@ -2032,7 +2073,7 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'staffIncentive' && isAdmin ? (
           <StaffIncentivePanel customers={customers} rules={incentiveRules} staffDirectory={staffDirectory} isMaster={isMaster} />
         ) : tab === 'completed' ? (
-          <CompletedDealsPanel customers={customers} staffDirectory={staffDirectory} onOpenDetail={openExisting} />
+          <CompletedDealsPanel customers={customers} staffDirectory={staffDirectory} onOpenDetail={openExisting} onRequestSms={requestSms} />
         ) : (
           <React.Fragment>
             {(isAdmin || myDbFilter === 'all') && (
@@ -2135,7 +2176,7 @@ function Dashboard({ currentUser, onLogout }) {
                 <span className="text-[12.5px] shrink-0" style={{ color: '#FFFFFF' }}>{bulkSelectedCount}건 선택됨</span>
                 <button onClick={() => setBulkSelected({})} style={{ border: '1px solid #3D4A41', color: '#FFFFFF' }} className="text-[12px] px-3 py-2 rounded-lg whitespace-nowrap">선택 해제</button>
                 {isAdmin && <button onClick={bulkUnassign} style={{ border: '1px solid #3D4A41', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">미배정으로 변경</button>}
-                <button onClick={() => setShowSmsCompose(true)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">📱 문자 발송</button>
+                <button onClick={() => requestSms(Object.keys(bulkSelected).filter(id => bulkSelected[id]).map(Number), `${bulkSelectedCount}건`, () => setBulkSelected({}))} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">📱 문자 발송</button>
               </div>
             )}
           </React.Fragment>
@@ -2146,7 +2187,7 @@ function Dashboard({ currentUser, onLogout }) {
         <button onClick={openNew} style={{ background: '#2F6B4F' }} className="fixed bottom-5 right-5 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg text-2xl" aria-label="신규DB 등록">＋</button>
       )}
 
-      {editing && <EditModal data={editing} isAdmin={isAdmin} salesUsers={isAdmin ? allStaff : salesUsers} isNew={editing.id == null} onClose={() => setEditing(null)} onSave={saveCustomer} onDelete={(id) => setConfirmDelete(id)} currentUserId={myId} onAssignSelf={assignLinkCopier} effectiveScript={myPersonalScript || DEFAULT_SMS_SCRIPT} />}}
+      {editing && <EditModal data={editing} isAdmin={isAdmin} salesUsers={isAdmin ? allStaff : salesUsers} isNew={editing.id == null} onClose={() => setEditing(null)} onSave={saveCustomer} onDelete={(id) => setConfirmDelete(id)} currentUserId={myId} onAssignSelf={assignLinkCopier} effectiveScript={myPersonalScript || DEFAULT_SMS_SCRIPT} onRequestSms={(ids, label) => requestSms(ids, label)} />}
 
       {confirmDelete != null && (
         <div className="fixed inset-0 z-30 flex items-center justify-center px-6" style={{ background: 'rgba(28,38,32,0.5)' }}>
@@ -2163,39 +2204,27 @@ function Dashboard({ currentUser, onLogout }) {
 
       {showInbox && <MessageCenter received={inboxMessages} sent={sentMessages} staff={allStaff} onMarkRead={markMessageRead} onDelete={deleteMessage} onClose={() => setShowInbox(false)} />}
       {messageTarget && <MessageComposeModal target={messageTarget} onClose={() => setMessageTarget(null)} onSend={(text) => sendMessage(messageTarget.id, text)} />}
-      {showSmsCompose && <SmsComposeModal selectedCount={bulkSelectedCount} defaultText={myPersonalScript || DEFAULT_SMS_SCRIPT} onClose={() => setShowSmsCompose(false)} onSend={sendSmsToSelected} />}
+      {smsRequest && <SmsComposeModal targetLabel={smsRequest.targetLabel} defaultText={myPersonalScript || DEFAULT_SMS_SCRIPT} onClose={() => setSmsRequest(null)} onSend={async (msg, img) => { const res = await sendSmsToIds(smsRequest.ids, msg, img); if (res.sent > 0 && smsRequest.onSent) smsRequest.onSent(); return res; }} />}
       {showSenderSetting && <SenderNumberModal currentNumber={currentUserSender} onClose={() => setShowSenderSetting(false)} onSave={saveSenderNumber} />}
       {showUpdatePopup && updateLogs.length > 0 && <UpdatePopupModal updates={updateLogs} lastSeenUpdateId={lastSeenUpdateId} onClose={dismissUpdatePopup} />}
     </div>
   );
 }
 
-function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete, currentUserId, onAssignSelf, effectiveScript }) {
+function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete, currentUserId, onAssignSelf, effectiveScript, onRequestSms }) {
   const [form, setForm] = useState(data);
   const [error, setError] = useState('');
   const [showApplication, setShowApplication] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [smsSending, setSmsSending] = useState(false);
-  const [smsResult, setSmsResult] = useState('');
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
   const toggleStage = (key) => setForm(prev => ({ ...prev, [key]: !prev[key] }));
   function handleSave() {
     if (!form.name.trim() || !form.phone.trim()) { setError('고객명, 연락처는 필수입니다.'); return; }
     onSave(form);
   }
-  async function sendInitialSms() {
+  function openSmsPreview() {
     if (!form.id) { alert('먼저 저장한 뒤에 문자를 보낼 수 있습니다.'); return; }
-    const text = effectiveScript || '';
-    if (!text.trim()) { alert('메인화면의 "고객영업문자 스크립트"에 먼저 내용을 등록해주세요.'); return; }
-    if (!confirm('이 고객에게 고객영업문자를 발송하시겠습니까?')) return;
-    setSmsSending(true); setSmsResult('');
-    const { data: res, error: err } = await supabase.functions.invoke('clever-endpoint', { body: { customer_ids: [form.id], message: text, is_initial_contact: true } });
-    setSmsSending(false);
-    if (err || (res && res.error)) { setSmsResult('발송 실패: ' + (res && res.error ? res.error : (err ? err.message : ''))); return; }
-    if (res.skipped > 0) { setSmsResult('이 고객은 수신거부 상태라 발송되지 않았습니다.'); return; }
-    const detail = (res.results && res.results[0]) || {};
-    if (detail.status && detail.status !== '성공') { setSmsResult('발송 실패: ' + detail.status); return; }
-    setSmsResult('문자가 발송되었습니다.');
+    onRequestSms([form.id], form.name + '님');
   }
   function copyApplyLink() {
     if (!form.apply_token) { alert('신청서 링크를 사용할 수 없습니다. (이미 신청 완료되었거나 링크가 없는 건입니다)'); return; }
@@ -2226,10 +2255,9 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
             <div className="flex items-center gap-2 mt-1">
               <input value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} placeholder="010-0000-0000" maxLength={13} style={inputStyle} className="flex-1 rounded-lg px-3 py-2.5 text-sm outline-none" />
               {!isNew && (
-                <button type="button" onClick={sendInitialSms} disabled={smsSending} title="고객영업문자 스크립트 발송" className="text-xl shrink-0 disabled:opacity-40">✉️</button>
+                <button type="button" onClick={openSmsPreview} title="문자 발송" className="text-xl shrink-0">✉️</button>
               )}
             </div>
-            {smsResult && <p className="text-[11.5px] mt-1" style={{ color: smsResult.includes('실패') || smsResult.includes('거부') ? '#A32D2D' : '#085041' }}>{smsResult}</p>}
             {!isNew && (
               <label className="flex items-center gap-2 mt-1.5 text-[11.5px]" style={{ color: '#6B6A63' }}>
                 <input type="checkbox" checked={!!form.sms_opt_out} onChange={e => set('sms_opt_out', e.target.checked)} />
