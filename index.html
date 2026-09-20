@@ -823,19 +823,26 @@ function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge }) {
   );
 }
 
-function InquiryPanel({ inquiries, onOpen, onRequestSms }) {
+function InquiryPanel({ inquiries, onOpen, onRequestSms, onDelete }) {
   const [selected, setSelected] = useState({});
   const selectedIds = Object.keys(selected).filter(id => selected[id]);
   function toggle(id) { setSelected(prev => ({ ...prev, [id]: !prev[id] })); }
   function selectAll() { const next = {}; inquiries.forEach(c => { next[c.id] = true; }); setSelected(next); }
   function clearAll() { setSelected({}); }
+  function handleDelete() {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`선택한 ${selectedIds.length}건을 휴지통으로 이동할까요?`)) return;
+    onDelete(selectedIds.map(id => Number(id)));
+    clearAll();
+  }
   return (
     <div className="flex flex-col gap-2.5">
       {inquiries.length > 0 && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={selectAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">전체 선택</button>
           <button onClick={clearAll} style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }} className="text-[12px] px-2.5 py-1.5 rounded-lg">선택 해제</button>
           {selectedIds.length > 0 && <button onClick={() => onRequestSms(selectedIds.map(id => Number(id)), `${selectedIds.length}건`, clearAll)} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="text-[12px] px-2.5 py-1.5 rounded-lg font-medium">📱 문자 발송</button>}
+          {selectedIds.length > 0 && <button onClick={handleDelete} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[12px] px-2.5 py-1.5 rounded-lg font-medium">🗑 선택 삭제</button>}
           {selectedIds.length > 0 && <span className="text-[12px] ml-auto" style={{ color: '#6B6A63' }}>{selectedIds.length}건 선택됨</span>}
         </div>
       )}
@@ -2057,7 +2064,7 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'unassigned' && isAdmin ? (
           <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} onOpenDetail={openExisting} onDelete={bulkDeleteCustomers} onRequestSms={requestSms} />
         ) : tab === 'inquiry' && isAdmin ? (
-          <InquiryPanel inquiries={inquiryCustomers} onOpen={openInquiry} onRequestSms={requestSms} />
+          <InquiryPanel inquiries={inquiryCustomers} onOpen={openInquiry} onRequestSms={requestSms} onDelete={bulkDeleteCustomers} />
         ) : tab === 'departed' && isAdmin ? (
           <UnassignedPanel unassigned={departedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} onOpenDetail={openExisting} onRequestSms={requestSms} />
         ) : tab === 'logs' && isAdmin ? (
