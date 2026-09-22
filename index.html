@@ -11,6 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
 <style>
   body { margin:0; background:#EFF1EC; font-family:-apple-system, BlinkMacSystemFont, "Malgun Gothic", "Segoe UI", sans-serif; }
   input, select, textarea, button { font-family: inherit; }
@@ -26,6 +27,10 @@
 <script>
   window.SUPABASE_URL = "https://kkmmfbqiddirhbiqtqsu.supabase.co";
   window.SUPABASE_ANON_KEY = "sb_publishable_4UNSE0BXfpI5lp4uc-ulxA_EqldYgh-";
+  // 포트원(PortOne) 통합 본인인증(카카오/PASS/네이버/토스) 설정
+  // 포트원 관리자콘솔 > 결제 연동 > 채널 관리에서 확인/발급 후 아래 두 값을 실제 값으로 교체해주세요.
+  window.PORTONE_STORE_ID = "YOUR_PORTONE_STORE_ID";
+  window.PORTONE_CHANNEL_KEY = "YOUR_PORTONE_INTEGRATED_CHANNEL_KEY";
 </script>
 
 <script type="text/babel">
@@ -33,6 +38,8 @@ const { useState, useEffect, useMemo } = React;
 const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, storageKey: 'carwash-crm-auth' }
 });
+const PORTONE_STORE_ID = window.PORTONE_STORE_ID;
+const PORTONE_CHANNEL_KEY = window.PORTONE_CHANNEL_KEY;
 
 const INCENTIVE_PER_DEAL = 30000;
 const DEFAULT_SMS_SCRIPT = `잠든 사이, 고객님의 차는 준비됩니다
@@ -302,10 +309,43 @@ function SignupPage({ onGotoLogin }) {
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [identityVerified, setIdentityVerified] = useState(false);
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+
+  async function handleIdentityVerification() {
+    if (!window.PortOne) { setError('본인인증 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.'); return; }
+    setError(''); setVerifying(true);
+    try {
+      const identityVerificationId = `identity-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const res = await window.PortOne.requestIdentityVerification({
+        storeId: PORTONE_STORE_ID,
+        identityVerificationId,
+        channelKey: PORTONE_CHANNEL_KEY,
+      });
+      if (res && res.code != null) {
+        setError('본인인증이 취소되었거나 실패했습니다: ' + (res.message || res.code));
+        setVerifying(false);
+        return;
+      }
+      const { data, error: fnError } = await supabase.functions.invoke('verify-identity', { body: { identity_verification_id: identityVerificationId } });
+      setVerifying(false);
+      if (fnError || !data || data.error) {
+        setError('본인인증 확인 실패: ' + (data && data.error ? data.error : (fnError ? fnError.message : '알 수 없는 오류')));
+        return;
+      }
+      setForm(prev => ({ ...prev, name: data.name || prev.name, phone: data.phone || prev.phone }));
+      setIdentityVerified(true);
+    } catch (e) {
+      setVerifying(false);
+      setError('본인인증 중 오류가 발생했습니다: ' + String(e));
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    // 본인인증 단계 비활성화 (요청에 따라 보류) - 이름/전화번호 직접 입력 방식으로 되돌림
+    // if (!identityVerified) { setError('카카오·PASS·네이버·토스 중 하나로 먼저 본인인증을 완료해주세요.'); return; }
     const required = ['email', 'password', 'name', 'phone', 'birth', 'bank', 'account', 'address'];
     if (required.some(k => !String(form[k]).trim())) { setError('모든 항목을 입력해주세요.'); return; }
     if (form.password !== form.passwordConfirm) { setError('비밀번호가 일치하지 않습니다.'); return; }
@@ -341,6 +381,23 @@ function SignupPage({ onGotoLogin }) {
       <div style={{ background: '#FFFFFF' }} className="w-full max-w-sm rounded-2xl p-6">
         <p className="text-[11px] tracking-wide uppercase" style={{ color: '#7C9385' }}>영업사원 계정 신청</p>
         <h1 className="text-xl font-semibold mt-1 mb-5" style={{ color: '#1C2620' }}>회원가입</h1>
+
+        {/* 본인인증 단계 비활성화 (요청에 따라 보류)
+        <div className="rounded-xl p-3.5 mb-4" style={{ background: identityVerified ? '#E1F5EE' : '#F1EFE8', border: '1px solid ' + (identityVerified ? '#5DCAA5' : '#E4E2D9') }}>
+          <p className="text-[12.5px] font-medium mb-2" style={{ color: '#1C2620' }}>1단계: 본인인증 (필수)</p>
+          {identityVerified ? (
+            <p className="text-[13px]" style={{ color: '#085041' }}>✅ 본인인증 완료: {form.name} ({form.phone})</p>
+          ) : (
+            <>
+              <button type="button" onClick={handleIdentityVerification} disabled={verifying} style={{ background: '#1C2620', color: '#FFFFFF' }} className="w-full text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">
+                {verifying ? '인증 진행 중...' : '카카오 · PASS · 네이버 · 토스로 본인인증'}
+              </button>
+              <p className="text-[11px] mt-2" style={{ color: '#B0AEA4' }}>본인인증을 완료하면 이름·휴대폰번호가 자동으로 채워집니다.</p>
+            </>
+          )}
+        </div>
+        */}
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <FieldInput label="이메일 *" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com" />
           <div className="grid grid-cols-2 gap-2">
@@ -364,7 +421,7 @@ function SignupPage({ onGotoLogin }) {
           </label>
 
           {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
-          <button type="submit" disabled={loading} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="mt-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{loading ? '처리 중...' : '가입 신청하기'}</button>
+          <button type="submit" disabled={loading || !identityVerified} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="mt-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{loading ? '처리 중...' : '가입 신청하기'}</button>
         </form>
         <button onClick={onGotoLogin} className="w-full text-center text-[13px] mt-4" style={{ color: '#6B6A63' }}>
           이미 계정이 있으신가요? <span style={{ color: '#2F6B4F', fontWeight: 600 }}>로그인</span>
@@ -2182,6 +2239,7 @@ function Dashboard({ currentUser, onLogout }) {
                 <span className="text-[12.5px] shrink-0" style={{ color: '#FFFFFF' }}>{bulkSelectedCount}건 선택됨</span>
                 <button onClick={() => setBulkSelected({})} style={{ border: '1px solid #3D4A41', color: '#FFFFFF' }} className="text-[12px] px-3 py-2 rounded-lg whitespace-nowrap">선택 해제</button>
                 {isAdmin && <button onClick={bulkUnassign} style={{ border: '1px solid #3D4A41', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">미배정으로 변경</button>}
+                {isAdmin && <button onClick={() => { const ids = Object.keys(bulkSelected).filter(id => bulkSelected[id]).map(Number); if (ids.length === 0) return; if (!confirm(`선택한 ${ids.length}건을 삭제할까요?\n휴지통으로 이동되며, 휴지통 화면에서 복구하거나 완전삭제할 수 있습니다.`)) return; bulkDeleteCustomers(ids); setBulkSelected({}); }} style={{ background: '#7A2323', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">🗑 전체삭제</button>}
                 <button onClick={() => requestSms(Object.keys(bulkSelected).filter(id => bulkSelected[id]).map(Number), `${bulkSelectedCount}건`, () => setBulkSelected({}))} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">📱 문자 발송</button>
               </div>
             )}
