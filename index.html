@@ -814,7 +814,7 @@ function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail, onReques
   );
 }
 
-function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge }) {
+function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge, onBulkRestore }) {
   const [selected, setSelected] = useState({});
   function daysLeft(deletedAt) {
     const deadline = new Date(deletedAt).getTime() + 30 * 24 * 60 * 60 * 1000;
@@ -830,6 +830,13 @@ function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge }) {
     if (selectedIds.length === 0) return;
     if (!confirm(`선택한 ${selectedIds.length}건을 지금 완전히 삭제할까요? 되돌릴 수 없습니다.`)) return;
     onBulkPurge(selectedIds);
+    clearAll();
+  }
+
+  function handleBulkRestore() {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`선택한 ${selectedIds.length}건을 모두 복원할까요?`)) return;
+    onBulkRestore(selectedIds);
     clearAll();
   }
 
@@ -872,7 +879,8 @@ function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge }) {
       {selectedIds.length > 0 && (
         <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2" style={{ background: '#1C2620' }}>
           <span className="text-[12.5px]" style={{ color: '#FFFFFF' }}>{selectedIds.length}건 선택됨</span>
-          <button onClick={handleBulkPurge} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">선택 항목 완전삭제</button>
+          <button onClick={handleBulkRestore} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">모두 복원</button>
+          <button onClick={handleBulkPurge} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">선택 항목 완전삭제</button>
         </div>
       )}
     </div>
@@ -2024,6 +2032,14 @@ function Dashboard({ currentUser, onLogout }) {
     setTrashedCustomers(prev => prev.filter(c => c.id !== id));
     if (restored) setCustomers(prev => [restored, ...prev]);
   }
+  async function bulkRestore(ids) {
+    const movedRows = trashedCustomers.filter(c => ids.includes(c.id)).map(c => ({ ...c, deleted_at: null, deleted_by: null }));
+    for (const batch of chunkArray(ids, 100)) {
+      await supabase.from('customers').update({ deleted_at: null, deleted_by: null }).in('id', batch);
+    }
+    setTrashedCustomers(prev => prev.filter(c => !ids.includes(c.id)));
+    setCustomers(prev => [...movedRows, ...prev]);
+  }
   async function purgeNow(id) {
     if (!confirm('이 건을 지금 즉시 완전히 삭제할까요? 되돌릴 수 없습니다.')) return;
     await supabase.from('customers').delete().eq('id', id);
@@ -2139,7 +2155,7 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'qr' && isAdmin ? (
           <QRCategoryPanel qrCodes={qrCodes} onAdd={addQrCode} onDelete={deleteQrCode} isMaster={isMaster} />
         ) : tab === 'trash' && isAdmin ? (
-          <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} onBulkPurge={bulkPurgeNow} />
+          <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} onBulkPurge={bulkPurgeNow} onBulkRestore={bulkRestore} />
         ) : tab === 'updates' ? (
           <UpdateLogPanel isAdmin={isAdmin} updates={updateLogs} onPost={postUpdateLog} onEdit={editUpdateLog} onDelete={deleteUpdateLog} />
         ) : tab === 'incentiveRules' && isMaster ? (
