@@ -458,7 +458,7 @@ function StageTracker({ customer, editable, onToggle }) {
           <button key={s.key} disabled={!editable} onClick={() => editable && onToggle(customer.id, s.key)}
             style={{ background: done ? '#2F6B4F' : '#F1EFE8', color: done ? '#FFFFFF' : '#9B998F', border: '1px solid ' + (done ? '#2F6B4F' : '#E4E2D9'), cursor: editable ? 'pointer' : 'default' }}
             className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium">
-            <span>{done ? '✔' : s.icon}</span>{s.label}
+            <span>{done ? '✔' : s.icon}</span>{s.label}{s.key === 'sms2' && customer.sms_sent_count > 0 ? `(${customer.sms_sent_count})` : ''}
           </button>
         );
       })}
@@ -1777,6 +1777,17 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('customers').update({ [key]: newVal }).eq('id', id);
   }
 
+  // 문자 발송 성공 시 영업진행과정의 "문자" 단계를 자동 체크하고, 발송 횟수를 (1),(2)... 로 누적 표시
+  async function markSmsSent(ids) {
+    for (const id of ids) {
+      const target = customers.find(c => c.id === id);
+      if (!target) continue;
+      const newCount = (target.sms_sent_count || 0) + 1;
+      await supabase.from('customers').update({ sms2: true, sms_sent_count: newCount }).eq('id', id);
+      setCustomers(prev => prev.map(c => c.id === id ? { ...c, sms2: true, sms_sent_count: newCount } : c));
+    }
+  }
+
   async function logAccess(action, customer) {
     try {
       await supabase.from('access_logs').insert({ actor_id: myId, actor_name: currentUser.name, action, customer_id: customer.id, customer_name: customer.name });
@@ -1788,7 +1799,7 @@ function Dashboard({ currentUser, onLogout }) {
   }
 
   function openNew() {
-    setEditing({ id: null, name: '', phone: '', complex: '', unit: '', visit_date: new Date().toISOString().slice(0, 10), rep_id: isAdmin ? (salesUsers[0] ? salesUsers[0].id : null) : myId, status: '신규', product: '', amount: 0, memo: '', call1: false, sms2: false, recall3: false });
+    setEditing({ id: null, name: '', phone: '', complex: '', unit: '', visit_date: new Date().toISOString().slice(0, 10), rep_id: isAdmin ? (salesUsers[0] ? salesUsers[0].id : null) : myId, status: '신규', product: '', amount: 0, memo: '', call1: false, sms2: false, recall3: false, sms_sent_count: 0 });
   }
 
   function openExisting(c) {
@@ -2268,7 +2279,15 @@ function Dashboard({ currentUser, onLogout }) {
 
       {showInbox && <MessageCenter received={inboxMessages} sent={sentMessages} staff={allStaff} onMarkRead={markMessageRead} onDelete={deleteMessage} onClose={() => setShowInbox(false)} />}
       {messageTarget && <MessageComposeModal target={messageTarget} onClose={() => setMessageTarget(null)} onSend={(text) => sendMessage(messageTarget.id, text)} />}
-      {smsRequest && <SmsComposeModal targetLabel={smsRequest.targetLabel} defaultText={myPersonalScript || DEFAULT_SMS_SCRIPT} onClose={() => setSmsRequest(null)} onSend={async (msg, img) => { const res = await sendSmsToIds(smsRequest.ids, msg, img); if (res.sent > 0 && smsRequest.onSent) smsRequest.onSent(); return res; }} />}
+      {smsRequest && <SmsComposeModal targetLabel={smsRequest.targetLabel} defaultText={myPersonalScript || DEFAULT_SMS_SCRIPT} onClose={() => setSmsRequest(null)} onSend={async (msg, img) => {
+        const res = await sendSmsToIds(smsRequest.ids, msg, img);
+        if (res.sent > 0) {
+          const successIds = (res.results || []).filter(r => r.status === '성공').map(r => r.customer_id);
+          if (successIds.length > 0) await markSmsSent(successIds);
+          if (smsRequest.onSent) smsRequest.onSent();
+        }
+        return res;
+      }} />}
       {showSenderSetting && <SenderNumberModal currentNumber={currentUserSender} onClose={() => setShowSenderSetting(false)} onSave={saveSenderNumber} />}
       {showUpdatePopup && updateLogs.length > 0 && <UpdatePopupModal updates={updateLogs} lastSeenUpdateId={lastSeenUpdateId} onClose={dismissUpdatePopup} />}
     </div>
@@ -2334,7 +2353,7 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
             <div className="flex gap-2 mt-1.5">
               {STAGES.map(s => { const done = form[s.key]; return (
                 <button key={s.key} type="button" onClick={() => toggleStage(s.key)} style={{ background: done ? '#2F6B4F' : '#F7F6F2', color: done ? '#FFFFFF' : '#6B6A63', border: '1px solid ' + (done ? '#2F6B4F' : '#E4E2D9') }} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12.5px] font-medium">
-                  <span>{done ? '✔' : s.icon}</span>{s.label}
+                  <span>{done ? '✔' : s.icon}</span>{s.label}{s.key === 'sms2' && form.sms_sent_count > 0 ? `(${form.sms_sent_count})` : ''}
                 </button>
               );})}
             </div>
