@@ -344,7 +344,8 @@ function SignupPage({ onGotoLogin }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!identityVerified) { setError('카카오·PASS·네이버·토스 중 하나로 먼저 본인인증을 완료해주세요.'); return; }
+    // 본인인증 단계 비활성화 (요청에 따라 보류) - 이름/전화번호 직접 입력 방식으로 되돌림
+    // if (!identityVerified) { setError('카카오·PASS·네이버·토스 중 하나로 먼저 본인인증을 완료해주세요.'); return; }
     const required = ['email', 'password', 'name', 'phone', 'birth', 'bank', 'account', 'address'];
     if (required.some(k => !String(form[k]).trim())) { setError('모든 항목을 입력해주세요.'); return; }
     if (form.password !== form.passwordConfirm) { setError('비밀번호가 일치하지 않습니다.'); return; }
@@ -381,6 +382,7 @@ function SignupPage({ onGotoLogin }) {
         <p className="text-[11px] tracking-wide uppercase" style={{ color: '#7C9385' }}>영업사원 계정 신청</p>
         <h1 className="text-xl font-semibold mt-1 mb-5" style={{ color: '#1C2620' }}>회원가입</h1>
 
+        {/* 본인인증 단계 비활성화 (요청에 따라 보류)
         <div className="rounded-xl p-3.5 mb-4" style={{ background: identityVerified ? '#E1F5EE' : '#F1EFE8', border: '1px solid ' + (identityVerified ? '#5DCAA5' : '#E4E2D9') }}>
           <p className="text-[12.5px] font-medium mb-2" style={{ color: '#1C2620' }}>1단계: 본인인증 (필수)</p>
           {identityVerified ? (
@@ -394,6 +396,7 @@ function SignupPage({ onGotoLogin }) {
             </>
           )}
         </div>
+        */}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <FieldInput label="이메일 *" type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="you@example.com" />
@@ -401,8 +404,8 @@ function SignupPage({ onGotoLogin }) {
             <FieldInput label="비밀번호 *" type="password" value={form.password} onChange={e => set('password', e.target.value)} />
             <FieldInput label="비밀번호 확인 *" type="password" value={form.passwordConfirm} onChange={e => set('passwordConfirm', e.target.value)} />
           </div>
-          <FieldInput label="이름 * (본인인증으로 채워짐)" value={form.name} onChange={e => set('name', e.target.value)} placeholder="홍길동" disabled={identityVerified} />
-          <FieldInput label="휴대폰번호 * (본인인증으로 채워짐)" value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} placeholder="010-0000-0000" maxLength={13} disabled={identityVerified} />
+          <FieldInput label="이름 *" value={form.name} onChange={e => set('name', e.target.value)} placeholder="홍길동" />
+          <FieldInput label="휴대폰번호 *" value={form.phone} onChange={e => set('phone', formatPhoneInput(e.target.value))} placeholder="010-0000-0000" maxLength={13} />
           <FieldInput label="생년월일 *" type="date" value={form.birth} onChange={e => set('birth', e.target.value)} />
           <div className="grid grid-cols-2 gap-2">
             <FieldInput label="은행명 *" value={form.bank} onChange={e => set('bank', e.target.value)} placeholder="국민은행" />
@@ -455,7 +458,7 @@ function StageTracker({ customer, editable, onToggle }) {
           <button key={s.key} disabled={!editable} onClick={() => editable && onToggle(customer.id, s.key)}
             style={{ background: done ? '#2F6B4F' : '#F1EFE8', color: done ? '#FFFFFF' : '#9B998F', border: '1px solid ' + (done ? '#2F6B4F' : '#E4E2D9'), cursor: editable ? 'pointer' : 'default' }}
             className="flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium">
-            <span>{done ? '✔' : s.icon}</span>{s.label}
+            <span>{done ? '✔' : s.icon}</span>{s.label}{s.key === 'sms2' && customer.sms_sent_count > 0 ? `(${customer.sms_sent_count})` : ''}
           </button>
         );
       })}
@@ -811,7 +814,7 @@ function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail, onReques
   );
 }
 
-function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge }) {
+function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge, onBulkRestore }) {
   const [selected, setSelected] = useState({});
   function daysLeft(deletedAt) {
     const deadline = new Date(deletedAt).getTime() + 30 * 24 * 60 * 60 * 1000;
@@ -827,6 +830,13 @@ function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge }) {
     if (selectedIds.length === 0) return;
     if (!confirm(`선택한 ${selectedIds.length}건을 지금 완전히 삭제할까요? 되돌릴 수 없습니다.`)) return;
     onBulkPurge(selectedIds);
+    clearAll();
+  }
+
+  function handleBulkRestore() {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`선택한 ${selectedIds.length}건을 모두 복원할까요?`)) return;
+    onBulkRestore(selectedIds);
     clearAll();
   }
 
@@ -869,7 +879,8 @@ function TrashPanel({ trashed, onRestore, onPurge, onBulkPurge }) {
       {selectedIds.length > 0 && (
         <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2" style={{ background: '#1C2620' }}>
           <span className="text-[12.5px]" style={{ color: '#FFFFFF' }}>{selectedIds.length}건 선택됨</span>
-          <button onClick={handleBulkPurge} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">선택 항목 완전삭제</button>
+          <button onClick={handleBulkRestore} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">모두 복원</button>
+          <button onClick={handleBulkPurge} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">선택 항목 완전삭제</button>
         </div>
       )}
     </div>
@@ -1467,7 +1478,7 @@ function ContractCalendar({ customers, salesUsers, onDeleteContracts }) {
   );
 }
 
-function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, onOpenDetail, onDelete, onRequestSms, title = '미배정 DB', repLabel, isMaster }) {
+function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, onOpenDetail, onDelete, onRequestSms, title = '미배정 DB', repLabel }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState({});
   const [targetRep, setTargetRep] = useState(salesUsers[0] ? salesUsers[0].id : '');
@@ -1506,7 +1517,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, o
           <p className="text-[12.5px]" style={{ color: '#6B6A63' }}>{title}</p>
           <p className="text-xl font-semibold" style={{ color: '#1C2620' }}>{unassigned.length}건</p>
         </div>
-        <button onClick={onDistributeEvenly} style={{ border: '1px solid #2F6B4F', color: '#2F6B4F' }} className="text-[12.5px] px-3 py-2 rounded-lg whitespace-nowrap font-medium">담당자에게 균등 배분</button>
+        <button onClick={onDistributeEvenly} style={{ border: '1px solid #2F6B4F', color: '#2F6B4F' }} className="text-[12.5px] px-3 py-2 rounded-lg whitespace-nowrap font-medium">영업사원에게 균등 배분</button>
       </div>
 
       <div className="relative">
@@ -1544,7 +1555,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, o
         <div className="sticky bottom-3 rounded-xl p-3 flex items-center gap-2 flex-wrap" style={{ background: '#1C2620' }}>
           <span className="text-[12.5px] shrink-0" style={{ color: '#FFFFFF' }}>{selectedCount}건 →</span>
           <select value={targetRep} onChange={e => setTargetRep(e.target.value)} className="flex-1 text-sm rounded-lg px-2 py-2 outline-none" style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }}>
-            {salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}{u.role !== 'sales' ? ` (${roleLabel(displayRole(u.role, isMaster))})` : ''}</option>)}
+            {salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
           <button onClick={send} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">전송</button>
           {onDelete && <button onClick={handleDelete} style={{ background: '#A32D2D', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">삭제</button>}
@@ -1658,7 +1669,6 @@ function Dashboard({ currentUser, onLogout }) {
   const [showUpdatePopup, setShowUpdatePopup] = useState(false);
   const [lastSeenUpdateId, setLastSeenUpdateId] = useState(currentUser.last_seen_update_id || 0);
   const [staffDirectory, setStaffDirectory] = useState([]);
-  const assignableStaff = staffDirectory.filter(u => u.role !== 'field');
   const [incentiveRules, setIncentiveRules] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [allStaff, setAllStaff] = useState([]);
@@ -1775,6 +1785,17 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('customers').update({ [key]: newVal }).eq('id', id);
   }
 
+  // 문자 발송 성공 시 영업진행과정의 "문자" 단계를 자동 체크하고, 발송 횟수를 (1),(2)... 로 누적 표시
+  async function markSmsSent(ids) {
+    for (const id of ids) {
+      const target = customers.find(c => c.id === id);
+      if (!target) continue;
+      const newCount = (target.sms_sent_count || 0) + 1;
+      await supabase.from('customers').update({ sms2: true, sms_sent_count: newCount }).eq('id', id);
+      setCustomers(prev => prev.map(c => c.id === id ? { ...c, sms2: true, sms_sent_count: newCount } : c));
+    }
+  }
+
   async function logAccess(action, customer) {
     try {
       await supabase.from('access_logs').insert({ actor_id: myId, actor_name: currentUser.name, action, customer_id: customer.id, customer_name: customer.name });
@@ -1786,7 +1807,7 @@ function Dashboard({ currentUser, onLogout }) {
   }
 
   function openNew() {
-    setEditing({ id: null, name: '', phone: '', complex: '', unit: '', visit_date: new Date().toISOString().slice(0, 10), rep_id: isAdmin ? (salesUsers[0] ? salesUsers[0].id : null) : myId, status: '신규', product: '', amount: 0, memo: '', call1: false, sms2: false, recall3: false });
+    setEditing({ id: null, name: '', phone: '', complex: '', unit: '', visit_date: new Date().toISOString().slice(0, 10), rep_id: isAdmin ? (salesUsers[0] ? salesUsers[0].id : null) : myId, status: '신규', product: '', amount: 0, memo: '', call1: false, sms2: false, recall3: false, sms_sent_count: 0 });
   }
 
   function openExisting(c) {
@@ -1855,14 +1876,27 @@ function Dashboard({ currentUser, onLogout }) {
     await loadAll();
   }
   async function sendSmsToIds(ids, message, attachImage) {
-    const body = { customer_ids: ids, message };
-    if (attachImage) { body.image_base64 = PROMO_POSTER_IMAGE; body.image_filename = '오토핸즈_포스터.png'; }
-    const { data, error } = await supabase.functions.invoke('clever-endpoint', { body });
-    if (error || (data && data.error)) {
-      alert('발송 실패: ' + (data && data.error ? data.error : (error ? error.message : '알 수 없는 오류')));
-      return { sent: 0, skipped: 0 };
+    // 한 번에 너무 많은 인원에게 보내면 Edge Function 실행 시간 제한(타임아웃)에 걸려
+    // "non-2xx status code" 오류가 날 수 있어서, 일정 인원 단위로 나눠서 순차 발송합니다.
+    const batchSize = 30;
+    let totalSent = 0, totalSkipped = 0, allResults = [];
+    for (const batch of chunkArray(ids, batchSize)) {
+      const body = { customer_ids: batch, message };
+      if (attachImage) { body.image_base64 = PROMO_POSTER_IMAGE; body.image_filename = '오토핸즈_포스터.png'; }
+      const { data, error } = await supabase.functions.invoke('clever-endpoint', { body });
+      if (error || (data && data.error)) {
+        let reason = data && data.error ? data.error : (error ? error.message : '알 수 없는 오류');
+        if (error && error.context && typeof error.context.json === 'function') {
+          try { const errBody = await error.context.json(); if (errBody && errBody.error) reason = errBody.error; } catch (e) { /* 무시 */ }
+        }
+        alert(`발송 중 오류가 발생했습니다 (이미 ${totalSent}건은 정상 발송됨): ` + reason);
+        return { sent: totalSent, skipped: totalSkipped, results: allResults };
+      }
+      totalSent += data.sent || 0;
+      totalSkipped += data.skipped || 0;
+      allResults = allResults.concat(data.results || []);
     }
-    return data;
+    return { sent: totalSent, skipped: totalSkipped, results: allResults };
   }
   function requestSms(ids, targetLabel, onSent) {
     if (!ids || ids.length === 0) return;
@@ -1962,15 +1996,15 @@ function Dashboard({ currentUser, onLogout }) {
     return out;
   }
   async function distributeAmongReps(list, label) {
-    if (assignableStaff.length === 0) { alert('배분할 수 있는 담당자가 없습니다.'); return; }
+    if (salesUsers.length === 0) { alert('승인된 영업사원이 없습니다.'); return; }
     if (list.length === 0) return;
-    if (!confirm(`${label} ${list.length}명을 담당자 ${assignableStaff.length}명(영업사원·관리자·마스터)에게 균등하게 나눠 배분할까요?`)) return;
-    const groups = assignableStaff.map(() => []);
-    list.forEach((c, i) => groups[i % assignableStaff.length].push(c.id));
-    for (let i = 0; i < assignableStaff.length; i++) {
+    if (!confirm(`${label} ${list.length}명을 영업사원 ${salesUsers.length}명에게 균등하게 나눠 배분할까요?`)) return;
+    const groups = salesUsers.map(() => []);
+    list.forEach((c, i) => groups[i % salesUsers.length].push(c.id));
+    for (let i = 0; i < salesUsers.length; i++) {
       for (const batch of chunkArray(groups[i], 100)) {
         if (batch.length === 0) continue;
-        await supabase.from('customers').update({ rep_id: assignableStaff[i].id }).in('id', batch);
+        await supabase.from('customers').update({ rep_id: salesUsers[i].id }).in('id', batch);
       }
     }
     await loadAll();
@@ -2010,6 +2044,14 @@ function Dashboard({ currentUser, onLogout }) {
     const { data: restored } = await supabase.from('customers').update({ deleted_at: null, deleted_by: null }).eq('id', id).select().single();
     setTrashedCustomers(prev => prev.filter(c => c.id !== id));
     if (restored) setCustomers(prev => [restored, ...prev]);
+  }
+  async function bulkRestore(ids) {
+    const movedRows = trashedCustomers.filter(c => ids.includes(c.id)).map(c => ({ ...c, deleted_at: null, deleted_by: null }));
+    for (const batch of chunkArray(ids, 100)) {
+      await supabase.from('customers').update({ deleted_at: null, deleted_by: null }).in('id', batch);
+    }
+    setTrashedCustomers(prev => prev.filter(c => !ids.includes(c.id)));
+    setCustomers(prev => [...movedRows, ...prev]);
   }
   async function purgeNow(id) {
     if (!confirm('이 건을 지금 즉시 완전히 삭제할까요? 되돌릴 수 없습니다.')) return;
@@ -2116,17 +2158,17 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'stats' && isAdmin ? (
           <ContractCalendar customers={customers} salesUsers={salesUsers} onDeleteContracts={bulkDeleteCustomers} />
         ) : tab === 'unassigned' && isAdmin ? (
-          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={assignableStaff} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} onOpenDetail={openExisting} onDelete={bulkDeleteCustomers} onRequestSms={requestSms} isMaster={isMaster} />
+          <UnassignedPanel unassigned={unassignedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(unassignedCustomers, '미배정 고객')} onOpenDetail={openExisting} onDelete={bulkDeleteCustomers} onRequestSms={requestSms} />
         ) : tab === 'inquiry' && isAdmin ? (
           <InquiryPanel inquiries={inquiryCustomers} onOpen={openInquiry} onRequestSms={requestSms} onDelete={bulkDeleteCustomers} />
         ) : tab === 'departed' && isAdmin ? (
-          <UnassignedPanel unassigned={departedCustomers} salesUsers={assignableStaff} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} onOpenDetail={openExisting} onRequestSms={requestSms} isMaster={isMaster} />
+          <UnassignedPanel unassigned={departedCustomers} salesUsers={salesUsers} onSend={assignToRep} onDistributeEvenly={() => distributeAmongReps(departedCustomers, '퇴사원 담당 고객')} title="퇴사원DB" repLabel={(c) => repName(c.rep_id)} onOpenDetail={openExisting} onRequestSms={requestSms} />
         ) : tab === 'logs' && isAdmin ? (
           <AccessLogPanel logs={accessLogs} onRefresh={refreshAccessLogs} />
         ) : tab === 'qr' && isAdmin ? (
           <QRCategoryPanel qrCodes={qrCodes} onAdd={addQrCode} onDelete={deleteQrCode} isMaster={isMaster} />
         ) : tab === 'trash' && isAdmin ? (
-          <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} onBulkPurge={bulkPurgeNow} />
+          <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} onBulkPurge={bulkPurgeNow} onBulkRestore={bulkRestore} />
         ) : tab === 'updates' ? (
           <UpdateLogPanel isAdmin={isAdmin} updates={updateLogs} onPost={postUpdateLog} onEdit={editUpdateLog} onDelete={deleteUpdateLog} />
         ) : tab === 'incentiveRules' && isMaster ? (
@@ -2237,6 +2279,7 @@ function Dashboard({ currentUser, onLogout }) {
                 <span className="text-[12.5px] shrink-0" style={{ color: '#FFFFFF' }}>{bulkSelectedCount}건 선택됨</span>
                 <button onClick={() => setBulkSelected({})} style={{ border: '1px solid #3D4A41', color: '#FFFFFF' }} className="text-[12px] px-3 py-2 rounded-lg whitespace-nowrap">선택 해제</button>
                 {isAdmin && <button onClick={bulkUnassign} style={{ border: '1px solid #3D4A41', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">미배정으로 변경</button>}
+                {isAdmin && <button onClick={() => { const ids = Object.keys(bulkSelected).filter(id => bulkSelected[id]).map(Number); if (ids.length === 0) return; if (!confirm(`선택한 ${ids.length}건을 삭제할까요?\n휴지통으로 이동되며, 휴지통 화면에서 복구하거나 완전삭제할 수 있습니다.`)) return; bulkDeleteCustomers(ids); setBulkSelected({}); }} style={{ background: '#7A2323', color: '#FFFFFF' }} className="text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">🗑 전체삭제</button>}
                 <button onClick={() => requestSms(Object.keys(bulkSelected).filter(id => bulkSelected[id]).map(Number), `${bulkSelectedCount}건`, () => setBulkSelected({}))} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="ml-auto text-[12.5px] px-3.5 py-2 rounded-lg font-medium whitespace-nowrap">📱 문자 발송</button>
               </div>
             )}
@@ -2265,7 +2308,15 @@ function Dashboard({ currentUser, onLogout }) {
 
       {showInbox && <MessageCenter received={inboxMessages} sent={sentMessages} staff={allStaff} onMarkRead={markMessageRead} onDelete={deleteMessage} onClose={() => setShowInbox(false)} />}
       {messageTarget && <MessageComposeModal target={messageTarget} onClose={() => setMessageTarget(null)} onSend={(text) => sendMessage(messageTarget.id, text)} />}
-      {smsRequest && <SmsComposeModal targetLabel={smsRequest.targetLabel} defaultText={myPersonalScript || DEFAULT_SMS_SCRIPT} onClose={() => setSmsRequest(null)} onSend={async (msg, img) => { const res = await sendSmsToIds(smsRequest.ids, msg, img); if (res.sent > 0 && smsRequest.onSent) smsRequest.onSent(); return res; }} />}
+      {smsRequest && <SmsComposeModal targetLabel={smsRequest.targetLabel} defaultText={myPersonalScript || DEFAULT_SMS_SCRIPT} onClose={() => setSmsRequest(null)} onSend={async (msg, img) => {
+        const res = await sendSmsToIds(smsRequest.ids, msg, img);
+        if (res.sent > 0) {
+          const successIds = (res.results || []).filter(r => r.status === '성공').map(r => r.customer_id);
+          if (successIds.length > 0) await markSmsSent(successIds);
+          if (smsRequest.onSent) smsRequest.onSent();
+        }
+        return res;
+      }} />}
       {showSenderSetting && <SenderNumberModal currentNumber={currentUserSender} onClose={() => setShowSenderSetting(false)} onSave={saveSenderNumber} />}
       {showUpdatePopup && updateLogs.length > 0 && <UpdatePopupModal updates={updateLogs} lastSeenUpdateId={lastSeenUpdateId} onClose={dismissUpdatePopup} />}
     </div>
@@ -2331,7 +2382,7 @@ function EditModal({ data, isAdmin, salesUsers, isNew, onClose, onSave, onDelete
             <div className="flex gap-2 mt-1.5">
               {STAGES.map(s => { const done = form[s.key]; return (
                 <button key={s.key} type="button" onClick={() => toggleStage(s.key)} style={{ background: done ? '#2F6B4F' : '#F7F6F2', color: done ? '#FFFFFF' : '#6B6A63', border: '1px solid ' + (done ? '#2F6B4F' : '#E4E2D9') }} className="flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12.5px] font-medium">
-                  <span>{done ? '✔' : s.icon}</span>{s.label}
+                  <span>{done ? '✔' : s.icon}</span>{s.label}{s.key === 'sms2' && form.sms_sent_count > 0 ? `(${form.sms_sent_count})` : ''}
                 </button>
               );})}
             </div>
