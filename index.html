@@ -635,7 +635,7 @@ function Announcements({ isAdmin, announcements, onPost, onUpdate, onDelete }) {
     if (editingId === a.id) {
       return (
         <div className="rounded-lg p-3" style={{ background: highlight ? '#FFF7E8' : '#F7F6F2', border: '1px solid ' + (highlight ? '#F0D9A0' : '#E4E2D9') }}>
-          <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={2} className="w-full rounded-lg px-2 py-1.5 text-[13px] outline-none" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} />
+          <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={Math.min(15, Math.max(8, editText.split('\n').length + Math.ceil(editText.length / 45)))} className="w-full rounded-lg px-3 py-2.5 text-[13.5px] leading-relaxed outline-none resize-y" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }} />
           <div className="flex gap-2 mt-2">
             <button onClick={() => setEditingId(null)} className="flex-1 text-[12px] py-1.5 rounded-lg" style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }}>취소</button>
             <button onClick={saveEdit} className="flex-1 text-[12px] py-1.5 rounded-lg" style={{ background: '#2F6B4F', color: '#FFFFFF' }}>저장</button>
@@ -665,7 +665,7 @@ function Announcements({ isAdmin, announcements, onPost, onUpdate, onDelete }) {
         <span className="text-[15px]">📢</span>
         <p className="text-[13px] font-medium" style={{ color: '#1C2620' }}>공지사항</p>
       </div>
-      {latest ? <Item a={latest} highlight={true} /> : <p className="text-[12.5px]" style={{ color: '#B0AEA4' }}>등록된 공지사항이 없습니다.</p>}
+      {latest ? Item({ a: latest, highlight: true }) : <p className="text-[12.5px]" style={{ color: '#B0AEA4' }}>등록된 공지사항이 없습니다.</p>}
 
       {isAdmin && (
         <div className="flex gap-2 mt-2.5">
@@ -681,7 +681,7 @@ function Announcements({ isAdmin, announcements, onPost, onUpdate, onDelete }) {
       )}
       {showPast && (
         <div className="flex flex-col gap-2 mt-2">
-          {past.map(a => <Item key={a.id} a={a} highlight={false} />)}
+          {past.map(a => <React.Fragment key={a.id}>{Item({ a, highlight: false })}</React.Fragment>)}
         </div>
       )}
     </div>
