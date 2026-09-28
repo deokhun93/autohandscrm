@@ -223,6 +223,15 @@ function maskAccount(account) {
   const hideSet = new Set(digitIdx.slice(3, digitIdx.length - 3));
   return s.split('').map((ch, i) => hideSet.has(i) ? '*' : ch).join('');
 }
+function CallButton({ phone }) {
+  if (!phone) return null;
+  const digits = String(phone).replace(/[^0-9+]/g, '');
+  if (!digits) return null;
+  return (
+    <a href={`tel:${digits}`} onClick={(e) => e.stopPropagation()} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="inline-flex items-center gap-1 text-[11.5px] font-medium px-2.5 py-1 rounded-full no-underline" aria-label="전화 걸기">📞 전화걸기</a>
+  );
+}
+
 function MaskedText({ value, type }) {
   const [revealed, setRevealed] = useState(false);
   if (!value) return null;
@@ -801,7 +810,7 @@ function CompletedDealsPanel({ customers, staffDirectory, onOpenDetail, onReques
               </div>
               <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>
               <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[12.5px]" style={{ color: '#6B6A63' }}>
-                <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
+                <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /> <CallButton phone={c.phone} /></span>
                 <span className="flex items-center gap-1">📅 계약일 {c.contract_date || c.visit_date}</span>
                 <span className="flex items-center gap-1">👤 {nameOf(c.rep_id)}</span>
               </div>
@@ -928,7 +937,7 @@ function InquiryPanel({ inquiries, onOpen, onRequestSms, onDelete }) {
             </div>
             {(c.complex || c.unit) && <p className="text-[13px] mt-1 flex items-center gap-1" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>}
             <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[12.5px]" style={{ color: '#6B6A63' }}>
-              <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
+              <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /> <CallButton phone={c.phone} /></span>
               <span className="flex items-center gap-1">📅 접수 {c.visit_date}</span>
             </div>
           </div>
@@ -1543,7 +1552,7 @@ function UnassignedPanel({ unassigned, salesUsers, onSend, onDistributeEvenly, o
                 <StatusBadge status={c.status} />
               </div>
               <p className="text-[12px] mt-0.5" style={{ color: '#6B6A63' }}>📍 {c.complex}{c.unit ? ' · ' + c.unit : ''}</p>
-              <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={c.phone} type="phone" /></p>
+              <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={c.phone} type="phone" /> <CallButton phone={c.phone} /></p>
               {repLabel && <p className="text-[11.5px] mt-0.5" style={{ color: '#854F0B' }}>이전 담당: {repLabel(c)}</p>}
               {c.memo && <p className="text-[11.5px] mt-0.5" style={{ color: '#8B8A80' }}>{c.memo}</p>}
             </div>
@@ -2260,7 +2269,7 @@ function Dashboard({ currentUser, onLogout }) {
                         </div>
                       </div>
                       <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2.5 text-[12.5px]" style={{ color: '#6B6A63' }}>
-                        <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /></span>
+                        <span className="flex items-center gap-1">☎ <MaskedText value={c.phone} type="phone" /> <CallButton phone={c.phone} /></span>
                         <span className="flex items-center gap-1">📅 방문 {c.visit_date}</span>
                         <span className="flex items-center gap-1">👤 {repName(c.rep_id)}</span>
                         {c.product && <span className="flex items-center gap-1">📦 {c.product}</span>}
