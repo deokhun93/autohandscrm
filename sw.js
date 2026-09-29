@@ -1,9 +1,5 @@
-// 오토핸즈 CRM 서비스워커
-// 항상 인터넷에서 최신 화면을 먼저 가져옵니다 (옛날 화면이 남는 문제 방지).
-// 인터넷이 끊겼을 때만 마지막으로 열었던 화면을 보여줍니다.
-// Supabase 등 다른 사이트로 가는 데이터 요청은 건드리지 않습니다.
-
-const CACHE = 'autohands-v1';
+// 오토핸즈 CRM 서비스워커 (v2 - 푸시 알림 추가)
+const CACHE = 'autohands-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -19,7 +15,6 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   if (new URL(req.url).origin !== self.location.origin) return;
-
   event.respondWith(
     fetch(req)
       .then((res) => {
@@ -28,5 +23,30 @@ self.addEventListener('fetch', (event) => {
         return res;
       })
       .catch(() => caches.match(req).then((hit) => hit || caches.match('/')))
+  );
+});
+
+// ===== 푸시 알림 받기 =====
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data && event.data.text() }; }
+  const title = data.title || '오토핸즈 CRM';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: { url: data.url || '/' },
+  }));
+});
+
+// ===== 알림을 눌렀을 때 앱 열기 =====
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) { if ('focus' in c) { c.navigate(url); return c.focus(); } }
+      return self.clients.openWindow(url);
+    })
   );
 });
