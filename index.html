@@ -45,6 +45,128 @@ const { useState, useEffect, useMemo } = React;
 const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, storageKey: 'carwash-crm-auth' }
 });
+// ===== 푸시 알림 (휴대폰 알림) =====
+const VAPID_PUBLIC_KEY = 'BK2UTh2PXr0eHlrzE6aF_yQz6oePPhcAc2brXaYMI19efZnUKa8oI8OR8BLG-QsJayVjcRNA7Zyu0xX3icYEE7A';
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+function isIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+function isStandalone() { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
+async function getPushStatus() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'unsupported';
+    if (Notification.permission === 'denied') return 'denied';
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    return (sub && Notification.permission === 'granted') ? 'on' : 'off';
+  } catch (e) { return 'off'; }
+}
+async function enablePush(myId) {
+  if (isIOS() && !isStandalone()) {
+    alert('아이폰은 앱으로 설치한 뒤에만 알림을 받을 수 있어요.\n\n사파리 아래 [공유 버튼] → [홈 화면에 추가] 후,\n홈 화면의 오토핸즈 아이콘으로 열어서 다시 눌러주세요.');
+    return false;
+  }
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    alert('이 브라우저는 알림을 지원하지 않아요. 안드로이드는 크롬, 아이폰은 홈 화면에 추가한 앱으로 열어주세요.');
+    return false;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    alert('알림이 차단되어 있어요.\n휴대폰 설정 → 알림(또는 크롬 사이트 설정)에서 오토핸즈 알림을 허용한 뒤 다시 눌러주세요.');
+    return false;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+    const j = sub.toJSON();
+    await supabase.from('push_subscriptions').delete().eq('endpoint', j.endpoint);
+    const { error } = await supabase.from('push_subscriptions').insert({ staff_id: myId, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth_key: j.keys.auth });
+    if (error) throw error;
+    return true;
+  } catch (e) {
+    alert('알림 등록에 실패했습니다: ' + (e.message || e));
+    return false;
+  }
+}
+async function disablePush() {
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if (sub) {
+      await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+      await sub.unsubscribe();
+    }
+    return true;
+  } catch (e) { alert('알림 해제에 실패했습니다: ' + (e.message || e)); return false; }
+}
+// 관리자용: 알림 발송 (target: 'all' | 'admin,master' | 'sales' | 'field' | 'staff:<id>')
+async function sendPush({ title, body, target }) {
+  const { data, error } = await supabase.functions.invoke('send-push', { body: { title, body, target, url: '/' } });
+  if (error || (data && data.error)) {
+    let msg = (data && data.error) || (error && error.message) || '알 수 없는 오류';
+    try { if (error && error.context && error.context.json) { const j = await error.context.json(); if (j && j.error) msg = j.error; } } catch (e) {}
+    alert('휴대폰 알림 발송 실패: ' + msg);
+    return;
+  }
+  alert(data.total === 0
+    ? '등록은 완료됐지만, 알림을 받도록 설정한 직원이 아직 없어요. (직원들이 📲 알림 켜기를 눌러야 받을 수 있어요)'
+    : `휴대폰 알림 발송 완료: ${data.sent}대 성공` + (data.failed ? ` / ${data.failed}대 실패` : ''));
+}
+function PushToggleButton({ myId }) {
+  const [status, setStatus] = useState('off');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { getPushStatus().then(setStatus); }, []);
+  async function onClick() {
+    if (busy) return;
+    setBusy(true);
+    if (status === 'on') {
+      if (confirm('이 휴대폰에서 오토핸즈 알림을 끌까요?')) { await disablePush(); }
+    } else {
+      const ok = await enablePush(myId);
+      if (ok) alert('알림이 켜졌어요! 이제 공지사항·업데이트 소식을 휴대폰으로 받아요.');
+    }
+    setStatus(await getPushStatus());
+    setBusy(false);
+  }
+  const on = status === 'on';
+  return (
+    <button onClick={onClick} title={on ? '휴대폰 알림 켜짐 (누르면 끄기)' : '휴대폰 알림 켜기'} aria-label="휴대폰 알림" style={{ background: on ? '#2F6B4F' : '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="relative flex items-center justify-center text-sm rounded-lg w-10 h-10">
+      {busy ? '…' : '📲'}
+      {!on && <span style={{ background: '#E24B4A' }} className="absolute -top-1 -right-1 text-[9px] leading-none px-1 py-0.5 rounded-full">OFF</span>}
+    </button>
+  );
+}
+// 관리자용: 등록할 때 '휴대폰 알림 보내기' 선택 영역
+function PushOptions({ value, onChange, staff }) {
+  const v = value || { enabled: false, target: 'all' };
+  const set = (patch) => onChange({ ...v, ...patch });
+  return (
+    <div className="rounded-lg px-3 py-2 mt-2" style={{ background: v.enabled ? '#E6F1FB' : '#F7F6F2', border: '1px solid ' + (v.enabled ? '#B5D4F4' : '#E4E2D9') }}>
+      <label className="flex items-center gap-2 text-[12.5px] cursor-pointer" style={{ color: '#1C2620' }}>
+        <input type="checkbox" checked={v.enabled} onChange={e => set({ enabled: e.target.checked })} />
+        📲 휴대폰 알림도 보내기
+      </label>
+      {v.enabled && (
+        <select value={v.target} onChange={e => set({ target: e.target.value })} className="w-full mt-2 rounded-lg px-2.5 py-2 text-[12.5px] outline-none" style={{ background: '#FFFFFF', border: '1px solid #E4E2D9', color: '#1C2620' }}>
+          <option value="all">전체 직원</option>
+          <option value="admin,master">관리자만</option>
+          <option value="sales">영업사원만</option>
+          <option value="field">현장직원만</option>
+          {(staff || []).length > 0 && (
+            <optgroup label="특정 직원 1명">
+              {(staff || []).map(u => <option key={u.id} value={'staff:' + u.id}>{u.name} ({roleLabel(u.role === 'master' ? 'admin' : u.role)})</option>)}
+            </optgroup>
+          )}
+        </select>
+      )}
+    </div>
+  );
+}
+
 const PORTONE_STORE_ID = window.PORTONE_STORE_ID;
 const PORTONE_CHANNEL_KEY = window.PORTONE_CHANNEL_KEY;
 
@@ -570,8 +692,9 @@ function UpdatePopupModal({ updates, lastSeenUpdateId, onClose }) {
   );
 }
 
-function UpdateLogPanel({ isAdmin, updates, onPost, onEdit, onDelete }) {
+function UpdateLogPanel({ isAdmin, updates, onPost, onEdit, onDelete, staff }) {
   const [title, setTitle] = useState('');
+  const [pushOpt, setPushOpt] = useState({ enabled: false, target: 'all' });
   const [content, setContent] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState('');
@@ -587,7 +710,8 @@ function UpdateLogPanel({ isAdmin, updates, onPost, onEdit, onDelete }) {
           <p className="text-[13px] font-medium mb-2" style={{ color: '#1C2620' }}>새 업데이트 소식 작성</p>
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="제목 (예: 문자 발송 기능 추가)" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full mb-2 rounded-lg px-3 py-2.5 text-sm outline-none" />
           <textarea value={content} onChange={e => setContent(e.target.value)} rows={3} placeholder="어떤 내용이 바뀌었는지 설명해주세요" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="w-full rounded-lg px-3 py-2.5 text-sm outline-none resize-none" />
-          <button onClick={() => { if (title.trim() && content.trim()) { onPost(title.trim(), content.trim()); setTitle(''); setContent(''); } }} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full mt-2 text-sm font-medium py-2.5 rounded-lg">등록</button>
+          <PushOptions value={pushOpt} onChange={setPushOpt} staff={staff} />
+          <button onClick={() => { if (title.trim() && content.trim()) { onPost(title.trim(), content.trim(), pushOpt); setTitle(''); setContent(''); setPushOpt({ enabled: false, target: 'all' }); } }} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="w-full mt-2 text-sm font-medium py-2.5 rounded-lg">등록</button>
         </div>
       )}
       {updates.length === 0 && (
@@ -627,8 +751,9 @@ function UpdateLogPanel({ isAdmin, updates, onPost, onEdit, onDelete }) {
   );
 }
 
-function Announcements({ isAdmin, announcements, onPost, onUpdate, onDelete }) {
+function Announcements({ isAdmin, announcements, onPost, onUpdate, onDelete, staff }) {
   const [text, setText] = useState('');
+  const [pushOpt, setPushOpt] = useState({ enabled: false, target: 'all' });
   const [showPast, setShowPast] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
@@ -677,9 +802,10 @@ function Announcements({ isAdmin, announcements, onPost, onUpdate, onDelete }) {
       {isAdmin && (
         <div className="flex gap-2 mt-2.5">
           <input value={text} onChange={e => setText(e.target.value)} placeholder="새 공지사항을 입력하세요" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="flex-1 rounded-lg px-3 py-2 text-sm outline-none" />
-          <button onClick={() => { if (text.trim()) { onPost(text.trim()); setText(''); } }} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-sm font-medium">등록</button>
+          <button onClick={() => { if (text.trim()) { onPost(text.trim(), pushOpt); setText(''); setPushOpt({ enabled: false, target: 'all' }); } }} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-sm font-medium">등록</button>
         </div>
       )}
+      {isAdmin && <PushOptions value={pushOpt} onChange={setPushOpt} staff={staff} />}
 
       {past.length > 0 && (
         <button onClick={() => setShowPast(s => !s)} className="text-[12px] mt-3" style={{ color: '#6B6A63' }}>
@@ -1949,9 +2075,12 @@ function Dashboard({ currentUser, onLogout }) {
     setSalesUsers(prev => prev.filter(u => u.id !== user.id));
     setAllStaff(prev => prev.filter(u => u.id !== user.id));
   }
-  async function postAnnouncement(content) {
+  async function postAnnouncement(content, pushOpt) {
     const { data, error } = await supabase.from('announcements').insert({ content, created_by: myId }).select().single();
     if (!error) setAnnouncements(prev => [data, ...prev]);
+    if (!error && pushOpt && pushOpt.enabled) {
+      await sendPush({ title: '📢 오토핸즈 공지사항', body: content.length > 120 ? content.slice(0, 120) + '…' : content, target: pushOpt.target });
+    }
   }
   async function updateAnnouncement(id, content) {
     await supabase.from('announcements').update({ content }).eq('id', id);
@@ -1961,9 +2090,12 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('announcements').delete().eq('id', id);
     setAnnouncements(prev => prev.filter(a => a.id !== id));
   }
-  async function postUpdateLog(title, content) {
+  async function postUpdateLog(title, content, pushOpt) {
     const { data, error } = await supabase.from('update_logs').insert({ title, content, created_by: myId }).select().single();
     if (!error) setUpdateLogs(prev => [data, ...prev]);
+    if (!error && pushOpt && pushOpt.enabled) {
+      await sendPush({ title: '🆕 업데이트: ' + title, body: content.length > 120 ? content.slice(0, 120) + '…' : content, target: pushOpt.target });
+    }
   }
   async function editUpdateLog(id, title, content) {
     await supabase.from('update_logs').update({ title, content }).eq('id', id);
@@ -2114,6 +2246,7 @@ function Dashboard({ currentUser, onLogout }) {
             <button onClick={() => setShowSenderSetting(true)} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="flex items-center justify-center text-sm rounded-lg w-10 h-10" aria-label="발신번호 설정">
               📱
             </button>
+            <PushToggleButton myId={myId} />
             <button onClick={() => setShowInbox(true)} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="relative flex items-center justify-center text-sm rounded-lg w-10 h-10">
               🔔
               {inboxMessages.some(m => !m.is_read) && <span style={{ background: '#C98A2E' }} className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full" />}
@@ -2186,7 +2319,7 @@ function Dashboard({ currentUser, onLogout }) {
         ) : tab === 'trash' && isAdmin ? (
           <TrashPanel trashed={trashedCustomers} onRestore={restoreCustomer} onPurge={purgeNow} onBulkPurge={bulkPurgeNow} onBulkRestore={bulkRestore} />
         ) : tab === 'updates' ? (
-          <UpdateLogPanel isAdmin={isAdmin} updates={updateLogs} onPost={postUpdateLog} onEdit={editUpdateLog} onDelete={deleteUpdateLog} />
+          <UpdateLogPanel isAdmin={isAdmin} updates={updateLogs} onPost={postUpdateLog} onEdit={editUpdateLog} onDelete={deleteUpdateLog} staff={allStaff} />
         ) : tab === 'incentiveRules' && isMaster ? (
           <IncentiveRulesPanel rules={incentiveRules} onAdd={addIncentiveRule} onDelete={deleteIncentiveRule} staffDirectory={staffDirectory} />
         ) : tab === 'staffIncentive' && isAdmin ? (
@@ -2206,7 +2339,7 @@ function Dashboard({ currentUser, onLogout }) {
 
                 <Leaderboard salesUsers={salesUsers} customers={customers} currentUserId={myId} incentiveMap={incentiveMap} />
 
-                <Announcements isAdmin={isAdmin} announcements={announcements} onPost={postAnnouncement} onUpdate={updateAnnouncement} onDelete={deleteAnnouncement} />
+                <Announcements isAdmin={isAdmin} announcements={announcements} onPost={postAnnouncement} onUpdate={updateAnnouncement} onDelete={deleteAnnouncement} staff={allStaff} />
 
                 <MyScriptEditor personalValue={myPersonalScript} onSave={savePersonalScript} />
                 <ScriptAccordion id="application_script" title="신청서 스크립트" isAdmin={isAdmin} content={scripts.application_script} onSave={saveScript} />
@@ -2906,13 +3039,13 @@ function App() {
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
 </script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js');
+    });
+  }
+</script>
 </body>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/sw.js');
-      });
-    }
-  </script>
 
 </html>
