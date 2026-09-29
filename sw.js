@@ -1,5 +1,5 @@
 // 오토핸즈 CRM 서비스워커 (v2 - 푸시 알림 추가)
-const CACHE = 'autohands-v2';
+const CACHE = 'autohands-v3';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -34,7 +34,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, {
     body: data.body || '',
     icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    badge: '/badge-96.png',
     data: { url: data.url || '/' },
   }));
 });
