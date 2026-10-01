@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>오토핸즈 직원 앱</title>
+<meta name="theme-color" content="#0C1422">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--ink:#0C1422;--paper:#F7F5F0;--card:#fff;--muted:#F1EEE6;--gold:#C9A44C;--gold-2:#E2C77F;--gold-soft:#F1E7CC;--gold-dark:#8A6D25;--blue:#1D3A6E;
+--text:#1B2433;--sub:#6B7280;--line:#E4E0D6;--line-2:#D9D4C7;--ok:#DCEFE3;--ok-ink:#1F5136;--wait:#F1E7CC;--skip:#ECEAE4;--err:#B4472E;
+--f:"Noto Sans KR",system-ui,sans-serif;--f-en:"Archivo","Noto Sans KR",sans-serif;--shadow:0 1px 2px rgba(12,20,34,.05),0 8px 20px rgba(12,20,34,.05);color-scheme:light}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:#ECE8DF;color:var(--text);font-family:var(--f);font-size:15px;line-height:1.55;word-break:keep-all;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.shell{max-width:520px;margin:0 auto;min-height:100%;background:var(--paper);box-shadow:0 0 40px rgba(12,20,34,.08)}
+.screen{padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 40px;display:flex;flex-direction:column;gap:14px}
+.appbar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.logo{display:flex;align-items:center;gap:10px}
+.logo .mark{width:34px;height:34px;border-radius:9px;background:var(--blue);display:grid;place-items:center;color:#fff}
+.logo b{display:block;font-family:var(--f-en);font-weight:800;letter-spacing:.14em;font-size:15px;line-height:1.1}
+.logo small{display:block;font-family:var(--f-en);font-size:9px;letter-spacing:.2em;color:var(--sub);font-weight:600}
+.icon-btn{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);background:var(--card);display:grid;place-items:center;color:inherit}
+h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-size:16px;font-weight:700;margin:0}
+.sub{color:var(--sub);font-size:13px;margin:0}.note{color:var(--sub);font-size:12.5px;margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow)}
+.row{display:flex;align-items:center;gap:10px;min-width:0}.grow{flex:1;min-width:0}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.summary div{border-radius:12px;padding:10px 6px;text-align:center}
+.summary b{display:block;font-size:22px;font-weight:900;line-height:1.1}.summary span{font-size:12px;font-weight:700}
+.summary .w{background:var(--wait)}.summary .d{background:var(--ok)}.summary .s{background:var(--skip)}
+.money{display:flex;justify-content:space-between;align-items:center;border-radius:12px;padding:12px 14px}
+.money.m{background:var(--card);border:1px solid var(--line)}.money.t{background:var(--ink);color:#fff}
+.money b{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums}.money.t b{color:var(--gold-2)}
+.money small{display:block;font-size:11.5px;color:var(--sub)}
+.datebar{display:flex;align-items:center;gap:8px}
+.datebar input{font:inherit;border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;background:var(--card)}
+.chip{min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-weight:700;font-size:13px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--gold-2);border-color:var(--ink)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.apt-h{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--sub);display:flex;align-items:center;gap:8px;margin-top:4px}
+.apt-h::after{content:"";flex:1;border-top:1px dashed var(--line-2)}
+.job{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
+.job.picked{outline:2px solid var(--gold)}
+.car{font-family:var(--f-en);font-weight:800;font-size:18px;letter-spacing:.02em}
+.tag{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--gold-soft);color:#6B5418;white-space:nowrap}
+.pill{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.pill.대기{background:var(--wait);color:#6B5418}.pill.완료{background:var(--ok);color:var(--ok-ink)}.pill.미작업{background:var(--skip);color:#555}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:14px}.kv dt{color:var(--sub)}.kv dd{margin:0;font-weight:500;display:flex;align-items:center;gap:6px}
+.sel{position:relative;width:30px;height:30px;display:grid;place-items:center;flex:none}
+.sel input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.sel .box{width:22px;height:22px;border-radius:6px;border:1px solid var(--line-2);background:var(--card);display:grid;place-items:center;color:transparent;pointer-events:none}
+.sel input:checked+.box{background:var(--ink);border-color:var(--ink);color:var(--gold-2)}
+.sel input:focus-visible+.box{outline:2px solid var(--gold);outline-offset:2px}
+.sel .box svg{width:14px;height:14px;stroke-width:2.6}
+.int-check{display:flex;align-items:center;gap:10px;min-height:46px;padding:6px 12px;border:1px dashed var(--line-2);border-radius:12px;font-weight:700;font-size:14px;cursor:pointer;position:relative}
+.int-check input{position:absolute;opacity:0;left:12px;top:50%;width:1px;height:1px}
+.int-check .box{width:24px;height:24px;border-radius:6px;border:1px solid var(--line-2);display:grid;place-items:center;color:transparent;background:var(--card)}
+.int-check.on{background:var(--ok);border:1px solid #7DBE98}.int-check.on .box{background:#7DBE98;color:var(--ink);border-color:#7DBE98}
+.int-check:has(input:focus-visible){outline:2px solid var(--gold)}
+.int-check .box svg{width:15px;height:15px;stroke-width:2.6}
+.req-line{margin:0;display:flex;gap:8px;font-size:13px;background:var(--muted);border-radius:10px;padding:8px 10px}
+.act{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 6px 0 16px;border-radius:12px;border:1px solid var(--ink);background:var(--ink);color:#fff;font-weight:700;font-size:14px}
+.btn .arr{width:30px;height:30px;border-radius:8px;background:var(--gold);color:var(--ink);display:grid;place-items:center}
+.btn .arr svg{width:16px;height:16px}
+.btn:disabled{background:#E7E3D9;border-color:#E7E3D9;color:#9A9384;cursor:not-allowed}.btn:disabled .arr{background:#D9D4C7;color:#9A9384}
+.btn.full{width:100%;min-height:50px}.btn.plain{padding:0 18px}
+.btn2{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--line-2);background:var(--card);font-weight:700;font-size:14px}
+.link{border:0;background:none;padding:6px;color:var(--sub);font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px;display:inline-flex;gap:4px;align-items:center}
+.field{display:flex;flex-direction:column;gap:6px}.field label{font-size:13px;font-weight:700}
+.field input,.field textarea{font:inherit;color:var(--text);background:var(--paper);border:1px solid var(--line-2);border-radius:10px;padding:12px 13px;width:100%}
+.field textarea{min-height:76px;resize:vertical}
+.field input:focus,.field textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,164,76,.2);background:#fff}
+.form-err{color:var(--err);font-size:13.5px;margin:0}.form-err:empty{display:none}
+.empty{text-align:center;padding:30px 10px;color:var(--sub)}
+.scrim{position:fixed;inset:0;background:rgba(12,20,34,.5);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px}
+.dialog{width:100%;max-width:400px;background:var(--paper);border-radius:20px;padding:22px 18px 18px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;box-shadow:0 20px 50px rgba(12,20,34,.3)}
+.dialog .acts{display:flex;gap:10px;width:100%;margin-top:6px}.dialog .acts>*{flex:1}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);width:calc(100% - 32px);max-width:488px;background:var(--ink);color:#fff;border-radius:14px;padding:12px 14px;font-size:13.5px;z-index:60;display:flex;gap:10px;align-items:center}
+.toast.err{background:#7A2E1C}
+.loading{display:grid;place-items:center;min-height:60vh;color:var(--sub)}
+</style>
+</head>
+<body>
+<div class="shell"><main class="screen" id="screen"><div class="loading">불러오는 중...</div></main></div>
+<div id="layer"></div>
+<script>
+const SUPABASE_URL='https://kkmmfbqiddirhbiqtqsu.supabase.co';
+const SUPABASE_KEY='sb_publishable_4UNSE0BXfpI5lp4uc-ulxA_EqldYgh-';
+const PAY=5000;
+const db=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'carwash-crm-auth'}}):null;
+const I={drop:'<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+check:'<path d="M20 6 9 17l-5-5"/>',send:'<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+undo:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',logout:'<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
+msg:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',bell:'<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+admin:'<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>'};
+const ic=(n,s)=>`<svg class="i" viewBox="0 0 24 24"${s?` style="width:${s}px;height:${s}px"`:''} aria-hidden="true">${I[n]}</svg>`;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $=s=>document.querySelector(s);
+const WD=['일','월','화','수','목','금','토'];
+const pad=n=>String(n).padStart(2,'0');
+const keyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const kdate=k=>{const [y,m,d]=k.split('-').map(Number);const t=new Date(y,m-1,d);return `${m}월 ${d}일 (${WD[t.getDay()]})`;};
+const won=n=>n.toLocaleString('ko-KR')+'원';
+const hm=ts=>{const d=new Date(ts);return `${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+const SWATCH={'흰색':'#fff','화이트':'#fff','검정':'#1B2433','검정색':'#1B2433','블랙':'#1B2433','회색':'#94A3B8','그레이':'#94A3B8','은색':'#CBD5E1','실버':'#CBD5E1','파란색':'#3B82F6','빨간색':'#DC2626','노란색':'#FDE047','초록색':'#16A34A','갈색':'#92400E','남색':'#1E3A8A'};
+function friendly(err){const m=(err&&err.message)||String(err||'');if(/Invalid login credentials/i.test(m))return '이메일 또는 비밀번호가 맞지 않아요.';if(/Failed to fetch|network/i.test(m))return '인터넷 연결을 확인해 주세요.';if(/[가-힣]/.test(m))return m;return '문제가 생겼어요. 잠시 후 다시 시도해 주세요.';}
+
+const S={ready:false,session:null,me:null,day:keyOf(new Date()),jobs:[],sum:null,reqs:[],sel:[],notice:'',apt:'전체',busy:false,dialog:null,err:''};
+
+async function loadMe(){
+  const {data,error}=await db.from('profiles').select('id,name,role,status').eq('id',S.session.user.id).maybeSingle();
+  if(error) throw error; S.me=data;
+}
+async function loadAll(){
+  try{
+    if(!S.me) await loadMe();
+    if(!S.me||S.me.status!=='승인'){ render(); return; }
+    const [jobs,sum,reqs]=await Promise.all([
+      db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)')
+        .eq('wash_date',S.day).eq('staff_id',S.me.id).order('sort_order').order('id'),
+      db.rpc('get_my_staff_summary',{p_day:S.day}),
+      db.rpc('list_customer_requests',{p_type:'msg',p_only_open:false})
+    ]);
+    if(jobs.error) throw jobs.error; if(sum.error) throw sum.error;
+    S.jobs=jobs.data||[]; S.sum=(sum.data&&sum.data[0])||null; S.reqs=reqs.error?[]:(reqs.data||[]);
+    S.sel=S.sel.filter(id=>S.jobs.some(j=>j.customer_id===id));
+    S.err='';
+  }catch(e){ S.err=friendly(e); }
+  render();
+}
+
+function loginView(){
+  return `<div style="text-align:center;padding:30px 0 6px"><div class="logo" style="justify-content:center"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>STAFF</small></span></div><p class="sub" style="margin-top:10px">CRM과 같은 이메일·비밀번호로 로그인해요</p></div>
+  <form id="login" class="card" novalidate>
+    <div class="field"><label for="em">이메일</label><input id="em" type="email" autocomplete="username"></div>
+    <div class="field"><label for="pw">비밀번호</label><input id="pw" type="password" autocomplete="current-password"></div>
+    <p class="form-err" role="alert">${esc(S.err)}</p>
+    <button class="btn full" type="submit" ${S.busy?'disabled':''}>${S.busy?'로그인 중...':'로그인'}<span class="arr">${ic('check')}</span></button>
+  </form>`;
+}
+function blockedView(){
+  return `<div class="appbar">${logo()}<button class="icon-btn" data-act="logout" aria-label="로그아웃">${ic('logout')}</button></div>
+  <div class="card"><h2 class="h">${S.me?'아직 사용할 수 없는 계정이에요':'직원 정보를 찾을 수 없어요'}</h2><p class="sub">${S.me?'관리자 승인 후 이용할 수 있어요.':'CRM 직원 계정으로 로그인해 주세요.'}</p></div>`;
+}
+function logo(){return `<div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>STAFF</small></span></div>`;}
+function jobCard(j){
+  const c=j.customers||{}, open=j.status==='대기', needInt=j.interior&&!j.interior_done, picked=S.sel.includes(j.customer_id);
+  const msg=S.reqs.find(r=>r.customer_id===j.customer_id&&(r.status==='접수'||Date.now()-new Date(r.created_at)<7*864e5));
+  let act='';
+  if(open) act=`<button class="link" data-act="skip" data-id="${j.id}">미작업 처리</button><button class="btn" data-act="done" data-id="${j.id}" ${needInt?'disabled':''}>완료 알림 보내기<span class="arr">${ic('send')}</span></button>`;
+  if(j.status==='완료') act=`<span class="sub">${j.done_at?hm(j.done_at)+' 완료 · ':''}+${won(PAY)}</span><span class="pill 완료">알림 보냄</span>`;
+  if(j.status==='미작업') act=`<button class="link" data-act="undo" data-id="${j.id}">${ic('undo',14)}미작업 취소</button><span class="sub">미작업으로 보고됨</span>`;
+  return `<article class="job ${picked?'picked':''}">
+    <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)} 공지 받을 고객으로 선택"><span class="box">${ic('check')}</span></label>
+      <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||'차량번호 없음')}</span>${j.interior?'<span class="tag">실내세차</span>':''}${j.moved_from?'<span class="tag">일정 변경</span>':''}</div>
+      <span class="pill ${j.status}">${j.status==='대기'?'세차대기':j.status==='완료'?'세차완료':'미작업'}</span></div>
+    <dl class="kv"><dt>차종</dt><dd>${esc(c.car_model||'-')}</dd><dt>색상</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>아파트단지</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
+    ${j.interior?`<label class="int-check ${j.interior_done?'on':''}"><input type="checkbox" data-int="${j.id}" ${j.interior_done?'checked':''} ${open?'':'disabled'}><span class="box">${ic('check')}</span>실내세차 완료</label>${open&&needInt?'<p class="note">실내세차를 체크해야 완료 알림을 보낼 수 있어요.</p>':''}`:''}
+    ${msg?`<p class="req-line">${ic('msg',16)}<span><b>고객 요청</b> ${esc(msg.message)}</span></p>`:''}
+    <div class="act">${act}</div></article>`;
+}
+function homeView(){
+  const s=S.sum||{today_total:0,today_done:0,today_wait:0,today_skip:0,month_done:0};
+  const apts=['전체',...new Set(S.jobs.map(j=>(j.customers||{}).complex||'기타'))];
+  const list=S.jobs.filter(j=>S.apt==='전체'||((j.customers||{}).complex||'기타')===S.apt);
+  const groups=[...new Set(list.map(j=>(j.customers||{}).complex||'기타'))];
+  const month=S.day.slice(5,7).replace(/^0/,'');
+  return `<div class="appbar">${logo()}<div class="row" style="gap:8px">${['admin','master'].includes(S.me.role)?`<a class="icon-btn" href="/admin" aria-label="관리자 모드">${ic('admin')}</a>`:''}<button class="icon-btn" data-act="reload" aria-label="새로고침">${ic('refresh')}</button><button class="icon-btn" data-act="logout" aria-label="로그아웃">${ic('logout')}</button></div></div>
+  <div><p class="sub">${esc(S.me.name)} 님 · 회사 배정</p><h1 class="h">${S.day===keyOf(new Date())?'오늘':kdate(S.day)} 세차 ${s.today_total}대</h1></div>
+  <div class="datebar"><button class="chip" data-act="day" data-d="-1">이전</button><input type="date" id="day" value="${S.day}" aria-label="날짜 선택"><button class="chip" data-act="day" data-d="1">다음</button><button class="chip" data-act="today">오늘</button></div>
+  ${S.err?`<p class="req-line" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}
+  <div class="summary"><div class="w"><b>${s.today_wait}</b><span>세차대기</span></div><div class="d"><b>${s.today_done}</b><span>세차완료</span></div><div class="s"><b>${s.today_skip}</b><span>미작업</span></div></div>
+  <div class="money m"><span><b style="font-size:15px">${month}월 수당</b><small>${month}월 1일 ~ 말일 · 완료 ${s.month_done}대</small></span><b>${won(s.month_done*PAY)}</b></div>
+  <div class="money t"><span style="font-weight:700">${S.day===keyOf(new Date())?'오늘':'이날'} 수당</span><b>${won(s.today_done*PAY)}</b></div>
+  ${noticeCard(list)}
+  ${apts.length>2?`<div class="chips" role="group" aria-label="아파트 선택">${apts.map(a=>`<button class="chip" aria-pressed="${S.apt===a}" data-act="apt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>`:''}
+  ${list.length?groups.map(g=>`<div class="apt-h">${esc(g)}</div>${list.filter(j=>((j.customers||{}).complex||'기타')===g).map(jobCard).join('')}`).join(''):`<div class="empty">이 날 배정된 세차가 없어요.</div>`}`;
+}
+function noticeCard(list){
+  const n=S.sel.length, allOn=list.length&&list.every(j=>S.sel.includes(j.customer_id));
+  return `<section class="card" aria-labelledby="nt-h">
+    <div class="row"><span class="icon-btn" style="border-radius:12px">${ic('bell')}</span><div class="grow"><h2 class="h" id="nt-h">고객 공지 보내기</h2><p class="sub">차량번호 옆 체크박스로 받을 고객을 고르세요</p></div></div>
+    <div class="field"><label for="notice">공지 내용</label><textarea id="notice" maxlength="300" placeholder="예: 비 예보로 오늘 세차가 내일로 미뤄져요.">${esc(S.notice)}</textarea></div>
+    <div class="act"><button class="link" data-act="sel-all">${allOn?'선택 해제':'목록 전체 선택'}</button><span style="font-weight:700;font-size:13px">${n}대 선택</span></div>
+    <button class="btn full" id="nt-send" data-act="notice" ${n&&S.notice.trim()&&!S.busy?'':'disabled'}>선택한 고객에게 공지 보내기<span class="arr">${ic('send')}</span></button></section>`;
+}
+function render(){
+  const scr=$('#screen');
+  if(!db){ scr.innerHTML='<div class="loading">인터넷 연결을 확인한 뒤 새로고침해 주세요.</div>'; return; }
+  if(!S.ready) return;
+  const fid=document.activeElement&&document.activeElement.id;
+  scr.innerHTML=!S.session?loginView():(!S.me||S.me.status!=='승인')?blockedView():homeView();
+  if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
+  const L=$('#layer'),d=S.dialog;
+  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn plain" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:'';
+  if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
+}
+let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`${ic(err?'bell':'check')}<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3200);}
+async function upd(id,patch,okMsg){
+  S.busy=true;
+  const {error}=await db.from('wash_jobs').update(patch).eq('id',id);
+  S.busy=false; S.dialog=null;
+  if(error){ toast(friendly(error),true); render(); return; }
+  if(okMsg) toast(okMsg); await loadAll();
+}
+document.addEventListener('click',async e=>{
+  const t=e.target.closest('[data-act]'); if(!t) return;
+  if(t.classList.contains('scrim')&&e.target.closest('[data-stop]')) return;
+  const a=t.dataset.act, id=Number(t.dataset.id), j=S.jobs.find(x=>x.id===id);
+  switch(a){
+    case 'logout': await db.auth.signOut(); break;
+    case 'reload': await loadAll(); toast('새로 불러왔어요.'); break;
+    case 'day': {const [y,m,d]=S.day.split('-').map(Number);const dt=new Date(y,m-1,d+Number(t.dataset.d));S.day=keyOf(dt);S.sel=[];await loadAll();break;}
+    case 'today': S.day=keyOf(new Date()); S.sel=[]; await loadAll(); break;
+    case 'apt': S.apt=t.dataset.a; render(); break;
+    case 'close': if(!S.busy){S.dialog=null;render();} break;
+    case 'done': S.dialog={title:'고객에게 완료 알림을 보낼까요?',body:`${(j.customers||{}).car_number||''} 세차를 완료로 처리하고 고객 앱에 '세차가 완료되었어요' 알림을 보내요.`,ok:'알림 보내기',run:()=>upd(id,{status:'완료'},'완료 알림을 보냈어요. +'+won(PAY))}; render(); break;
+    case 'skip': S.dialog={title:'미작업으로 처리할까요?',body:'차량이 없거나 세차를 못 한 경우에 눌러 주세요. 회사에 미작업으로 보고돼요.',ok:'미작업 처리',run:()=>upd(id,{status:'미작업'},'미작업으로 처리했어요.')}; render(); break;
+    case 'undo': await upd(id,{status:'대기'},'다시 대기로 바꿨어요.'); break;
+    case 'confirm': if(S.dialog&&!S.busy){ S.busy=true; render(); await S.dialog.run(); } break;
+    case 'sel-all': {const ids=S.jobs.filter(j=>S.apt==='전체'||((j.customers||{}).complex||'기타')===S.apt).map(j=>j.customer_id);const all=ids.every(x=>S.sel.includes(x));S.sel=all?S.sel.filter(x=>!ids.includes(x)):[...new Set([...S.sel,...ids])];render();break;}
+    case 'notice': {
+      const body=S.notice.trim(); if(!body||!S.sel.length) break;
+      S.busy=true; render();
+      const {data,error}=await db.rpc('send_customer_notice',{p_customer_ids:S.sel,p_title:'공지사항',p_body:body});
+      S.busy=false;
+      if(error){ toast(friendly(error),true); render(); break; }
+      S.notice=''; S.sel=[]; toast(`${data||0}명에게 공지를 보냈어요.`); render(); break;
+    }
+  }
+});
+document.addEventListener('change',async e=>{
+  const t=e.target;
+  if(t.id==='day'&&t.value){ S.day=t.value; S.sel=[]; await loadAll(); return; }
+  if(t.dataset.sel){ const id=Number(t.dataset.sel); S.sel=t.checked?[...new Set([...S.sel,id])]:S.sel.filter(x=>x!==id); render(); return; }
+  if(t.dataset.int){ await upd(Number(t.dataset.int),{interior_done:t.checked},null); }
+});
+document.addEventListener('input',e=>{ if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nt-send'); if(b) b.disabled=!(S.sel.length&&S.notice.trim()); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} });
+document.addEventListener('submit',async e=>{
+  if(e.target.id!=='login') return; e.preventDefault();
+  const em=$('#em').value.trim(), pw=$('#pw').value;
+  if(!em||!pw){ S.err='이메일과 비밀번호를 입력해 주세요.'; render(); return; }
+  S.busy=true; S.err=''; render(); $('#em').value=em;
+  const {error}=await db.auth.signInWithPassword({email:em,password:pw});
+  S.busy=false; if(error){ S.err=friendly(error); render(); $('#em').value=em; }
+});
+(async function boot(){
+  if(!db){ S.ready=true; render(); return; }
+  const {data}=await db.auth.getSession(); S.session=data.session; S.ready=true;
+  if(S.session) await loadAll(); else render();
+  db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; S.jobs=[]; render(); return; } if(!was){ S.err=''; await loadAll(); } });
+  setInterval(()=>{ const ae=document.activeElement; if(S.session&&S.me&&!S.dialog&&!(ae&&/INPUT|TEXTAREA/.test(ae.tagName))&&document.visibilityState==='visible') loadAll(); },60000);
+})();
+</script>
+</body>
+</html>

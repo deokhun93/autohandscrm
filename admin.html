@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>오토핸즈 관리자 모드</title>
+<meta name="theme-color" content="#0C1422">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--ink:#0C1422;--paper:#F7F5F0;--card:#fff;--muted:#F1EEE6;--gold:#C9A44C;--gold-2:#E2C77F;--gold-soft:#F1E7CC;--gold-dark:#8A6D25;--blue:#1D3A6E;
+--text:#1B2433;--sub:#6B7280;--line:#E4E0D6;--line-2:#D9D4C7;--ok:#DCEFE3;--ok-ink:#1F5136;--skip:#ECEAE4;--slate:#E6EAF2;--err:#B4472E;
+--f:"Noto Sans KR",system-ui,sans-serif;--f-en:"Archivo","Noto Sans KR",sans-serif;--shadow:0 1px 2px rgba(12,20,34,.05),0 8px 20px rgba(12,20,34,.05);color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text);font-family:var(--f);font-size:14.5px;line-height:1.55;word-break:keep-all;-webkit-font-smoothing:antialiased}
+button,select,input,textarea{font:inherit;color:inherit}button{cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.top{position:sticky;top:0;z-index:20;background:var(--ink);color:#fff}
+.top .in{max-width:1180px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px;margin-right:auto}
+.logo .mark{width:34px;height:34px;border-radius:9px;background:var(--blue);display:grid;place-items:center}
+.logo b{display:block;font-family:var(--f-en);font-weight:800;letter-spacing:.14em;font-size:15px;line-height:1.1}
+.logo small{display:block;font-family:var(--f-en);font-size:9px;letter-spacing:.2em;color:var(--gold-2);font-weight:600}
+.top a,.top button.tl{color:#D5DAE3;text-decoration:none;font-size:13.5px;font-weight:700;background:none;border:0;padding:6px 8px;display:inline-flex;gap:6px;align-items:center}
+.tabs{background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:58px;z-index:19}
+.tabs .in{max-width:1180px;margin:0 auto;padding:0 12px;display:flex;gap:2px;overflow-x:auto}
+.tabs button{border:0;background:none;padding:14px 14px 12px;font-weight:700;color:var(--sub);border-bottom:2px solid transparent;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
+.tabs button[aria-selected="true"]{color:var(--text);border-color:var(--gold)}
+.tabs .cnt{font-size:11px;background:var(--gold);color:var(--ink);border-radius:999px;padding:0 7px;line-height:18px}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px;display:flex;flex-direction:column;gap:16px}
+h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-size:16px;font-weight:700;margin:0}
+.sub{color:var(--sub);font-size:13px;margin:0}.note{color:var(--sub);font-size:12.5px;margin:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow)}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}.grow{flex:1;min-width:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{min-height:34px;padding:0 13px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-weight:700;font-size:13px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--gold-2);border-color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:0 16px;border-radius:10px;border:1px solid var(--ink);background:var(--ink);color:#fff;font-weight:700;font-size:13.5px}
+.btn:hover{background:#1A2740}.btn:disabled{background:#E7E3D9;border-color:#E7E3D9;color:#9A9384;cursor:not-allowed}
+.btn.gold{background:var(--gold);border-color:var(--gold);color:var(--ink)}
+.btn2{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--line-2);background:var(--card);font-weight:700;font-size:13.5px}
+.btn2:hover{background:var(--gold-soft)}.btn2.danger{color:var(--err);border-color:#E9C3B9}
+.link{border:0;background:none;padding:4px 6px;color:var(--sub);font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap;background:var(--muted)}
+.p-new{background:var(--gold);color:var(--ink)}.p-ok{background:var(--ok);color:var(--ok-ink)}.p-hold{background:var(--skip);color:#555}
+.t-msg{background:var(--slate)}.t-interior{background:var(--gold-soft);color:#6B5418}.t-schedule{background:#ECEAE4}
+.car{font-family:var(--f-en);font-weight:800;font-size:16px;letter-spacing:.02em}
+.text{margin:0;background:var(--muted);border-radius:10px;padding:10px 12px;white-space:pre-wrap}
+.tel-row{display:flex;align-items:center;gap:8px}
+.tel{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 14px 0 6px;border:1px solid var(--gold);border-radius:999px;background:var(--gold-soft);text-decoration:none;font-weight:700;color:var(--text)}
+.tel .ph{width:28px;height:28px;border-radius:50%;background:var(--ink);color:var(--gold-2);display:grid;place-items:center}
+.eye{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--card);display:grid;place-items:center}
+.eye[aria-pressed="true"]{background:var(--ink);color:var(--gold-2)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+th{font-size:12px;color:var(--sub);font-weight:700;white-space:nowrap;background:var(--paper);position:sticky;top:0}
+td input,td select{border:1px solid var(--line-2);border-radius:8px;padding:6px 8px;background:#fff;max-width:130px}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.inp{border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;background:#fff}
+textarea.inp{width:100%;min-height:80px;resize:vertical}
+.summary{display:flex;gap:10px;flex-wrap:wrap}
+.summary div{border-radius:12px;padding:10px 16px;min-width:110px}
+.summary b{display:block;font-size:22px;font-weight:900;line-height:1.1}.summary span{font-size:12px;font-weight:700}
+.cal-head{display:flex;align-items:center;justify-content:space-between}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal .wd{font-size:11.5px;font-weight:700;text-align:center;color:var(--sub)}
+.day{min-height:58px;border-radius:10px;border:1px solid var(--line);background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-weight:700}
+.day small{font-size:10.5px}
+.day.open{background:var(--gold-soft);border-color:var(--gold)}.day.full{background:#ECEAE4}
+.day.past{color:#C9C4B8;background:var(--paper);cursor:default}.day.sel{outline:2px solid var(--ink);outline-offset:1px}
+.two-col{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:start}
+.empty{text-align:center;padding:30px 10px;color:var(--sub)}
+.scrim{position:fixed;inset:0;background:rgba(12,20,34,.5);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px}
+.dialog{width:100%;max-width:440px;background:var(--paper);border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(12,20,34,.3)}
+.dialog .acts{display:flex;gap:10px;justify-content:flex-end}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;max-width:520px;width:calc(100% - 32px);background:var(--ink);color:#fff;border-radius:12px;padding:12px 14px;z-index:60;display:flex;gap:10px;align-items:center}
+.toast.err{background:#7A2E1C}
+.login{max-width:400px;margin:60px auto;padding:0 16px}
+.field{display:flex;flex-direction:column;gap:6px}.field label{font-size:13px;font-weight:700}
+.form-err{color:var(--err);margin:0;font-size:13.5px}.form-err:empty{display:none}
+@media (max-width:860px){.two-col{grid-template-columns:1fr}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="root"><div class="empty">불러오는 중...</div></div>
+<div id="layer"></div>
+<script>
+const SUPABASE_URL='https://kkmmfbqiddirhbiqtqsu.supabase.co';
+const SUPABASE_KEY='sb_publishable_4UNSE0BXfpI5lp4uc-ulxA_EqldYgh-';
+const db=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'carwash-crm-auth'}}):null;
+const I={drop:'<path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>',
+phone:'<path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384"/>',
+eye:'<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+eyeOff:'<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/>',
+check:'<path d="M20 6 9 17l-5-5"/>',back:'<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',arrow:'<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+logout:'<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>'};
+const ic=(n,s)=>`<svg class="i" viewBox="0 0 24 24"${s?` style="width:${s}px;height:${s}px"`:''} aria-hidden="true">${I[n]}</svg>`;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $=s=>document.querySelector(s);
+const WD=['일','월','화','수','목','금','토'], WDF=['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
+const pad=n=>String(n).padStart(2,'0');
+const keyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const kdate=k=>{if(!k)return '';const [y,m,d]=k.split('-').map(Number);return `${m}월 ${d}일 (${WD[new Date(y,m-1,d).getDay()]})`;};
+const when=ts=>{const d=new Date(ts);return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+const maskPhone=p=>String(p||'').replace(/^(\d{3})-?(\d{3,4})-?(\d{4})$/,(m,a,b,c)=>`${a}-${'*'.repeat(b.length)}-${c}`);
+function friendly(err){const m=(err&&err.message)||String(err||'');if(/Invalid login credentials/i.test(m))return '이메일 또는 비밀번호가 맞지 않아요.';if(/Failed to fetch|network/i.test(m))return '인터넷 연결을 확인해 주세요.';if(/[가-힣]/.test(m))return m;return '문제가 생겼어요: '+m;}
+
+const TABS=[['req','고객 요청'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
+const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
+  reqs:[],reqF:'open', accs:[],accAll:false, staff:[], customers:[],
+  jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
+  custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
+
+/* ---------- 데이터 ---------- */
+async function q(p){ const {data,error}=await p; if(error) throw error; return data; }
+async function loadBase(){
+  const me=await q(db.from('profiles').select('id,name,role,status').eq('id',S.session.user.id).maybeSingle());
+  S.me=me;
+  if(!me||me.status!=='승인'||!['admin','master'].includes(me.role)) return false;
+  const [staff,cust]=await Promise.all([
+    q(db.rpc('list_staff_directory')),
+    q(db.from('customers').select('id,name,phone,complex,unit,car_number,car_model,car_color,wash_plan,wash_weekday,field_staff_id,product,contract_date').eq('status','계약완료').is('deleted_at',null).order('complex').order('unit'))
+  ]);
+  S.staff=staff||[]; S.customers=cust||[];
+  if(!S.slotApt) S.slotApt=complexes()[0]||'';
+  return true;
+}
+const complexes=()=>[...new Set(S.customers.map(c=>c.complex).filter(Boolean))];
+const fieldStaff=()=>S.staff.filter(s=>['field','admin','master'].includes(s.role));
+const staffName=id=>(S.staff.find(s=>s.id===id)||{}).name||'미배정';
+async function loadTab(){
+  try{
+    if(S.tab==='req') S.reqs=await q(db.rpc('list_customer_requests',{p_type:null,p_only_open:false}))||[];
+    if(S.tab==='acc') S.accs=await q(db.rpc('list_customer_accounts',{p_only_pending:!S.accAll}))||[];
+    if(S.tab==='jobs') S.jobs=await q(db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)').eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[];
+    if(S.tab==='slots'&&S.slotApt){ const {from,to}=monthRange(); S.slots=await q(db.rpc('list_interior_slots',{p_complex:S.slotApt,p_from:from,p_to:to}))||[]; }
+    S.err='';
+  }catch(e){ S.err=friendly(e); }
+  render();
+}
+async function refreshCounts(){
+  try{
+    const [r,a]=await Promise.all([db.rpc('list_customer_requests',{p_type:null,p_only_open:true}),db.rpc('list_customer_accounts',{p_only_pending:true})]);
+    S.cntReq=(r.data||[]).length; S.cntAcc=(a.data||[]).length;
+  }catch(_){}
+}
+function monthRange(){ const b=new Date(); b.setDate(1); b.setMonth(b.getMonth()+S.slotMonth); const y=b.getFullYear(),m=b.getMonth(); return {y,m,from:keyOf(new Date(y,m,1)),to:keyOf(new Date(y,m+1,0))}; }
+
+/* ---------- 공통 조각 ---------- */
+function phoneLine(phone,key){
+  if(!phone) return '';
+  const shown=S.shown.includes(key), num=String(phone).replace(/\D/g,'');
+  return `<div class="tel-row"><a class="tel" href="tel:${num}"><span class="ph">${ic('phone',14)}</span>${esc(shown?phone:maskPhone(phone))}</a><button class="eye" data-act="eye" data-k="${esc(key)}" aria-pressed="${shown}" aria-label="${shown?'번호 가리기':'전체 번호 보기'}">${ic(shown?'eyeOff':'eye')}</button></div>`;
+}
+const RT={msg:'고객 메시지',interior:'실내세차 신청',schedule:'일정 변경'};
+const statusPill=(st,type)=>{const label=st==='확인'&&type==='schedule'?'적용됨':st;return `<span class="pill ${st==='접수'?'p-new':st==='보류'?'p-hold':'p-ok'}">${esc(label)}</span>`;};
+
+/* ---------- 탭: 고객 요청 ---------- */
+function reqView(){
+  const F={open:r=>r.status==='접수',msg:r=>r.req_type==='msg',interior:r=>r.req_type==='interior',schedule:r=>r.req_type==='schedule',all:()=>true};
+  const list=S.reqs.filter(F[S.reqF]);
+  return `<div class="row"><div class="grow"><h1 class="h">고객 요청</h1><p class="sub">고객 앱에서 들어온 메시지 · 실내세차 신청 · 일정 변경요청</p></div></div>
+  <div class="chips">${[['open','처리 전'],['msg','고객 메시지'],['interior','실내세차'],['schedule','일정 변경'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.reqF===k}" data-act="reqF" data-f="${k}">${l}</button>`).join('')}</div>
+  ${list.length?`<div class="grid">${list.map(r=>{
+    let act='';
+    if(r.status==='접수'||r.status==='보류'){
+      if(r.req_type==='msg') act=`<button class="btn" data-act="req" data-id="${r.id}" data-a="read">${ic('check')}확인함</button>`;
+      if(r.req_type==='interior') act=`<button class="link" data-act="req" data-id="${r.id}" data-a="hold">보류</button><button class="btn" data-act="req" data-id="${r.id}" data-a="approve">${ic('check')}승인</button>`;
+      if(r.req_type==='schedule') act=`<button class="link" data-act="req" data-id="${r.id}" data-a="hold">보류</button><button class="btn" data-act="req" data-id="${r.id}" data-a="approve">${ic('check')}확인</button>`;
+    }
+    return `<article class="card"><div class="row"><span class="pill t-${r.req_type}">${RT[r.req_type]||r.req_type}</span><span class="grow"></span>${statusPill(r.status,r.req_type)}</div>
+      <div><span class="car">${esc(r.car_number||'-')}</span> <span class="sub">${esc(r.customer_name)} · ${esc([r.complex,r.unit].filter(Boolean).join(' '))}</span></div>
+      ${phoneLine(r.phone,'r'+r.id)}
+      <p class="text">${esc(r.message)}</p>
+      <div class="row"><span class="sub grow">${when(r.created_at)}</span>${act}</div></article>`;}).join('')}</div>`
+  :`<div class="empty">표시할 요청이 없어요.</div>`}`;
+}
+
+/* ---------- 탭: 가입 승인 ---------- */
+function accView(){
+  return `<div class="row"><div class="grow"><h1 class="h">고객 가입 승인</h1><p class="sub">고객 앱에 가입한 고객을 계약 정보와 연결해요. 승인하면 고객에게 '가입이 승인되었어요' 알림이 가요.</p></div>
+    <button class="chip" aria-pressed="${!S.accAll}" data-act="accAll" data-v="0">승인 대기</button><button class="chip" aria-pressed="${S.accAll}" data-act="accAll" data-v="1">전체</button></div>
+  ${S.accs.length?`<div class="grid">${S.accs.map(a=>{
+    const cand=a.candidate_customer_id;
+    return `<article class="card"><div class="row"><b class="grow">${esc(a.name)} <span class="sub">(${esc(a.login_id)})</span></b><span class="pill ${a.account_status==='대기'?'p-new':a.account_status==='거절'?'p-hold':'p-ok'}">${esc(a.account_status)}</span></div>
+      <p class="sub">가입 정보 · 차량 ${esc(a.car_number)} · ${when(a.created_at)}</p>
+      ${phoneLine(a.phone,'a'+a.user_id)}
+      ${cand?`<div class="text"><b>${a.customer_id?'연결된':'찾은'} 계약 고객</b><br>${esc(a.candidate_name)} · ${esc([a.candidate_complex,a.candidate_unit].filter(Boolean).join(' '))} · ${esc(a.candidate_car)}</div>`
+        :`<div class="text" style="background:#F8E3DD;color:#7A2E1C">휴대폰·차량번호가 같은 계약 고객을 찾지 못했어요. 아래에서 직접 골라 승인할 수 있어요.</div>`}
+      ${a.account_status!=='승인'?`${!cand?`<select class="inp" id="pick-${a.user_id}" aria-label="연결할 계약 고객"><option value="">계약 고객 고르기</option>${S.customers.map(c=>`<option value="${c.id}">${esc(c.name)} · ${esc(c.complex)} ${esc(c.unit||'')} · ${esc(c.car_number||'')}</option>`).join('')}</select>`:''}
+      <div class="row" style="justify-content:flex-end"><button class="btn2 danger" data-act="acc-reject" data-u="${a.user_id}">거절</button><button class="btn" data-act="acc-approve" data-u="${a.user_id}" data-c="${cand||''}">${ic('check')}승인</button></div>`:''}
+    </article>`;}).join('')}</div>`:`<div class="empty">${S.accAll?'가입한 고객이 없어요.':'승인을 기다리는 가입이 없어요.'}</div>`}`;
+}
+
+/* ---------- 탭: 세차 일정 ---------- */
+function jobsView(){
+  const done=S.jobs.filter(j=>j.status==='완료').length, wait=S.jobs.filter(j=>j.status==='대기').length, skip=S.jobs.filter(j=>j.status==='미작업').length;
+  const fs=fieldStaff();
+  return `<div class="row"><div class="grow"><h1 class="h">세차 일정</h1><p class="sub">날짜별 세차 차량과 담당 직원을 관리해요. '일정 만들기'를 누르면 지정 요일 고객이 자동으로 들어가요.</p></div></div>
+  <div class="row"><button class="btn2" data-act="jday" data-d="-1">이전</button><input type="date" class="inp" id="jday" value="${S.jobDay}" aria-label="날짜"><button class="btn2" data-act="jday" data-d="1">다음</button>
+    <span class="grow"></span><button class="btn gold" data-act="gen">${kdate(S.jobDay)} 일정 만들기</button></div>
+  <div class="summary"><div style="background:var(--gold-soft)"><b>${wait}</b><span>세차대기</span></div><div style="background:var(--ok)"><b>${done}</b><span>세차완료</span></div><div style="background:var(--skip)"><b>${skip}</b><span>미작업</span></div><div style="background:var(--card);border:1px solid var(--line)"><b>${S.jobs.length}</b><span>전체</span></div></div>
+  <div class="card"><div class="row"><b class="grow">차량 추가</b><select class="inp" id="add-cust" style="min-width:260px" aria-label="추가할 고객"><option value="">고객 고르기</option>${S.customers.map(c=>`<option value="${c.id}">${esc(c.complex)} ${esc(c.unit||'')} · ${esc(c.car_number||c.name)}</option>`).join('')}</select><button class="btn2" data-act="add-job">${kdate(S.jobDay)}에 추가</button></div></div>
+  ${S.jobs.length?`<div class="tbl"><table><thead><tr><th>차량번호</th><th>차종·색상</th><th>아파트</th><th>담당 직원</th><th>실내세차</th><th>상태</th><th></th></tr></thead><tbody>
+    ${S.jobs.map(j=>{const c=j.customers||{};return `<tr><td><b class="car" style="font-size:14px">${esc(c.car_number||'-')}</b>${j.moved_from?`<br><span class="sub">원래 ${kdate(j.moved_from)}</span>`:''}</td>
+      <td>${esc([c.car_model,c.car_color].filter(Boolean).join(' · ')||'-')}</td><td>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</td>
+      <td><select data-jstaff="${j.id}" aria-label="담당 직원"><option value="">미배정</option>${fs.map(s=>`<option value="${s.id}" ${s.id===j.staff_id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></td>
+      <td><label class="row" style="gap:6px"><input type="checkbox" data-jint="${j.id}" ${j.interior?'checked':''} ${j.status!=='대기'?'disabled':''}>${j.interior?(j.interior_done?'완료':'포함'):'없음'}</label></td>
+      <td><span class="pill ${j.status==='완료'?'p-ok':j.status==='미작업'?'p-hold':'p-new'}">${j.status}</span></td>
+      <td>${j.status==='대기'?`<button class="link" data-act="del-job" data-id="${j.id}">삭제</button>`:''}</td></tr>`;}).join('')}
+  </tbody></table></div>`:`<div class="empty">이 날 일정이 없어요. 위의 '일정 만들기'를 눌러 보세요.<br><span class="note">고객 세차 설정 탭에서 정기권·지정 요일·담당 직원이 입력된 고객만 자동으로 들어가요.</span></div>`}`;
+}
+
+/* ---------- 탭: 실내세차 일정 ---------- */
+function slotsView(){
+  const apts=complexes(), {y,m}=monthRange(), first=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate(), t=keyOf(new Date());
+  const map=Object.fromEntries(S.slots.map(s=>[s.slot_date,s]));
+  let cells=WD.map(w=>`<span class="wd">${w}</span>`).join(''); for(let i=0;i<first;i++) cells+='<span></span>';
+  for(let d=1;d<=days;d++){ const k=`${y}-${pad(m+1)}-${pad(d)}`, s=map[k], past=k<=t;
+    cells+=`<button class="day ${past?'past':s?(s.booked>=s.capacity?'full':'open'):''} ${S.slotDay===k?'sel':''}" data-act="sday" data-k="${k}" ${past?'disabled':''}>${d}${s?`<small>${s.booked}/${s.capacity}</small>`:''}</button>`; }
+  const s=S.slotDay&&map[S.slotDay];
+  return `<div class="row"><div class="grow"><h1 class="h">실내세차 일정</h1><p class="sub">단지별로 실내세차 가능한 날짜와 받을 차량 수를 열어 두면 고객 앱에서 신청할 수 있어요.</p></div></div>
+  ${apts.length?`<div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.slotApt===a}" data-act="sapt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>`:'<div class="empty">계약완료 고객이 있는 단지가 없어요.</div>'}
+  ${S.slotApt?`<div class="two-col"><div class="card"><div class="cal-head"><button class="btn2" data-act="smonth" data-d="-1" ${S.slotMonth<=0?'disabled':''}>${ic('back')}</button><h2 class="h">${y}년 ${m+1}월 · ${esc(S.slotApt)}</h2><button class="btn2" data-act="smonth" data-d="1" ${S.slotMonth>=3?'disabled':''}>${ic('arrow')}</button></div><div class="cal">${cells}</div><p class="note">숫자는 '신청 대수 / 받을 수 있는 대수'예요.</p></div>
+  <div class="card">${S.slotDay?`<h2 class="h">${kdate(S.slotDay)}</h2>
+    ${s?`<div class="row"><span class="grow">받을 수 있는 차량</span><button class="btn2" data-act="cap" data-d="-1" ${s.capacity<=Math.max(1,s.booked)?'disabled':''}>−</button><b style="font-size:18px;min-width:44px;text-align:center">${s.capacity}대</b><button class="btn2" data-act="cap" data-d="1">+</button></div>
+      <p class="sub">신청한 차량 ${s.booked}대${s.booked_cars&&s.booked_cars.length?' · '+s.booked_cars.map(esc).join(', '):''}</p>
+      ${s.booked?'<p class="note">신청한 고객이 있어서 이 날짜는 닫을 수 없어요.</p>':`<button class="btn2 danger" data-act="close-slot">이 날짜 신청 닫기</button>`}`
+    :`<p class="sub">아직 신청을 받지 않는 날짜예요.</p><button class="btn" data-act="open-slot">${ic('check')}이 날짜 신청 열기 (2대)</button>`}`
+  :'<p class="sub">달력에서 날짜를 눌러 신청을 열거나 닫으세요.</p>'}</div></div>`:''}`;
+}
+
+/* ---------- 탭: 고객 세차 설정 ---------- */
+function custView(){
+  const apts=['전체',...complexes()], qq=S.custQ.trim().toLowerCase(), fs=fieldStaff();
+  const list=S.customers.filter(c=>(S.custApt==='전체'||c.complex===S.custApt)&&(!qq||[c.name,c.car_number,c.unit,c.phone].join(' ').toLowerCase().includes(qq)));
+  return `<div class="row"><div class="grow"><h1 class="h">고객 세차 설정</h1><p class="sub">계약완료 고객의 정기권 횟수·지정 요일·차종·색상·담당 현장직원을 정해요. 세차 일정 자동 만들기에 쓰여요.</p></div></div>
+  <div class="row"><input class="inp" id="custQ" placeholder="이름·차량번호·동 검색" value="${esc(S.custQ)}" style="min-width:220px"><div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.custApt===a}" data-act="capt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div></div>
+  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>차량번호</th><th>정기권</th><th>지정 요일</th><th>차종</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
+    ${list.map(c=>`<tr data-cid="${c.id}"><td><b>${esc(c.name)}</b></td><td>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</td><td>${esc(c.car_number||'-')}</td>
+      <td><select data-f="wash_plan"><option value="">없음</option><option value="2" ${c.wash_plan===2?'selected':''}>월 2회</option><option value="4" ${c.wash_plan===4?'selected':''}>월 4회</option></select></td>
+      <td><select data-f="wash_weekday"><option value="">미정</option>${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${c.wash_weekday===d?'selected':''}>${WDF[d]}</option>`).join('')}</select></td>
+      <td><input data-f="car_model" value="${esc(c.car_model||'')}" placeholder="예: 아반떼"></td>
+      <td><input data-f="car_color" value="${esc(c.car_color||'')}" placeholder="예: 흰색" style="max-width:90px"></td>
+      <td><select data-f="field_staff_id"><option value="">미배정</option>${fs.map(s=>`<option value="${s.id}" ${s.id===c.field_staff_id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></td>
+      <td><button class="btn2" data-act="save-cust" data-id="${c.id}">저장</button></td></tr>`).join('')}
+  </tbody></table></div>`:'<div class="empty">조건에 맞는 계약완료 고객이 없어요.</div>'}`;
+}
+
+/* ---------- 탭: 공지 보내기 ---------- */
+function noticeView(){
+  const apts=['전체',...complexes()];
+  const list=S.customers.filter(c=>S.noticeApt==='전체'||c.complex===S.noticeApt);
+  const all=list.length&&list.every(c=>S.noticeSel.includes(c.id));
+  return `<div class="row"><div class="grow"><h1 class="h">공지 보내기</h1><p class="sub">고른 고객의 고객 앱 알림함으로 공지가 가요.</p></div></div>
+  <div class="two-col"><div class="card"><div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.noticeApt===a}" data-act="napt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>
+    <div class="row"><button class="link" data-act="nall">${all?'선택 해제':'목록 전체 선택'}</button><span class="grow"></span><b>${S.noticeSel.length}명 선택</b></div>
+    <div class="tbl" style="max-height:420px;overflow:auto"><table><tbody>${list.map(c=>`<tr><td style="width:36px"><input type="checkbox" data-nsel="${c.id}" ${S.noticeSel.includes(c.id)?'checked':''} aria-label="${esc(c.name)} 선택"></td><td>${esc(c.name)}</td><td>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</td><td>${esc(c.car_number||'')}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="card"><div class="chips">${[['우천 연기','비 예보로 오늘 세차가 내일로 하루 미뤄져요. 이용에 불편을 드려 죄송해요.'],['시간 변경','오늘 세차 시간이 변경되었어요. 차량은 평소 위치에 두시면 돼요.'],['휴무 안내','휴무일 안내드려요. 해당 회차는 다음 날 진행해요.']].map(([l,b])=>`<button class="chip" data-act="tpl" data-b="${esc(b)}">${l}</button>`).join('')}</div>
+    <label for="notice" style="font-weight:700;font-size:13px">공지 내용</label><textarea class="inp" id="notice" maxlength="300">${esc(S.notice)}</textarea>
+    <button class="btn" id="nsend" data-act="nsend" ${S.noticeSel.length&&S.notice.trim()?'':'disabled'}>${ic('check')}선택한 고객에게 공지 보내기</button></div></div>`;
+}
+
+/* ---------- 그리기 ---------- */
+function render(){
+  const R=$('#root');
+  if(!db){ R.innerHTML='<div class="empty">인터넷 연결을 확인한 뒤 새로고침해 주세요.</div>'; return; }
+  if(!S.ready) return;
+  const fid=document.activeElement&&document.activeElement.id;
+  if(!S.session){
+    R.innerHTML=`<div class="login"><div class="logo" style="justify-content:center;color:var(--text);margin-bottom:14px"><span class="mark" style="color:#fff">${ic('drop')}</span><span><b>AUTOHANDS</b><small style="color:var(--sub)">ADMIN</small></span></div>
+    <form id="login" class="card" novalidate><h2 class="h">관리자 로그인</h2><p class="sub">CRM과 같은 이메일·비밀번호를 써요</p>
+      <div class="field"><label for="em">이메일</label><input class="inp" id="em" type="email" autocomplete="username"></div>
+      <div class="field"><label for="pw">비밀번호</label><input class="inp" id="pw" type="password" autocomplete="current-password"></div>
+      <p class="form-err" role="alert">${esc(S.err)}</p><button class="btn" type="submit" ${S.busy?'disabled':''}>${S.busy?'로그인 중...':'로그인'}</button></form></div>`;
+  } else if(!S.me||S.me.status!=='승인'||!['admin','master'].includes(S.me.role)){
+    R.innerHTML=`<div class="login"><div class="card"><h2 class="h">관리자만 들어올 수 있어요</h2><p class="sub">관리자 계정으로 로그인해 주세요. 현장직원은 직원 앱을 이용해 주세요.</p><div class="row"><a class="btn2" href="/field">직원 앱으로</a><button class="btn2" data-act="logout">로그아웃</button></div></div></div>`;
+  } else {
+    const views={req:reqView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
+    R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div>
+      <a href="/">${ic('back',14)}CRM으로</a><a href="/field">직원 앱</a><button class="tl" data-act="reload">${ic('refresh',14)}새로고침</button><button class="tl" data-act="logout">${ic('logout',14)}${esc(S.me.name)} 로그아웃</button></div></header>
+    <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}</button>`).join('')}</div></nav>
+    <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${views[S.tab]()}</main>`;
+  }
+  if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
+  const L=$('#layer'),d=S.dialog;
+  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:'';
+  if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
+}
+let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3400);}
+function ask(title,body,ok,run){ S.dialog={title,body,ok,run}; render(); }
+async function act(fn,okMsg,after){
+  try{ await fn(); if(okMsg) toast(okMsg); }catch(e){ toast(friendly(e),true); }
+  S.dialog=null; S.busy=false;
+  if(after) await after(); await refreshCounts(); await loadTab();
+}
+const jobsAfter=null;
+
+document.addEventListener('click',async e=>{
+  const t=e.target.closest('[data-act]'); if(!t) return;
+  if(t.classList.contains('scrim')&&e.target.closest('[data-stop]')) return;
+  const a=t.dataset.act, id=Number(t.dataset.id);
+  switch(a){
+    case 'logout': await db.auth.signOut(); break;
+    case 'reload': try{await loadBase();}catch(_){} await refreshCounts(); await loadTab(); toast('새로 불러왔어요.'); break;
+    case 'tab': S.tab=t.dataset.t; S.err=''; render(); await loadTab(); break;
+    case 'eye': {const k=t.dataset.k;S.shown=S.shown.includes(k)?S.shown.filter(x=>x!==k):[...S.shown,k];render();break;}
+    case 'close': if(!S.busy){S.dialog=null;render();} break;
+    case 'confirm': if(S.dialog&&!S.busy){ S.busy=true; render(); await S.dialog.run(); } break;
+    case 'reqF': S.reqF=t.dataset.f; render(); break;
+    case 'req': {
+      const r=S.reqs.find(x=>x.id===id), how=t.dataset.a;
+      const label=how==='read'?'확인함으로 표시':how==='hold'?'보류':r.req_type==='schedule'?'일정 변경 확인':'실내세차 승인';
+      const body=how==='approve'&&r.req_type==='schedule'?`${kdate(r.base_date)} 회차를 ${kdate(r.target_date)}로 이 주만 옮기고, 고객에게 '요청사항이 적용되었습니다.' 알림을 보내요.`
+        :how==='approve'?`${kdate(r.target_date)} 실내세차를 확정하고 고객에게 알림을 보내요.`
+        :how==='hold'?'고객에게 "담당 매니저가 확인 후 연락드릴게요" 알림이 가요.':'이 메시지를 확인한 것으로 표시해요. 고객 앱에 "매니저 확인"으로 보여요.';
+      ask(label+'할까요?',body,label,()=>act(()=>q(db.rpc('handle_customer_request',{p_id:id,p_action:how})),'처리했어요.'));
+      break;
+    }
+    case 'accAll': S.accAll=t.dataset.v==='1'; await loadTab(); break;
+    case 'acc-approve': {
+      const u=t.dataset.u, sel=document.getElementById('pick-'+u), cid=t.dataset.c?null:(sel&&sel.value?Number(sel.value):null);
+      if(!t.dataset.c&&!cid){ toast('연결할 계약 고객을 먼저 골라 주세요.',true); break; }
+      ask('가입을 승인할까요?','계약 고객과 연결하고 고객에게 승인 알림을 보내요.','승인',()=>act(()=>q(db.rpc('approve_customer_account',{p_user:u,p_customer_id:cid})),'승인했어요.'));
+      break;
+    }
+    case 'acc-reject': { const u=t.dataset.u; ask('가입을 거절할까요?','고객 앱에 "가입이 승인되지 않았어요" 안내가 보여요. 고객이 정보를 고쳐 다시 요청할 수 있어요.','거절',()=>act(()=>q(db.rpc('reject_customer_account',{p_user:u})),'거절했어요.')); break; }
+    case 'jday': {const [y,m,d]=S.jobDay.split('-').map(Number);S.jobDay=keyOf(new Date(y,m-1,d+Number(t.dataset.d)));await loadTab();break;}
+    case 'gen': ask(`${kdate(S.jobDay)} 일정을 만들까요?`,'지정 요일이 이 날인 계약 고객을 담당 직원에게 자동 배정해요. 이미 있는 차량은 다시 넣지 않아요.','일정 만들기',()=>act(async()=>{const n=await q(db.rpc('generate_wash_jobs',{p_date:S.jobDay}));toast(`${n||0}대를 새로 넣었어요.`);},null)); break;
+    case 'add-job': {
+      const cid=Number(($('#add-cust')||{}).value||0); if(!cid){toast('추가할 고객을 골라 주세요.',true);break;}
+      const c=S.customers.find(x=>x.id===cid);
+      await act(()=>q(db.from('wash_jobs').insert({customer_id:cid,wash_date:S.jobDay,staff_id:c&&c.field_staff_id||null,sort_order:999})),'추가했어요.'); break;
+    }
+    case 'del-job': ask('이 일정을 삭제할까요?','세차 대기 상태의 일정만 지울 수 있어요.','삭제',()=>act(()=>q(db.from('wash_jobs').delete().eq('id',id)),'삭제했어요.')); break;
+    case 'sapt': S.slotApt=t.dataset.a; S.slotDay=null; await loadTab(); break;
+    case 'smonth': S.slotMonth=Math.max(0,Math.min(3,S.slotMonth+Number(t.dataset.d))); S.slotDay=null; await loadTab(); break;
+    case 'sday': S.slotDay=t.dataset.k; render(); break;
+    case 'open-slot': await act(()=>q(db.from('interior_slots').insert({complex:S.slotApt,slot_date:S.slotDay,capacity:2})),`${kdate(S.slotDay)} 신청을 열었어요.`); break;
+    case 'close-slot': await act(()=>q(db.from('interior_slots').delete().eq('complex',S.slotApt).eq('slot_date',S.slotDay)),`${kdate(S.slotDay)} 신청을 닫았어요.`); break;
+    case 'cap': { const s=S.slots.find(x=>x.slot_date===S.slotDay); if(!s) break; const v=Math.max(Math.max(1,s.booked),Math.min(50,s.capacity+Number(t.dataset.d))); await act(()=>q(db.from('interior_slots').update({capacity:v}).eq('complex',S.slotApt).eq('slot_date',S.slotDay)),null); break; }
+    case 'capt': S.custApt=t.dataset.a; render(); break;
+    case 'save-cust': {
+      const tr=t.closest('tr'), get=f=>tr.querySelector(`[data-f="${f}"]`).value;
+      const patch={wash_plan:get('wash_plan')?Number(get('wash_plan')):null,wash_weekday:get('wash_weekday')!==''?Number(get('wash_weekday')):null,car_model:get('car_model').trim()||null,car_color:get('car_color').trim()||null,field_staff_id:get('field_staff_id')||null};
+      try{ await q(db.from('customers').update(patch).eq('id',id)); Object.assign(S.customers.find(c=>c.id===id),patch); toast('저장했어요.'); }catch(err){ toast(friendly(err),true); }
+      break;
+    }
+    case 'napt': S.noticeApt=t.dataset.a; render(); break;
+    case 'nall': {const ids=S.customers.filter(c=>S.noticeApt==='전체'||c.complex===S.noticeApt).map(c=>c.id);const all=ids.every(x=>S.noticeSel.includes(x));S.noticeSel=all?S.noticeSel.filter(x=>!ids.includes(x)):[...new Set([...S.noticeSel,...ids])];render();break;}
+    case 'tpl': S.notice=t.dataset.b; render(); break;
+    case 'nsend': ask(`${S.noticeSel.length}명에게 공지를 보낼까요?`,S.notice.trim(),'보내기',()=>act(async()=>{const n=await q(db.rpc('send_customer_notice',{p_customer_ids:S.noticeSel,p_title:'공지사항',p_body:S.notice.trim()}));toast(`${n||0}명에게 보냈어요.`);S.notice='';S.noticeSel=[];},null)); break;
+  }
+});
+document.addEventListener('change',async e=>{
+  const t=e.target;
+  if(t.id==='jday'&&t.value){ S.jobDay=t.value; await loadTab(); return; }
+  if(t.dataset.jstaff){ await act(()=>q(db.from('wash_jobs').update({staff_id:t.value||null}).eq('id',Number(t.dataset.jstaff))),'담당 직원을 바꿨어요.'); return; }
+  if(t.dataset.jint){ await act(()=>q(db.from('wash_jobs').update({interior:t.checked}).eq('id',Number(t.dataset.jint))),null); return; }
+  if(t.dataset.nsel){ const id=Number(t.dataset.nsel); S.noticeSel=t.checked?[...new Set([...S.noticeSel,id])]:S.noticeSel.filter(x=>x!==id); render(); }
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='custQ'){ S.custQ=e.target.value; render(); }
+  if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nsend'); if(b) b.disabled=!(S.noticeSel.length&&S.notice.trim()); }
+});
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} });
+document.addEventListener('submit',async e=>{
+  if(e.target.id!=='login') return; e.preventDefault();
+  const em=$('#em').value.trim(), pw=$('#pw').value;
+  if(!em||!pw){ S.err='이메일과 비밀번호를 입력해 주세요.'; render(); return; }
+  S.busy=true; S.err=''; render(); $('#em').value=em;
+  const {error}=await db.auth.signInWithPassword({email:em,password:pw});
+  S.busy=false; if(error){ S.err=friendly(error); render(); $('#em').value=em; }
+});
+async function start(){
+  try{ const ok=await loadBase(); if(ok){ await refreshCounts(); await loadTab(); return; } }catch(e){ S.err=friendly(e); }
+  render();
+}
+(async function boot(){
+  if(!db){ S.ready=true; render(); return; }
+  const {data}=await db.auth.getSession(); S.session=data.session; S.ready=true;
+  if(S.session) await start(); else render();
+  db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; render(); return; } if(!was){ S.err=''; await start(); } });
+})();
+</script>
+</body>
+</html>
