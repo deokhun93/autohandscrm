@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>오토핸즈 직원 앱</title>
 <meta name="theme-color" content="#0C1422">
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="/manifest-field.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="오토핸즈 직원">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
@@ -262,5 +265,6 @@ document.addEventListener('submit',async e=>{
   setInterval(()=>{ const ae=document.activeElement; if(S.session&&S.me&&!S.dialog&&!(ae&&/INPUT|TEXTAREA/.test(ae.tagName))&&document.visibilityState==='visible') loadAll(); },60000);
 })();
 </script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}</script>
 </body>
 </html>
