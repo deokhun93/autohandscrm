@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>오토핸즈 관리자 모드</title>
 <meta name="theme-color" content="#0C1422">
+<link rel="manifest" href="/manifest-admin.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon-admin.png">
+<link rel="icon" href="/icon-admin-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="오토핸즈 관리자">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -82,6 +88,18 @@ textarea.inp{width:100%;min-height:80px;resize:vertical}
 .field{display:flex;flex-direction:column;gap:6px}.field label{font-size:13px;font-weight:700}
 .form-err{color:var(--err);margin:0;font-size:13.5px}.form-err:empty{display:none}
 @media (max-width:860px){.two-col{grid-template-columns:1fr}.grid{grid-template-columns:1fr}}
+@media (max-width:700px){
+  .top{position:static}.tabs{top:0}
+  .top .in{padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 10px;gap:4px}
+  .top .lbl{display:none}
+  .top a,.top button.tl{padding:8px;min-width:40px;min-height:40px;justify-content:center}
+  .wrap{padding:16px 14px 50px}
+  .btn,.btn2{min-height:44px}
+  .chip{min-height:38px}
+  .card{padding:14px}
+  .summary div{min-width:0;flex:1;padding:10px 12px}
+  td input,td select{max-width:110px}
+}
 </style>
 </head>
 <body>
@@ -108,6 +126,10 @@ const when=ts=>{const d=new Date(ts);return `${d.getMonth()+1}/${d.getDate()} ${
 const maskPhone=p=>String(p||'').replace(/^(\d{3})-?(\d{3,4})-?(\d{4})$/,(m,a,b,c)=>`${a}-${'*'.repeat(b.length)}-${c}`);
 function friendly(err){const m=(err&&err.message)||String(err||'');if(/Invalid login credentials/i.test(m))return '이메일 또는 비밀번호가 맞지 않아요.';if(/Failed to fetch|network/i.test(m))return '인터넷 연결을 확인해 주세요.';if(/[가-힣]/.test(m))return m;return '문제가 생겼어요: '+m;}
 
+let deferredInstall=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;if(typeof render==='function'&&S.ready)render();});
+window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리자 앱을 설치했어요. 홈 화면의 오토핸즈 관리자 아이콘으로 열어 주세요.');render();});
+const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const TABS=[['req','고객 요청'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
   reqs:[],reqF:'open', accs:[],accAll:false, staff:[], customers:[],
@@ -282,7 +304,7 @@ function render(){
   } else {
     const views={req:reqView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
     R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div>
-      <a href="/">${ic('back',14)}CRM으로</a><a href="/field">직원 앱</a><button class="tl" data-act="reload">${ic('refresh',14)}새로고침</button><button class="tl" data-act="logout">${ic('logout',14)}${esc(S.me.name)} 로그아웃</button></div></header>
+      ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<a href="/" aria-label="CRM으로">${ic('back',14)}<span class="lbl">CRM으로</span></a><a href="/field" aria-label="직원 앱">${ic('arrow',14)}<span class="lbl">직원 앱</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
     <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}</button>`).join('')}</div></nav>
     <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${views[S.tab]()}</main>`;
   }
@@ -305,6 +327,7 @@ document.addEventListener('click',async e=>{
   if(t.classList.contains('scrim')&&e.target.closest('[data-stop]')) return;
   const a=t.dataset.act, id=Number(t.dataset.id);
   switch(a){
+    case 'install': if(deferredInstall){ deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall=null; render(); } break;
     case 'logout': await db.auth.signOut(); break;
     case 'reload': try{await loadBase();}catch(_){} await refreshCounts(); await loadTab(); toast('새로 불러왔어요.'); break;
     case 'tab': S.tab=t.dataset.t; S.err=''; render(); await loadTab(); break;
@@ -387,5 +410,6 @@ async function start(){
   db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; render(); return; } if(!was){ S.err=''; await start(); } });
 })();
 </script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}</script>
 </body>
 </html>
