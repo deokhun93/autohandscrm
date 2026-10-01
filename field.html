@@ -105,6 +105,41 @@ msg:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',bell:'<path d="M10.268 21a2 2 0
 refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
 admin:'<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>'};
 const ic=(n,s)=>`<svg class="i" viewBox="0 0 24 24"${s?` style="width:${s}px;height:${s}px"`:''} aria-hidden="true">${I[n]}</svg>`;
+/* ---------- 휴대폰 알림 (직원·관리자) ---------- */
+I.bell=I.bell||'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>';
+const VAPID_PUBLIC_KEY='BK2UTh2PXr0eHlrzE6aF_yQz6oePPhcAc2brXaYMI19efZnUKa8oI8OR8BLG-QsJayVjcRNA7Zyu0xX3icYEE7A';
+let pushState='checking';
+function kickPush(){ try{ if(db) db.functions.invoke('hyper-endpoint',{body:{}}).catch(()=>{}); }catch(_){} }
+function b64ToU8(b){const p='='.repeat((4-b.length%4)%4);const raw=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));}
+const pushIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent), pushStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+async function checkPush(){
+  try{
+    if(pushIOS()&&!pushStandalone()) pushState='ios';
+    else if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)) pushState='unsupported';
+    else if(Notification.permission==='denied') pushState='denied';
+    else { const reg=await navigator.serviceWorker.getRegistration(); const sub=reg?await reg.pushManager.getSubscription():null; pushState=(sub&&Notification.permission==='granted')?'on':'off'; }
+  }catch(_){ pushState='off'; }
+}
+async function enablePush(){
+  await checkPush();
+  if(pushState==='on'){ toast('휴대폰 알림이 이미 켜져 있어요.'); return; }
+  if(pushState==='ios'){ toast('아이폰은 홈 화면에 추가한 앱으로 열어야 알림을 받을 수 있어요.',true); return; }
+  if(pushState==='unsupported'){ toast('이 브라우저는 알림을 지원하지 않아요. 크롬에서 열어 주세요.',true); return; }
+  if(pushState==='denied'){ toast('알림이 차단되어 있어요. 휴대폰 설정 → 애플리케이션 → 앱(또는 Chrome) → 알림을 허용해 주세요.',true); return; }
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted'){ await checkPush(); render(); toast('알림이 허용되지 않았어요.',true); return; }
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(VAPID_PUBLIC_KEY)});
+    const j=sub.toJSON();
+    const {error}=await db.rpc('save_staff_push',{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth});
+    if(error) throw error;
+    pushState='on'; render(); toast('휴대폰 알림을 켰어요. 새 요청이 오면 바로 알려드려요.');
+  }catch(e){ await checkPush(); render(); toast(friendly(e),true); }
+}
+checkPush().then(()=>{ try{ render(); }catch(_){} });
+
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $=s=>document.querySelector(s);
 const WD=['일','월','화','수','목','금','토'];
@@ -177,7 +212,8 @@ function homeView(){
   const list=S.jobs.filter(j=>S.apt==='전체'||((j.customers||{}).complex||'기타')===S.apt);
   const groups=[...new Set(list.map(j=>(j.customers||{}).complex||'기타'))];
   const month=S.day.slice(5,7).replace(/^0/,'');
-  return `<div class="appbar">${logo()}<div class="row" style="gap:8px">${['admin','master'].includes(S.me.role)?`<a class="icon-btn" href="/admin" aria-label="관리자 모드">${ic('admin')}</a>`:''}<button class="icon-btn" data-act="reload" aria-label="새로고침">${ic('refresh')}</button><button class="icon-btn" data-act="logout" aria-label="로그아웃">${ic('logout')}</button></div></div>
+  return `<div class="appbar">${logo()}<div class="row" style="gap:8px">${['admin','master'].includes(S.me.role)?`<a class="icon-btn" href="/admin" aria-label="관리자 모드">${ic('admin')}</a>`:''}<button class="icon-btn" data-act="push-on" aria-label="${pushState==='on'?'휴대폰 알림 켜짐':'휴대폰 알림 켜기'}" style="${pushState==='on'?'background:var(--navy,#0C1422);color:#E2C77F;border-color:transparent':''}">${ic('bell')}</button><button class="icon-btn" data-act="reload" aria-label="새로고침">${ic('refresh')}</button><button class="icon-btn" data-act="logout" aria-label="로그아웃">${ic('logout')}</button></div></div>
+  ${pushState==='off'?`<button class="btn2" data-act="push-on" style="justify-content:center">${ic('bell')}휴대폰 알림 켜기</button>`:''}
   <div><p class="sub">${esc(S.me.name)} 님 · 회사 배정</p><h1 class="h">${S.day===keyOf(new Date())?'오늘':kdate(S.day)} 세차 ${s.today_total}대</h1></div>
   <div class="datebar"><button class="chip" data-act="day" data-d="-1">이전</button><input type="date" id="day" value="${S.day}" aria-label="날짜 선택"><button class="chip" data-act="day" data-d="1">다음</button><button class="chip" data-act="today">오늘</button></div>
   ${S.err?`<p class="req-line" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}
@@ -213,7 +249,7 @@ async function upd(id,patch,okMsg){
   const {error}=await db.from('wash_jobs').update(patch).eq('id',id);
   S.busy=false; S.dialog=null;
   if(error){ toast(friendly(error),true); render(); return; }
-  if(okMsg) toast(okMsg); await loadAll();
+  kickPush(); if(okMsg) toast(okMsg); await loadAll();
 }
 document.addEventListener('click',async e=>{
   const t=e.target.closest('[data-act]'); if(!t) return;
@@ -222,6 +258,7 @@ document.addEventListener('click',async e=>{
   switch(a){
     case 'logout': await db.auth.signOut(); break;
     case 'reload': await loadAll(); toast('새로 불러왔어요.'); break;
+    case 'push-on': await enablePush(); break;
     case 'day': {const [y,m,d]=S.day.split('-').map(Number);const dt=new Date(y,m-1,d+Number(t.dataset.d));S.day=keyOf(dt);S.sel=[];await loadAll();break;}
     case 'today': S.day=keyOf(new Date()); S.sel=[]; await loadAll(); break;
     case 'apt': S.apt=t.dataset.a; render(); break;
@@ -237,7 +274,7 @@ document.addEventListener('click',async e=>{
       const {data,error}=await db.rpc('send_customer_notice',{p_customer_ids:S.sel,p_title:'공지사항',p_body:body});
       S.busy=false;
       if(error){ toast(friendly(error),true); render(); break; }
-      S.notice=''; S.sel=[]; toast(`${data||0}명에게 공지를 보냈어요.`); render(); break;
+      kickPush(); S.notice=''; S.sel=[]; toast(`${data||0}명에게 공지를 보냈어요.`); render(); break;
     }
   }
 });

@@ -116,6 +116,41 @@ eyeOff:'<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696
 check:'<path d="M20 6 9 17l-5-5"/>',back:'<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',arrow:'<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
 logout:'<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',refresh:'<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>'};
 const ic=(n,s)=>`<svg class="i" viewBox="0 0 24 24"${s?` style="width:${s}px;height:${s}px"`:''} aria-hidden="true">${I[n]}</svg>`;
+/* ---------- 휴대폰 알림 (직원·관리자) ---------- */
+I.bell=I.bell||'<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>';
+const VAPID_PUBLIC_KEY='BK2UTh2PXr0eHlrzE6aF_yQz6oePPhcAc2brXaYMI19efZnUKa8oI8OR8BLG-QsJayVjcRNA7Zyu0xX3icYEE7A';
+let pushState='checking';
+function kickPush(){ try{ if(db) db.functions.invoke('hyper-endpoint',{body:{}}).catch(()=>{}); }catch(_){} }
+function b64ToU8(b){const p='='.repeat((4-b.length%4)%4);const raw=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));}
+const pushIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent), pushStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+async function checkPush(){
+  try{
+    if(pushIOS()&&!pushStandalone()) pushState='ios';
+    else if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)) pushState='unsupported';
+    else if(Notification.permission==='denied') pushState='denied';
+    else { const reg=await navigator.serviceWorker.getRegistration(); const sub=reg?await reg.pushManager.getSubscription():null; pushState=(sub&&Notification.permission==='granted')?'on':'off'; }
+  }catch(_){ pushState='off'; }
+}
+async function enablePush(){
+  await checkPush();
+  if(pushState==='on'){ toast('휴대폰 알림이 이미 켜져 있어요.'); return; }
+  if(pushState==='ios'){ toast('아이폰은 홈 화면에 추가한 앱으로 열어야 알림을 받을 수 있어요.',true); return; }
+  if(pushState==='unsupported'){ toast('이 브라우저는 알림을 지원하지 않아요. 크롬에서 열어 주세요.',true); return; }
+  if(pushState==='denied'){ toast('알림이 차단되어 있어요. 휴대폰 설정 → 애플리케이션 → 앱(또는 Chrome) → 알림을 허용해 주세요.',true); return; }
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted'){ await checkPush(); render(); toast('알림이 허용되지 않았어요.',true); return; }
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(VAPID_PUBLIC_KEY)});
+    const j=sub.toJSON();
+    const {error}=await db.rpc('save_staff_push',{p_endpoint:j.endpoint,p_p256dh:j.keys.p256dh,p_auth:j.keys.auth});
+    if(error) throw error;
+    pushState='on'; render(); toast('휴대폰 알림을 켰어요. 새 요청이 오면 바로 알려드려요.');
+  }catch(e){ await checkPush(); render(); toast(friendly(e),true); }
+}
+checkPush().then(()=>{ try{ render(); }catch(_){} });
+
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $=s=>document.querySelector(s);
 const WD=['일','월','화','수','목','금','토'], WDF=['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
@@ -165,6 +200,7 @@ async function loadTab(){
   render();
 }
 async function refreshCounts(){
+  kickPush();
   try{
     const [r,a]=await Promise.all([db.rpc('list_customer_requests',{p_type:null,p_only_open:true}),db.rpc('list_customer_accounts',{p_only_pending:true})]);
     S.cntReq=(r.data||[]).length; S.cntAcc=(a.data||[]).length;
@@ -304,7 +340,7 @@ function render(){
   } else {
     const views={req:reqView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
     R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div>
-      ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<a href="/" aria-label="CRM으로">${ic('back',14)}<span class="lbl">CRM으로</span></a><a href="/field" aria-label="직원 앱">${ic('arrow',14)}<span class="lbl">직원 앱</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
+      ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<button class="tl" data-act="push-on" aria-label="휴대폰 알림" style="${pushState==='on'?'color:var(--gold-2)':''}">${ic('bell',14)}<span${pushState==='on'?' class="lbl"':''}>${pushState==='on'?'알림 켜짐':'알림 켜기'}</span></button><a href="/" aria-label="CRM으로">${ic('back',14)}<span class="lbl">CRM으로</span></a><a href="/field" aria-label="직원 앱">${ic('arrow',14)}<span class="lbl">직원 앱</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
     <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}</button>`).join('')}</div></nav>
     <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${views[S.tab]()}</main>`;
   }
@@ -316,7 +352,7 @@ function render(){
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3400);}
 function ask(title,body,ok,run){ S.dialog={title,body,ok,run}; render(); }
 async function act(fn,okMsg,after){
-  try{ await fn(); if(okMsg) toast(okMsg); }catch(e){ toast(friendly(e),true); }
+  try{ await fn(); kickPush(); if(okMsg) toast(okMsg); }catch(e){ toast(friendly(e),true); }
   S.dialog=null; S.busy=false;
   if(after) await after(); await refreshCounts(); await loadTab();
 }
@@ -327,6 +363,7 @@ document.addEventListener('click',async e=>{
   if(t.classList.contains('scrim')&&e.target.closest('[data-stop]')) return;
   const a=t.dataset.act, id=Number(t.dataset.id);
   switch(a){
+    case 'push-on': await enablePush(); break;
     case 'install': if(deferredInstall){ deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall=null; render(); } break;
     case 'logout': await db.auth.signOut(); break;
     case 'reload': try{await loadBase();}catch(_){} await refreshCounts(); await loadTab(); toast('새로 불러왔어요.'); break;
