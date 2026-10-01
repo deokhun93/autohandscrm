@@ -1,4 +1,5 @@
 {
+  "id": "/crm-app",
   "name": "오토핸즈CRM",
   "short_name": "오토핸즈CRM",
   "description": "오토핸즈 영업 고객관리",
@@ -7,7 +8,7 @@
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
-  "theme_color": "#1e40af",
+  "theme_color": "#0C1422",
   "lang": "ko",
   "icons": [
     {
