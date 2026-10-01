@@ -135,6 +135,7 @@ async function loadTab(){
   try{
     if(S.tab==='req') S.reqs=await q(db.rpc('list_customer_requests',{p_type:null,p_only_open:false}))||[];
     if(S.tab==='acc') S.accs=await q(db.rpc('list_customer_accounts',{p_only_pending:!S.accAll}))||[];
+    if(S.tab==='jobs'){ await db.rpc('ensure_wash_jobs',{p_from:S.jobDay,p_to:S.jobDay}); }
     if(S.tab==='jobs') S.jobs=await q(db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)').eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[];
     if(S.tab==='slots'&&S.slotApt){ const {from,to}=monthRange(); S.slots=await q(db.rpc('list_interior_slots',{p_complex:S.slotApt,p_from:from,p_to:to}))||[]; }
     S.err='';
@@ -199,7 +200,7 @@ function accView(){
 function jobsView(){
   const done=S.jobs.filter(j=>j.status==='완료').length, wait=S.jobs.filter(j=>j.status==='대기').length, skip=S.jobs.filter(j=>j.status==='미작업').length;
   const fs=fieldStaff();
-  return `<div class="row"><div class="grow"><h1 class="h">세차 일정</h1><p class="sub">날짜별 세차 차량과 담당 직원을 관리해요. '일정 만들기'를 누르면 지정 요일 고객이 자동으로 들어가요.</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">세차 일정</h1><p class="sub">날짜를 고르면 지정 요일 고객이 자동으로 들어가요. 직원 앱에서도 그 날짜를 열면 자동으로 채워져요.</p></div></div>
   <div class="row"><button class="btn2" data-act="jday" data-d="-1">이전</button><input type="date" class="inp" id="jday" value="${S.jobDay}" aria-label="날짜"><button class="btn2" data-act="jday" data-d="1">다음</button>
     <span class="grow"></span><button class="btn gold" data-act="gen">${kdate(S.jobDay)} 일정 만들기</button></div>
   <div class="summary"><div style="background:var(--gold-soft)"><b>${wait}</b><span>세차대기</span></div><div style="background:var(--ok)"><b>${done}</b><span>세차완료</span></div><div style="background:var(--skip)"><b>${skip}</b><span>미작업</span></div><div style="background:var(--card);border:1px solid var(--line)"><b>${S.jobs.length}</b><span>전체</span></div></div>
@@ -237,7 +238,7 @@ function slotsView(){
 function custView(){
   const apts=['전체',...complexes()], qq=S.custQ.trim().toLowerCase(), fs=fieldStaff();
   const list=S.customers.filter(c=>(S.custApt==='전체'||c.complex===S.custApt)&&(!qq||[c.name,c.car_number,c.unit,c.phone].join(' ').toLowerCase().includes(qq)));
-  return `<div class="row"><div class="grow"><h1 class="h">고객 세차 설정</h1><p class="sub">계약완료 고객의 정기권 횟수·지정 요일·차종·색상·담당 현장직원을 정해요. 세차 일정 자동 만들기에 쓰여요.</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">고객 세차 설정</h1><p class="sub">정기권·지정 요일·담당 현장직원을 모두 입력하고 저장하면, 지정 요일 날짜에 직원 앱에 자동으로 나타나요. 월 2회는 계약일 기준 격주예요.</p></div></div>
   <div class="row"><input class="inp" id="custQ" placeholder="이름·차량번호·동 검색" value="${esc(S.custQ)}" style="min-width:220px"><div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.custApt===a}" data-act="capt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div></div>
   ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>차량번호</th><th>정기권</th><th>지정 요일</th><th>차종</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
     ${list.map(c=>`<tr data-cid="${c.id}"><td><b>${esc(c.name)}</b></td><td>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</td><td>${esc(c.car_number||'-')}</td>
@@ -335,7 +336,7 @@ document.addEventListener('click',async e=>{
       const c=S.customers.find(x=>x.id===cid);
       await act(()=>q(db.from('wash_jobs').insert({customer_id:cid,wash_date:S.jobDay,staff_id:c&&c.field_staff_id||null,sort_order:999})),'추가했어요.'); break;
     }
-    case 'del-job': ask('이 일정을 삭제할까요?','세차 대기 상태의 일정만 지울 수 있어요.','삭제',()=>act(()=>q(db.from('wash_jobs').delete().eq('id',id)),'삭제했어요.')); break;
+    case 'del-job': ask('이 일정을 삭제할까요?','이 날 이 차량 일정을 지워요. 지운 일정은 자동으로 다시 생기지 않아요.','삭제',()=>act(()=>q(db.rpc('remove_wash_job',{p_id:id})),'삭제했어요. 이 날은 다시 자동으로 생기지 않아요.')); break;
     case 'sapt': S.slotApt=t.dataset.a; S.slotDay=null; await loadTab(); break;
     case 'smonth': S.slotMonth=Math.max(0,Math.min(3,S.slotMonth+Number(t.dataset.d))); S.slotDay=null; await loadTab(); break;
     case 'sday': S.slotDay=t.dataset.k; render(); break;
@@ -346,7 +347,7 @@ document.addEventListener('click',async e=>{
     case 'save-cust': {
       const tr=t.closest('tr'), get=f=>tr.querySelector(`[data-f="${f}"]`).value;
       const patch={wash_plan:get('wash_plan')?Number(get('wash_plan')):null,wash_weekday:get('wash_weekday')!==''?Number(get('wash_weekday')):null,car_model:get('car_model').trim()||null,car_color:get('car_color').trim()||null,field_staff_id:get('field_staff_id')||null};
-      try{ await q(db.from('customers').update(patch).eq('id',id)); Object.assign(S.customers.find(c=>c.id===id),patch); toast('저장했어요.'); }catch(err){ toast(friendly(err),true); }
+      try{ await q(db.from('customers').update(patch).eq('id',id)); Object.assign(S.customers.find(c=>c.id===id),patch); toast(patch.wash_plan&&patch.wash_weekday!==null&&patch.field_staff_id?`저장했어요. 매주 ${WDF[patch.wash_weekday]}마다 직원 앱에 나타나요.`.replace('매주',patch.wash_plan===2?'격주':'매주'):'저장했어요. 정기권·지정 요일·담당 직원이 모두 있어야 직원 앱에 나타나요.'); }catch(err){ toast(friendly(err),true); }
       break;
     }
     case 'napt': S.noticeApt=t.dataset.a; render(); break;

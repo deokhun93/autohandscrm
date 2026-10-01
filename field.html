@@ -123,6 +123,7 @@ async function loadAll(){
   try{
     if(!S.me) await loadMe();
     if(!S.me||S.me.status!=='승인'){ render(); return; }
+    await db.rpc('ensure_wash_jobs',{p_from:S.day,p_to:S.day});  // 지정 요일 고객 일정을 자동으로 채움
     const [jobs,sum,reqs]=await Promise.all([
       db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)')
         .eq('wash_date',S.day).eq('staff_id',S.me.id).order('sort_order').order('id'),
@@ -182,7 +183,7 @@ function homeView(){
   <div class="money t"><span style="font-weight:700">${S.day===keyOf(new Date())?'오늘':'이날'} 수당</span><b>${won(s.today_done*PAY)}</b></div>
   ${noticeCard(list)}
   ${apts.length>2?`<div class="chips" role="group" aria-label="아파트 선택">${apts.map(a=>`<button class="chip" aria-pressed="${S.apt===a}" data-act="apt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>`:''}
-  ${list.length?groups.map(g=>`<div class="apt-h">${esc(g)}</div>${list.filter(j=>((j.customers||{}).complex||'기타')===g).map(jobCard).join('')}`).join(''):`<div class="empty">이 날 배정된 세차가 없어요.</div>`}`;
+  ${list.length?groups.map(g=>`<div class="apt-h">${esc(g)}</div>${list.filter(j=>((j.customers||{}).complex||'기타')===g).map(jobCard).join('')}`).join(''):`<div class="empty">이 날 배정된 세차가 없어요.<p class="note" style="margin-top:8px">관리자 모드 › 고객 세차 설정에서 정기권·지정 요일·담당 현장직원이 모두 입력된 고객만, 지정 요일 날짜에 자동으로 보여요. 월 2회 고객은 격주로 보여요.</p></div>`}`;
 }
 function noticeCard(list){
   const n=S.sel.length, allOn=list.length&&list.every(j=>S.sel.includes(j.customer_id));
