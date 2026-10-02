@@ -578,7 +578,7 @@ function SignupPage({ onGotoLogin }) {
             <FieldInput label="은행명 *" value={form.bank} onChange={e => set('bank', e.target.value)} placeholder="국민은행" />
             <FieldInput label="계좌번호 *" value={form.account} onChange={e => set('account', e.target.value)} placeholder="123-456-789012" />
           </div>
-          <FieldInput label="집주소 *" value={form.address} onChange={e => set('address', e.target.value)} placeholder="대구광역시 ..." />
+          <div><label className="text-[12.5px]" style={{ color: '#6B6A63' }}>집주소 *</label><div className="flex gap-2 mt-1"><input value={form.address} onChange={e => set('address', e.target.value)} placeholder="주소찾기를 누르거나 직접 입력하세요" style={{ background: '#F7F6F2', border: '1px solid #E4E2D9', color: '#1C2620' }} className="flex-1 min-w-0 rounded-lg px-3 py-2.5 text-sm outline-none" /><button type="button" onClick={() => { if (!window.daum || !window.daum.Postcode) { alert('주소 검색 기능을 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.'); return; } new window.daum.Postcode({ oncomplete: (data) => set('address', data.roadAddress || data.address) }).open(); }} style={{ background: '#2A362E', color: '#FFFFFF' }} className="px-3.5 rounded-lg text-sm font-medium whitespace-nowrap">주소찾기</button></div></div>
 
           <label className="flex items-start gap-2 text-[12.5px]" style={{ color: '#4A4A45' }}>
             <input type="checkbox" className="mt-0.5" checked={privacyConsent} onChange={e => setPrivacyConsent(e.target.checked)} />
