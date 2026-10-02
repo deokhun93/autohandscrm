@@ -588,7 +588,7 @@ function SignupPage({ onGotoLogin }) {
           </label>
 
           {error && <p className="text-[13px]" style={{ color: '#A32D2D' }}>{error}</p>}
-          <button type="submit" disabled={loading ||disabled={loading} } style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="mt-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{loading ? '처리 중...' : '가입 신청하기'}</button>
+          <button type="submit" disabled={loading ||disabled={loading} style={{ background: '#2F6B4F', color: '#FFFFFF' }} className="mt-1 text-sm font-medium py-2.5 rounded-lg disabled:opacity-60">{loading ? '처리 중...' : '가입 신청하기'}</button>
         </form>
         <button onClick={onGotoLogin} className="w-full text-center text-[13px] mt-4" style={{ color: '#6B6A63' }}>
           이미 계정이 있으신가요? <span style={{ color: '#2F6B4F', fontWeight: 600 }}>로그인</span>
