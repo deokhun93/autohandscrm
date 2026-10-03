@@ -1,15 +1,19 @@
-/* 오토핸즈 앱 이동 바 (관리자 앱 · 직원 앱 공용)
+/* 오토핸즈 웹 이동 바 (관리자웹 · 직원웹 공용) — 영업CRM | 관리자웹 | 직원웹 | 고객웹↗ | 홈페이지↗
    PC(701px 이상): 화면 맨 위 가로 바 / 휴대폰: 화면 맨 아래 탭바
    사용법: AppNav.set('admin', true)  → 현재 앱 표시 + 바 보이기
            AppNav.set('field', false) → 바 숨기기 (일반 현장직원 등) */
 (function () {
   var APPS = [
-    { key: 'customer', label: '고객앱', href: 'https://autohands-web.vercel.app/app', ext: true,
-      icon: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>' },
-    { key: 'admin', label: '관리자앱', href: '/admin',
+    { key: 'crm', label: '영업CRM', href: '/',
+      icon: '<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>' },
+    { key: 'admin', label: '관리자웹', href: '/admin',
       icon: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>' },
-    { key: 'field', label: '직원앱', href: '/field',
-      icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/>' }
+    { key: 'field', label: '직원웹', href: '/field',
+      icon: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m16 11 2 2 4-4"/>' },
+    { key: 'customer', label: '고객웹', href: 'https://autohands-web.vercel.app/app', ext: true,
+      icon: '<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/>' },
+    { key: 'home', label: '홈페이지', href: 'https://autohands-web.vercel.app/', ext: true,
+      icon: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9v12h14V9"/><path d="M10 21v-6h4v6"/>' }
   ];
 
   var css = '' +
@@ -33,7 +37,7 @@
     /* 휴대폰: 맨 아래 탭바 */
     '@media (max-width:700px){' +
       '.appnav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#0C1422;border-top:1px solid rgba(255,255,255,.1);padding-bottom:env(safe-area-inset-bottom,0px)}' +
-      '.appnav a{flex-direction:column;gap:3px;font-size:11.5px;min-height:58px;padding:6px 4px}' +
+      '.appnav a{flex-direction:column;gap:3px;font-size:11px;min-height:58px;padding:6px 2px;white-space:nowrap}' +
       '.appnav svg{width:22px;height:22px}' +
       '.appnav .ext{display:none}' +
       'body.has-appnav{padding-bottom:calc(60px + env(safe-area-inset-bottom,0px))}' +

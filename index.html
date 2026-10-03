@@ -386,6 +386,13 @@ function FieldInput({ label, ...props }) {
 
 // ===== 비밀번호 보기 · 자동 로그인 (CRM·관리자·직원 앱 공통 설정) =====
 const STAFF_AUTO_KEY = 'crm-auto-login', STAFF_ALIVE_KEY = 'crm-alive';
+/* 여러 창(CRM·관리자웹·직원웹)이 로그인을 함께 써요: 다른 창이 3분 안에 열려 있었으면 '사용 중'으로 봐요 */
+const STAFF_BEAT_KEY='crm-alive-at';
+function staffBeat(){ try{ localStorage.setItem(STAFF_BEAT_KEY,String(Date.now())); }catch(_){} }
+function staffAlive(){ try{ return sessionStorage.getItem(STAFF_ALIVE_KEY)==='1' || (Date.now()-Number(localStorage.getItem(STAFF_BEAT_KEY)||0))<180000; }catch(_){ return false; } }
+let staffBeating=false;
+function staffStartBeat(){ if(staffBeating) return; staffBeating=true; staffBeat(); setInterval(staffBeat,30000); addEventListener('pagehide',staffBeat); document.addEventListener('visibilitychange',staffBeat); }
+
 function staffGetAuto() { try { return localStorage.getItem(STAFF_AUTO_KEY) !== '0'; } catch (e) { return true; } }
 function staffSetAuto(on) { try { localStorage.setItem(STAFF_AUTO_KEY, on ? '1' : '0'); sessionStorage.setItem(STAFF_ALIVE_KEY, '1'); } catch (e) {} }
 function PasswordInput({ label, value, onChange, placeholder, autoComplete }) {
@@ -2249,6 +2256,21 @@ function Dashboard({ currentUser, onLogout }) {
   return (
     <div style={{ background: '#EFF1EC', minHeight: '100vh' }} className="w-full pb-24">
       <div style={{ background: '#1C2620' }} className="px-4 pt-5 pb-4 sticky top-0 z-10">
+        <nav aria-label="웹 바로가기" className="flex items-center gap-1.5 mb-3 overflow-x-auto" style={{ marginTop: -6 }}>
+          {[
+            { label: '영업CRM', href: '/', current: true },
+            ...(isRealAdmin ? [{ label: '관리자웹', href: '/admin' }] : []),
+            { label: '직원웹', href: '/field' },
+            { label: '고객웹', href: 'https://autohands-web.vercel.app/app', ext: true },
+            { label: '홈페이지', href: 'https://autohands-web.vercel.app/', ext: true },
+          ].map(l => (
+            <a key={l.label} href={l.href} {...(l.ext ? { target: '_blank', rel: 'noopener' } : {})} aria-current={l.current ? 'page' : undefined}
+              style={l.current ? { background: '#FFFFFF', color: '#1C2620' } : { background: '#2A362E', color: '#D5DED8', border: '1px solid #3D4A41' }}
+              className="text-[12px] font-medium px-3 py-1 rounded-full whitespace-nowrap no-underline">
+              {l.label}{l.ext ? ' ↗' : ''}
+            </a>
+          ))}
+        </nav>
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-[11px] tracking-wide uppercase" style={{ color: '#8FA89A' }}>방문 세차 정기권 · 신규고객관리</p>
@@ -3023,9 +3045,10 @@ function App() {
     (async () => {
       let { data } = await supabase.auth.getSession();
       // 자동 로그인을 끈 경우: 앱(브라우저)을 완전히 닫았다 열면 로그아웃
-      let alive = false; try { alive = sessionStorage.getItem(STAFF_ALIVE_KEY) === '1'; } catch (e) {}
-      if (data.session && !staffGetAuto() && !alive) { await supabase.auth.signOut(); data = { session: null }; }
+      const alive = staffAlive();
+      if (data.session && !staffGetAuto() && !alive) { await supabase.auth.signOut({ scope: 'local' }); data = { session: null }; }
       try { sessionStorage.setItem(STAFF_ALIVE_KEY, '1'); } catch (e) {}
+      staffStartBeat();
       if (data.session) {
         const { data: profile } = await supabase.from('profiles').select('*').eq('id', data.session.user.id).single();
         if (profile && profile.status === '승인') setCurrentUser(profile);
