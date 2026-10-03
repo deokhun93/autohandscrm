@@ -85,7 +85,16 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .notes li{display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .notes li.imp{border-color:var(--gold);background:#FFF8E6}.notes p{margin:0 0 2px;white-space:pre-wrap}
-.star-btn{border:0;background:none;font-size:18px;line-height:1;padding:2px;color:#B9B3A3}.t-interior{background:var(--gold-soft);color:#6B5418}.t-schedule{background:#ECEAE4}
+.star-btn{border:0;background:none;font-size:18px;line-height:1;padding:2px;color:#B9B3A3}
+.note-open{border:0;background:none;text-align:left;padding:0;cursor:pointer;color:inherit}.note-open .nb{display:block;white-space:pre-wrap;margin:0 0 2px}.note-open:hover .nb{text-decoration:underline;text-decoration-color:var(--gold);text-underline-offset:3px}
+.dialog.note-modal{max-width:640px;max-height:calc(100vh - 40px);overflow:auto}.nm-text{width:100%;min-height:220px;font-size:15px;line-height:1.6;resize:vertical}
+.cm-tbl th.ck,.cm-tbl td.ck{width:40px;text-align:center;padding-left:10px}.cm-tbl .ck input{width:18px;height:18px;margin:0;accent-color:var(--ink);vertical-align:middle}
+.cm-row.is-cancel td{background:#E6E3DB;color:#8A8577}.cm-row.is-cancel .car,.cm-row.is-cancel b{color:#8A8577}
+.cm-row.is-pause td{background:#FFF4C2}.cm-row.is-soon td{background:#FDE2E0}
+.cm-row.picked td{box-shadow:inset 0 2px 0 var(--ink),inset 0 -2px 0 var(--ink)}
+.pill.st-on{background:var(--ok);color:var(--ok-ink)}.pill.st-pause{background:#F7D64A;color:#5A4500}.pill.st-soon{background:#C62828;color:#fff}.pill.st-cancel{background:#9A9384;color:#fff}
+.btn2.st-pause{border-color:#E6C23A;background:#FFF4C2}.btn2.st-cancel{border-color:#B8B2A3;background:#ECEAE4}
+.chip.cst-pause[aria-pressed="true"]{background:#F7D64A;border-color:#E6C23A;color:#3D2F00}.chip.cst-soon[aria-pressed="true"]{background:#C62828;border-color:#C62828;color:#fff}.chip.cst-cancel[aria-pressed="true"]{background:#8A8577;border-color:#8A8577;color:#fff}.t-interior{background:var(--gold-soft);color:#6B5418}.t-schedule{background:#ECEAE4}
 .car{font-family:var(--f-en);font-weight:800;font-size:16px;letter-spacing:.02em}
 .text{margin:0;background:var(--muted);border-radius:10px;padding:10px 12px;white-space:pre-wrap}
 .tel-row{display:flex;align-items:center;gap:8px}
@@ -223,7 +232,7 @@ window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리�
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const TABS=[['req','고객 요청'],['cmgr','고객관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
-  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{}, accs:[],accAll:false, staff:[], customers:[],
+  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false, accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
   custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
 
@@ -254,8 +263,10 @@ async function loadTab(){
       const ids=new Set((S.reqF==='trash'?S.trash:S.reqs).map(r=>r.id)); S.sel=S.sel.filter(x=>ids.has(x));
     }
     if(S.tab==='cmgr'){
-      const rows=await q(db.rpc('list_customer_note_counts'))||[];
-      S.noteCnt={}; rows.forEach(r=>S.noteCnt[r.customer_id]=r);
+      const [rows,st]=await Promise.all([q(db.rpc('list_customer_note_counts')),q(db.rpc('list_customer_status'))]);
+      S.noteCnt={}; (rows||[]).forEach(r=>S.noteCnt[r.customer_id]=r);
+      S.cstat={}; (st||[]).forEach(r=>S.cstat[r.id]=r);
+      const live=new Set((st||[]).map(r=>r.id)); S.customers=S.customers.filter(c=>live.has(c.id)); S.cmSel=S.cmSel.filter(x=>live.has(x));
       await Promise.all(S.cmOpen.map(loadNotes));
     }
     if(S.tab==='acc') S.accs=await q(db.rpc('list_customer_accounts',{p_only_pending:!S.accAll}))||[];
@@ -425,38 +436,71 @@ function custView(){
 
 /* ---------- 탭: 고객관리 (차량별 메모·처리이력) ---------- */
 async function loadNotes(cid){ S.notes[cid]=await q(db.rpc('list_customer_notes',{p_customer_id:cid}))||[]; }
+function cmState(c){
+  const st=S.cstat[c.id]||{wash_status:'세차중'};
+  if(st.wash_status==='해지') return {k:'cancel',label:'해지',cls:'is-cancel'};
+  if(st.wash_status==='일시정지'){
+    const days=st.pause_until?Math.round((new Date(st.pause_until+'T00:00:00')-new Date(keyOf(new Date())+'T00:00:00'))/86400000):null;
+    const md=st.pause_until?st.pause_until.slice(5).replace('-','/').replace(/^0/,''):'';
+    if(days!=null&&days<=7) return {k:'soon',label:`재개 임박 · ${md} (D-${days})`,cls:'is-soon',days};
+    return {k:'pause',label:`일시정지 · ${md} 재개`,cls:'is-pause',days};
+  }
+  return {k:'on',label:'세차중',cls:''};
+}
 function cmgrView(){
   const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
   const qq=S.cmQ.replace(/\s/g,'').toLowerCase();
-  const list=S.customers.filter(c=>(!S.cmApt||c.complex===S.cmApt)&&(!qq||[c.car_number,c.name,c.unit,c.phone,c.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq)));
-  const COLS=12;
+  const base=S.customers.filter(c=>(!S.cmApt||c.complex===S.cmApt)&&(!qq||[c.car_number,c.name,c.unit,c.phone,c.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq)));
+  const cnt={all:base.length,on:0,pause:0,soon:0,cancel:0}; base.forEach(c=>cnt[cmState(c).k]++);
+  const list=base.filter(c=>{const k=cmState(c).k;return S.cmSt==='all'||k===S.cmSt||(S.cmSt==='pause'&&k==='soon');});
+  const ids=list.map(c=>c.id), allSel=ids.length&&ids.every(x=>S.cmSel.includes(x)), n=S.cmSel.length;
+  const COLS=14;
   return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.</p></div></div>
   <form id="cmsearch" class="req-tools" role="search">
     <select class="inp" id="cmApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.cmApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <input class="inp grow" id="cmQ" type="search" value="${esc(S.cmQin)}" placeholder="차량번호 · 이름 · 동호수 · 연락처 검색" aria-label="검색">
     <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.cmQ||S.cmApt?`<button class="link" type="button" data-act="cmClear">초기화</button>`:''}
   </form>
-  <p class="note">${list.length}대${S.cmApt?' · '+esc(S.cmApt):''}${S.cmQ?` · '${esc(S.cmQ)}' 검색`:''}</p>
-  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th>아파트</th><th>동·호수</th><th>차량번호</th><th>고객 메모</th><th>고객</th><th>연락처</th><th>차종</th><th>색상</th><th>정기권</th><th>지정 요일</th><th>담당 직원</th><th>계약일</th></tr></thead><tbody>
-    ${list.map(c=>{const n=S.noteCnt[c.id]||{total:0,starred:0}, open=S.cmOpen.includes(c.id);
-      return `<tr class="cm-row${open?' open':''}"><td>${esc(c.complex||'-')}</td><td>${esc(c.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(c.car_number||'-')}</b></td><td><button class="memo-tog" data-act="cmToggle" data-id="${c.id}" aria-expanded="${open}">${n.starred?`<span class="star">⭐${n.starred}</span>`:''}<span>메모 ${n.total}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td><td><b>${esc(c.name||'')}</b></td>
-      <td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td><td>${esc(c.car_model||'-')}</td><td>${esc(c.car_color||'-')}</td><td class="nowrap">${c.wash_plan?'월 '+c.wash_plan+'회':'-'}</td><td class="nowrap">${c.wash_weekday!=null?WDF[c.wash_weekday]:'-'}</td><td class="nowrap">${esc(c.field_staff_id?staffName(c.field_staff_id):'미배정')}</td><td class="nowrap">${c.contract_date?esc(String(c.contract_date).slice(2).replace(/-/g,'.')):'-'}</td></tr>
+  <div class="chips">${[['all','전체'],['on','세차중'],['pause','일시정지'],['soon','재개 임박'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
+  <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}<span class="grow"></span>
+    <button class="btn2 sm" data-act="cmSet" data-s="세차중" ${n?'':'disabled'}>세차중으로</button>
+    <button class="btn2 sm st-pause" data-act="cmPause" ${n?'':'disabled'}>일시중지</button>
+    <button class="btn2 sm st-cancel" data-act="cmSet" data-s="해지" ${n?'':'disabled'}>해지</button>
+    <button class="btn sm danger" data-act="cmTrash" ${n?'':'disabled'}>🗑 삭제</button></div>
+  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="cmSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>상태</th><th>고객</th><th>연락처</th><th>차종</th><th>색상</th><th>정기권</th><th>지정 요일</th><th>담당 직원</th><th>계약일</th><th>고객 메모</th></tr></thead><tbody>
+    ${list.map(c=>{const nn=S.noteCnt[c.id]||{total:0,starred:0}, open=S.cmOpen.includes(c.id), st=cmState(c), sel=S.cmSel.includes(c.id);
+      return `<tr class="cm-row ${st.cls}${open?' open':''}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-cmsel="${c.id}" ${sel?'checked':''} aria-label="${esc(c.car_number||'')} 선택"></td><td>${esc(c.complex||'-')}</td><td>${esc(c.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(c.car_number||'-')}</b></td>
+      <td><span class="pill st-${st.k}">${esc(st.label)}</span></td><td><b>${esc(c.name||'')}</b></td>
+      <td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td><td>${esc(c.car_model||'-')}</td><td>${esc(c.car_color||'-')}</td><td class="nowrap">${c.wash_plan?'월 '+c.wash_plan+'회':'-'}</td><td class="nowrap">${c.wash_weekday!=null?WDF[c.wash_weekday]:'-'}</td><td class="nowrap">${esc(c.field_staff_id?staffName(c.field_staff_id):'미배정')}</td><td class="nowrap">${c.contract_date?esc(String(c.contract_date).slice(2).replace(/-/g,'.')):'-'}</td>
+      <td><button class="memo-tog" data-act="cmToggle" data-id="${c.id}" aria-expanded="${open}">${nn.starred?`<span class="star">⭐${nn.starred}</span>`:''}<span>메모 ${nn.total}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td></tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box">${notesPanel(c)}</div></td></tr>`:''}`;}).join('')}
-  </tbody></table></div>`:`<div class="empty">${S.cmQ||S.cmApt?'조건에 맞는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`}`;
+  </tbody></table></div>`:`<div class="empty">${S.cmQ||S.cmApt||S.cmSt!=='all'?'조건에 맞는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`}`;
 }
 function notesPanel(c){
   const list=S.notes[c.id];
   const star=!!S.noteStar[c.id];
-  return `<div class="row"><b>${esc(c.car_number||'')} · ${esc([c.complex,c.unit].filter(Boolean).join(' '))}</b><span class="sub">메모·처리이력</span></div>
+  return `<div class="row"><b>${esc(c.car_number||'')} · ${esc([c.complex,c.unit].filter(Boolean).join(' '))}</b><span class="sub">메모·처리이력 · 메모를 누르면 크게 보고 수정할 수 있어요</span></div>
   <div class="note-new">
     <textarea class="inp" id="note-${c.id}" maxlength="2000" placeholder="조치 내용, 특이사항 등을 적어 주세요. 예) 앞범퍼 기존 스크래치 있음">${esc(S.noteDraft[c.id]||'')}</textarea>
     <div class="row"><label class="flag f-star"><input type="checkbox" data-nstar="${c.id}" ${star?'checked':''}><span>⭐ 중요</span></label><button class="btn2 sm" type="button" data-act="noteEmoji" data-id="${c.id}" title="글 속에 ⭐ 넣기">⭐ 넣기</button><span class="grow"></span><button class="btn" data-act="noteAdd" data-id="${c.id}">메모 저장</button></div>
   </div>
   ${!list?'<p class="sub">불러오는 중...</p>':list.length?`<ul class="notes">${list.map(n=>`<li class="${n.important?'imp':''}">
       <button class="star-btn" data-act="noteStar" data-id="${n.id}" data-c="${c.id}" data-on="${n.important?0:1}" aria-pressed="${n.important}" aria-label="${n.important?'중요 표시 빼기':'중요로 표시'}">${n.important?'⭐':'☆'}</button>
-      <div class="grow"><p>${esc(n.body)}</p><small class="by">${esc(n.author)} · ${fullWhen(n.created_at)}${n.source==='request'?' · 고객 요청 완료 자동기록':''}</small></div>
+      <button class="note-open grow" data-act="noteOpen" data-id="${n.id}" data-c="${c.id}" title="크게 보기 · 수정"><span class="nb">${esc(n.body)}</span><small class="by">${esc(n.author)} · ${fullWhen(n.created_at)}${n.source==='request'?' · 고객 요청 완료 자동기록':''}${n.updated_at?` · 수정 ${esc(n.editor||'')} ${fullWhen(n.updated_at)}`:''}</small></button>
       <button class="link" data-act="noteDel" data-id="${n.id}" data-c="${c.id}">삭제</button></li>`).join('')}</ul>`
     :'<p class="sub">아직 메모가 없어요.</p>'}`;
+}
+function noteModalView(){
+  const m=S.noteModal; if(!m) return '';
+  const c=S.customers.find(x=>x.id===m.cid)||{}, n=(S.notes[m.cid]||[]).find(x=>x.id===m.id);
+  if(!n) return '';
+  return `<div class="scrim" data-act="nmClose"><div class="dialog note-modal" role="dialog" aria-modal="true" aria-labelledby="nm-h" data-stop>
+    <div class="row"><div class="grow"><h2 class="h" id="nm-h">${esc(c.car_number||'')} 메모</h2><p class="sub">${esc([c.complex,c.unit].filter(Boolean).join(' '))} · ${esc(c.name||'')}</p></div><button class="btn2 sm" data-act="nmClose" aria-label="닫기">닫기</button></div>
+    <p class="by">작성 ${esc(n.author)} · ${fullWhen(n.created_at)}${n.source==='request'?' · 고객 요청 완료 자동기록':''}${n.updated_at?`<br>수정 ${esc(n.editor||'')} · ${fullWhen(n.updated_at)}`:''}</p>
+    <textarea class="inp nm-text" id="nm-body" maxlength="2000">${esc(S.nmBody)}</textarea>
+    <div class="row"><label class="flag f-star"><input type="checkbox" id="nm-star" ${S.nmStar?'checked':''}><span>⭐ 중요 (집중 체크)</span></label><button class="btn2 sm" type="button" data-act="nmEmoji">⭐ 넣기</button></div>
+    <div class="acts"><button class="btn2 danger" data-act="nmDel">삭제</button><span class="grow"></span><button class="btn2" data-act="nmClose">취소</button><button class="btn" data-act="nmSave" ${S.busy?'disabled':''}>저장</button></div>
+  </div></div>`;
 }
 const fullWhen=ts=>{const d=new Date(ts);return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;};
 
@@ -499,11 +543,11 @@ function render(){
   if(window.AppNav) AppNav.set('admin', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
   if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
   const L=$('#layer'),d=S.dialog;
-  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub" style="white-space:pre-line">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:'';
+  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub" style="white-space:pre-line">${esc(d.body)}</p>${d.extra||''}<div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:noteModalView();
   if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
 }
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3400);}
-function ask(title,body,ok,run){ S.dialog={title,body,ok,run}; render(); }
+function ask(title,body,ok,run,extra){ S.dialog={title,body,ok,run,extra}; render(); }
 async function act(fn,okMsg,after){
   try{ await fn(); kickPush(); if(okMsg) toast(okMsg); }catch(e){ toast(friendly(e),true); }
   S.dialog=null; S.busy=false;
@@ -529,6 +573,34 @@ document.addEventListener('click',async e=>{
     case 'selAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; const all=ids.every(x=>S.sel.includes(x)); S.sel=all?S.sel.filter(x=>!ids.includes(x)):[...new Set([...S.sel,...ids])]; render(); break; }
     case 'selNone': S.sel=[]; render(); break;
     case 'cmClear': S.cmQ=''; S.cmQin=''; S.cmApt=''; render(); break;
+    case 'cmSt': S.cmSt=t.dataset.f; render(); break;
+    case 'cmSelNone': S.cmSel=[]; render(); break;
+    case 'cmSelAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; S.cmSel=t.checked?[...new Set([...S.cmSel,...ids])]:S.cmSel.filter(x=>!ids.includes(x)); render(); break; }
+    case 'cmSet': { const ids=[...S.cmSel], st=t.dataset.s; if(!ids.length) break;
+      const body=st==='해지'?'해지하면 정기세차 일정이 더 이상 만들어지지 않고, 오늘 이후 잡혀 있던 대기 일정도 지워져요. 목록에서는 회색으로 보여요.\n나중에 [세차중으로]를 누르면 다시 일정이 만들어져요.'
+        :'일시정지·해지를 풀고 다시 정기세차 일정이 만들어지게 해요.';
+      ask(`선택한 ${ids.length}대를 ${st==='해지'?'해지':'세차중으로'} 처리할까요?`,body,'확인',()=>act(async()=>{ const n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:st,p_resume:null})); S.cmSel=[]; toast(`${n||0}대를 ${st} 처리했어요.`); },null)); break; }
+    case 'cmPause': { const ids=[...S.cmSel]; if(!ids.length) break;
+      const tmr=new Date(); tmr.setDate(tmr.getDate()+1); const min=keyOf(tmr);
+      if(!S.pauseDate||S.pauseDate<min){ const d=new Date(); d.setDate(d.getDate()+14); S.pauseDate=keyOf(d); }
+      ask(`선택한 ${ids.length}대를 일시중지할까요?`,'다시 시작할 날짜를 골라 주세요. 그 전까지는 세차 일정이 만들어지지 않고, 목록에서 노란색으로 보여요.\n재개일 일주일 전부터는 빨간색(재개 임박)으로 바뀌고, 재개일이 되면 자동으로 세차중으로 돌아가요.','확인',
+        ()=>act(async()=>{ const n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:'일시정지',p_resume:S.pauseDate})); S.cmSel=[]; toast(`${n||0}대를 ${S.pauseDate.slice(5).replace('-','/')}까지 일시중지했어요.`); },null),
+        `<label class="field"><span style="font-weight:700;font-size:13px">다시 시작하는 날</span><input class="inp" type="date" id="pauseDate" min="${min}" value="${S.pauseDate}"></label>`); break; }
+    case 'cmTrash': { const ids=[...S.cmSel]; if(!ids.length) break;
+      ask(`선택한 ${ids.length}명을 휴지통으로 이동할까요?`,'휴지통으로 이동된 고객은 30일이 지나면 자동으로 완전히 삭제됩니다.\n30일 안에는 영업CRM [🗑 휴지통]에서 복원할 수 있어요.','확인',
+        ()=>act(async()=>{ const n=await q(db.rpc('trash_customers',{p_ids:ids})); S.customers=S.customers.filter(c=>!ids.includes(c.id)); S.cmSel=[]; toast(`${n||0}명을 휴지통으로 옮겼어요.`); },null)); break; }
+    case 'noteOpen': { const cid=Number(t.dataset.c), n=(S.notes[cid]||[]).find(x=>x.id===id); if(!n) break; S.noteModal={id,cid}; S.nmBody=n.body; S.nmStar=!!n.important; render(); setTimeout(()=>{const m=$('#nm-body'); if(m){m.focus(); m.setSelectionRange(m.value.length,m.value.length);}},30); break; }
+    case 'nmClose': if(!S.busy){ S.noteModal=null; render(); } break;
+    case 'nmEmoji': { const ta=$('#nm-body'); if(!ta) break; const a0=ta.selectionStart??ta.value.length, b0=ta.selectionEnd??a0; ta.value=ta.value.slice(0,a0)+'⭐'+ta.value.slice(b0); S.nmBody=ta.value; ta.focus(); ta.setSelectionRange(a0+2,a0+2); break; }
+    case 'nmSave': { const m=S.noteModal; if(!m) break; const v=S.nmBody.trim(); if(!v){ toast('메모 내용을 적어 주세요.',true); break; }
+      S.busy=true; render();
+      try{ await q(db.rpc('update_customer_note',{p_id:m.id,p_body:v,p_important:S.nmStar})); await loadNotes(m.cid);
+        const n0=S.noteCnt[m.cid]||{customer_id:m.cid}; S.noteCnt[m.cid]={...n0,total:S.notes[m.cid].length,starred:S.notes[m.cid].filter(x=>x.important).length};
+        S.noteModal=null; toast('메모를 수정했어요.'); }catch(err){ toast(friendly(err),true); }
+      S.busy=false; render(); break; }
+    case 'nmDel': { const m=S.noteModal; if(!m) break;
+      ask('이 메모를 삭제할까요?','삭제한 메모는 되돌릴 수 없어요.','확인',async()=>{ try{ await q(db.rpc('delete_customer_note',{p_id:m.id})); await loadNotes(m.cid);
+        const n0=S.noteCnt[m.cid]||{customer_id:m.cid}; S.noteCnt[m.cid]={...n0,total:S.notes[m.cid].length,starred:S.notes[m.cid].filter(x=>x.important).length}; S.noteModal=null; toast('메모를 삭제했어요.'); }catch(err){ toast(friendly(err),true); } S.dialog=null; S.busy=false; render(); }); break; }
     case 'cmToggle': {
       if(S.cmOpen.includes(id)){ S.cmOpen=S.cmOpen.filter(x=>x!==id); render(); break; }
       S.cmOpen=[...S.cmOpen,id]; render();
@@ -626,6 +698,9 @@ document.addEventListener('change',async e=>{
   if(t.id==='reqApt'){ S.reqApt=t.value; await loadTab(); return; }
   if(t.id==='cmApt'){ S.cmApt=t.value; render(); return; }
   if(t.dataset.nstar){ S.noteStar[Number(t.dataset.nstar)]=t.checked; return; }
+  if(t.dataset.cmsel){ const id=Number(t.dataset.cmsel); S.cmSel=t.checked?[...new Set([...S.cmSel,id])]:S.cmSel.filter(x=>x!==id); render(); return; }
+  if(t.id==='nm-star'){ S.nmStar=t.checked; return; }
+  if(t.id==='pauseDate'){ S.pauseDate=t.value; return; }
   if(t.id==='reqType'){ S.reqType=t.value; render(); return; }
   if(t.id==='jday'&&t.value){ S.jobDay=t.value; await loadTab(); return; }
   if(t.dataset.jstaff){ await act(()=>q(db.from('wash_jobs').update({staff_id:t.value||null}).eq('id',Number(t.dataset.jstaff))),'담당 직원을 바꿨어요.'); return; }
@@ -636,10 +711,12 @@ document.addEventListener('input',e=>{
   if(e.target.id==='custQ'){ S.custQ=e.target.value; render(); }
   if(e.target.id==='reqQ'){ S.reqQ=e.target.value; }
   if(e.target.id==='cmQ'){ S.cmQin=e.target.value; }
+  if(e.target.id==='nm-body'){ S.nmBody=e.target.value; }
+  if(e.target.id==='pauseDate'){ S.pauseDate=e.target.value; }
   if(e.target.id&&e.target.id.startsWith('note-')){ S.noteDraft[Number(e.target.id.slice(5))]=e.target.value; }
   if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nsend'); if(b) b.disabled=!(S.noticeSel.length&&S.notice.trim()); }
 });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} else if(e.key==='Escape'&&S.noteModal&&!S.busy){S.noteModal=null;render();} });
 document.addEventListener('submit',async e=>{
   if(e.target.id==='cmsearch'){ e.preventDefault(); S.cmQin=($('#cmQ')||{}).value||''; S.cmQ=S.cmQin.trim(); render(); return; }
   if(e.target.id==='reqsearch'){ e.preventDefault(); S.reqQ=($('#reqQ')||{}).value||''; await loadTab(); return; }
