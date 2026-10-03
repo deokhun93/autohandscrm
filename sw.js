@@ -1,5 +1,5 @@
-// 오토핸즈 CRM 서비스워커 (v2 - 푸시 알림 추가)
-const CACHE = 'autohands-v3';
+// 오토핸즈 CRM 서비스워커 (v4 - 앱 이동 바, 알림 누를 때 다른 앱 창을 바꾸지 않음)
+const CACHE = 'autohands-v4';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -45,7 +45,14 @@ self.addEventListener('notificationclick', (event) => {
   const url = (event.notification.data && event.notification.data.url) || '/';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      for (const c of list) { if ('focus' in c) { c.navigate(url); return c.focus(); } }
+      // 알림이 가리키는 앱(/admin, /field, CRM)이 이미 열려 있으면 그 창만 앞으로 가져와요.
+      // 다른 앱 창을 억지로 바꾸지 않아서, 보던 앱이 엉뚱한 앱으로 바뀌는 일이 없어요.
+      const path = new URL(url, self.location.origin).pathname.replace(/\/$/, '') || '/';
+      const appOf = (p) => (p.startsWith('/admin') ? 'admin' : p.startsWith('/field') ? 'field' : 'crm');
+      const want = appOf(path);
+      for (const c of list) {
+        if (appOf(new URL(c.url).pathname) === want && 'focus' in c) return c.focus();
+      }
       return self.clients.openWindow(url);
     })
   );
