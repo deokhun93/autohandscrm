@@ -17,7 +17,7 @@
 <script src="/appnav.js"></script>
 <style>
 :root{--ink:#0C1422;--paper:#F7F5F0;--card:#fff;--muted:#F1EEE6;--gold:#C9A44C;--gold-2:#E2C77F;--gold-soft:#F1E7CC;--gold-dark:#8A6D25;--blue:#1D3A6E;
---text:#1B2433;--sub:#6B7280;--line:#E4E0D6;--line-2:#D9D4C7;--ok:#DCEFE3;--ok-ink:#1F5136;--skip:#ECEAE4;--slate:#E6EAF2;--err:#B4472E;
+--text:#1B2433;--sub:#6B7280;--line:#E4E0D6;--line-2:#D9D4C7;--ok:#DCEFE3;--ok-ink:#1F5136;--skip:#ECEAE4;--slate:#E6EAF2;--err:#B4472E;--red:#C62828;
 --f:"Noto Sans KR",system-ui,sans-serif;--f-en:"Archivo","Noto Sans KR",sans-serif;--shadow:0 1px 2px rgba(12,20,34,.05),0 8px 20px rgba(12,20,34,.05);color-scheme:light}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--text);font-family:var(--f);font-size:14.5px;line-height:1.55;word-break:keep-all;-webkit-font-smoothing:antialiased}
@@ -53,7 +53,20 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .link{border:0;background:none;padding:4px 6px;color:var(--sub);font-size:13px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
 .pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap;background:var(--muted)}
 .p-new{background:var(--gold);color:var(--ink)}.p-ok{background:var(--ok);color:var(--ok-ink)}.p-hold{background:var(--skip);color:#555}
-.t-msg{background:var(--slate)}.t-interior{background:var(--gold-soft);color:#6B5418}.t-schedule{background:#ECEAE4}
+.t-msg{background:var(--slate)}.p-urgent{background:#C62828;color:#fff}
+.chip-red[aria-pressed="true"]{background:#C62828;border-color:#C62828;color:#fff}
+.req-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.req-tools select{min-width:130px}.req-tools input{min-width:200px}
+.req .who{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.req .apt{font-weight:900;font-size:16px}
+.req.is-urgent{border-color:#E8A9A9;box-shadow:inset 4px 0 0 #C62828,var(--shadow)}
+.req.is-done{background:#EEECE6;box-shadow:none}.req.is-done .msg,.req.is-done .who{text-decoration:line-through;text-decoration-color:#9A9384;color:#7C7768}.req.is-done .msg{background:#E4E1D8}
+.flags{display:flex;gap:8px;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:10px}
+.flag{display:inline-flex;align-items:center;gap:7px;min-height:40px;padding:0 12px;border:1px solid var(--line-2);border-radius:10px;background:#fff;font-weight:700;cursor:pointer;user-select:none}
+.flag input{width:19px;height:19px;margin:0;accent-color:var(--ink)}.flag input:disabled+span{color:#A8A396}
+.flag.f-urgent input{accent-color:#C62828}.flag.f-urgent:has(input:checked){border-color:#C62828;background:#FCEAEA;color:#9B1C1C}
+.flag:has(input:checked):not(.f-urgent){border-color:var(--ink);background:var(--gold-soft)}
+.by{font-size:11.5px;font-weight:500;color:var(--sub)}
+.memo{background:#FFF8E6;border:1px solid var(--gold-soft);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}.memo p{margin:0;white-space:pre-wrap}
+.memo-edit{display:flex;flex-direction:column;gap:8px}.memo-add{align-self:flex-start}.t-interior{background:var(--gold-soft);color:#6B5418}.t-schedule{background:#ECEAE4}
 .car{font-family:var(--f-en);font-weight:800;font-size:16px;letter-spacing:.02em}
 .text{margin:0;background:var(--muted);border-radius:10px;padding:10px 12px;white-space:pre-wrap}
 .tel-row{display:flex;align-items:center;gap:8px}
@@ -191,7 +204,7 @@ window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리�
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const TABS=[['req','고객 요청'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
-  reqs:[],reqF:'open', accs:[],accAll:false, staff:[], customers:[],
+  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null, accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
   custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
 
@@ -214,7 +227,7 @@ const fieldStaff=()=>S.staff.filter(s=>['field','admin','master'].includes(s.rol
 const staffName=id=>(S.staff.find(s=>s.id===id)||{}).name||'미배정';
 async function loadTab(){
   try{
-    if(S.tab==='req') S.reqs=await q(db.rpc('list_customer_requests',{p_type:null,p_only_open:false}))||[];
+    if(S.tab==='req') S.reqs=await q(db.rpc('list_requests_admin',{p_state:S.reqF,p_complex:S.reqApt||null,p_q:S.reqQ.trim()||null,p_limit:300}))||[];
     if(S.tab==='acc') S.accs=await q(db.rpc('list_customer_accounts',{p_only_pending:!S.accAll}))||[];
     if(S.tab==='jobs'){ await db.rpc('ensure_wash_jobs',{p_from:S.jobDay,p_to:S.jobDay}); }
     if(S.tab==='jobs') S.jobs=await q(db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)').eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[];
@@ -226,7 +239,7 @@ async function loadTab(){
 async function refreshCounts(){
   kickPush();
   try{
-    const [r,a]=await Promise.all([db.rpc('list_customer_requests',{p_type:null,p_only_open:true}),db.rpc('list_customer_accounts',{p_only_pending:true})]);
+    const [r,a]=await Promise.all([db.rpc('list_requests_admin',{p_state:'open',p_complex:null,p_q:null,p_limit:1000}),db.rpc('list_customer_accounts',{p_only_pending:true})]);
     S.cntReq=(r.data||[]).length; S.cntAcc=(a.data||[]).length;
   }catch(_){}
 }
@@ -242,24 +255,50 @@ const RT={msg:'고객 메시지',interior:'실내세차 신청',schedule:'일정
 const statusPill=(st,type)=>{const label=st==='확인'&&type==='schedule'?'적용됨':st;return `<span class="pill ${st==='접수'?'p-new':st==='보류'?'p-hold':'p-ok'}">${esc(label)}</span>`;};
 
 /* ---------- 탭: 고객 요청 ---------- */
+const byName=(name,ts)=>name||ts?`<small class="by">${esc(name||'')}${ts?' · '+when(ts):''}</small>`:'';
 function reqView(){
-  const F={open:r=>r.status==='접수',msg:r=>r.req_type==='msg',interior:r=>r.req_type==='interior',schedule:r=>r.req_type==='schedule',all:()=>true};
-  const list=S.reqs.filter(F[S.reqF]);
-  return `<div class="row"><div class="grow"><h1 class="h">고객 요청</h1><p class="sub">고객 앱에서 들어온 메시지 · 실내세차 신청 · 일정 변경요청</p></div></div>
-  <div class="chips">${[['open','처리 전'],['msg','고객 메시지'],['interior','실내세차'],['schedule','일정 변경'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.reqF===k}" data-act="reqF" data-f="${k}">${l}</button>`).join('')}</div>
-  ${list.length?`<div class="grid">${list.map(r=>{
-    let act='';
-    if(r.status==='접수'||r.status==='보류'){
-      if(r.req_type==='msg') act=`<button class="btn" data-act="req" data-id="${r.id}" data-a="read">${ic('check')}확인함</button>`;
-      if(r.req_type==='interior') act=`<button class="link" data-act="req" data-id="${r.id}" data-a="hold">보류</button><button class="btn" data-act="req" data-id="${r.id}" data-a="approve">${ic('check')}승인</button>`;
-      if(r.req_type==='schedule') act=`<button class="link" data-act="req" data-id="${r.id}" data-a="hold">보류</button><button class="btn" data-act="req" data-id="${r.id}" data-a="approve">${ic('check')}확인</button>`;
-    }
-    return `<article class="card"><div class="row"><span class="pill t-${r.req_type}">${RT[r.req_type]||r.req_type}</span><span class="grow"></span>${statusPill(r.status,r.req_type)}</div>
-      <div><span class="car">${esc(r.car_number||'-')}</span> <span class="sub">${esc(r.customer_name)} · ${esc([r.complex,r.unit].filter(Boolean).join(' '))}</span></div>
-      ${phoneLine(r.phone,'r'+r.id)}
-      <p class="text">${esc(r.message)}</p>
-      <div class="row"><span class="sub grow">${when(r.created_at)}</span>${act}</div></article>`;}).join('')}</div>`
-  :`<div class="empty">표시할 요청이 없어요.</div>`}`;
+  const TY={all:()=>true,msg:r=>r.req_type==='msg',interior:r=>r.req_type==='interior',schedule:r=>r.req_type==='schedule'};
+  const list=S.reqs.filter(TY[S.reqType]||TY.all);
+  const apts=[...new Set([...complexes(),...S.reqs.map(r=>r.complex)].filter(Boolean))].sort((x,y)=>x.localeCompare(y,'ko'));
+  const nUrgent=S.reqs.filter(r=>r.urgent&&!r.done_at).length;
+  return `<div class="row"><div class="grow"><h1 class="h">고객 요청</h1><p class="sub">고객 앱에서 들어온 메시지 · 실내세차 신청 · 일정 변경요청 — 긴급 표시, 확인·메모, 완료 체크</p></div></div>
+  <div class="chips">${[['open','진행 중'],['urgent','긴급'],['done','완료'],['all','전체']].map(([k,l])=>`<button class="chip${k==='urgent'?' chip-red':''}" aria-pressed="${S.reqF===k}" data-act="reqF" data-f="${k}">${l}${k==='open'&&S.cntReq?` <b>${S.cntReq}</b>`:''}</button>`).join('')}</div>
+  <form id="reqsearch" class="req-tools" role="search">
+    <select class="inp" id="reqApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.reqApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
+    <select class="inp" id="reqType" aria-label="요청 종류"><option value="all">종류 전체</option>${Object.entries(RT).map(([k,l])=>`<option value="${k}" ${S.reqType===k?'selected':''}>${l}</option>`).join('')}</select>
+    <input class="inp grow" id="reqQ" type="search" value="${esc(S.reqQ)}" placeholder="차량번호 · 이름 · 동호수 · 내용 · 메모 검색" aria-label="검색">
+    <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.reqQ||S.reqApt?`<button class="link" type="button" data-act="reqClear">초기화</button>`:''}
+  </form>
+  <p class="note">${S.reqF==='open'?'완료 체크 전인 요청이에요. 긴급 건이 맨 위에 와요.':S.reqF==='urgent'?'완료 전 긴급 건이에요.':S.reqF==='done'?'완료한 요청이에요. 검색으로 지난 내역을 찾을 수 있어요.':'모든 요청이에요.'} · ${list.length}건${nUrgent&&S.reqF!=='urgent'?` · <b style="color:var(--red)">긴급 ${nUrgent}건</b>`:''}</p>
+  ${list.length?`<div class="grid">${list.map(reqCard).join('')}</div>`
+  :`<div class="empty">${S.reqQ||S.reqApt?'조건에 맞는 요청이 없어요.':'표시할 요청이 없어요.'}</div>`}`;
+}
+function reqCard(r){
+  let act='';
+  if(r.status==='접수'||r.status==='보류'){
+    if(r.req_type==='interior') act=`<button class="link" data-act="req" data-id="${r.id}" data-a="hold">보류</button><button class="btn" data-act="req" data-id="${r.id}" data-a="approve">${ic('check')}승인</button>`;
+    if(r.req_type==='schedule') act=`<button class="link" data-act="req" data-id="${r.id}" data-a="hold">보류</button><button class="btn" data-act="req" data-id="${r.id}" data-a="approve">${ic('check')}일정 적용</button>`;
+  }
+  const where=[r.complex,r.unit].filter(Boolean).join(' ')||'아파트 미입력';
+  const editing=S.memoEdit===r.id;
+  const memo=editing
+    ?`<div class="memo-edit"><textarea class="inp" id="memo-${r.id}" maxlength="1000" placeholder="조치 내용, 통화 내용 등 내부 메모 (고객에게 안 보여요)">${esc(r.staff_memo||'')}</textarea><div class="row"><span class="grow"></span><button class="link" data-act="memoCancel">취소</button><button class="btn" data-act="memoSave" data-id="${r.id}">메모 저장</button></div></div>`
+    :r.staff_memo?`<div class="memo"><p>${esc(r.staff_memo)}</p><div class="row">${byName(r.memo_name,r.memo_at)}<span class="grow"></span><button class="link" data-act="memoEdit" data-id="${r.id}">메모 수정</button></div></div>`
+    :`<button class="link memo-add" data-act="memoEdit" data-id="${r.id}">+ 메모 쓰기</button>`;
+  return `<article class="card req${r.urgent?' is-urgent':''}${r.done_at?' is-done':''}">
+    <div class="row"><span class="pill t-${r.req_type}">${RT[r.req_type]||r.req_type}</span>${r.urgent?'<span class="pill p-urgent">긴급</span>':''}${r.done_at?'<span class="pill p-ok">완료</span>':''}<span class="grow"></span><span class="sub" title="고객 앱에 보이는 상태">고객 화면: ${statusPill(r.status,r.req_type)}</span></div>
+    <div class="who"><span class="apt">${esc(where)}</span><span class="car">${esc(r.car_number||'-')}</span></div>
+    <p class="sub" style="margin-top:-6px">${esc(r.customer_name||'')}${r.car_model?' · '+esc(r.car_model):''}${r.wash_plan?' · 월 '+r.wash_plan+'회':''}</p>
+    ${phoneLine(r.phone,'r'+r.id)}
+    <p class="text msg">${esc(r.message)}</p>
+    ${act?`<div class="row"><span class="grow sub">신청 처리</span>${act}</div>`:''}
+    <div class="flags">
+      <label class="flag f-urgent"><input type="checkbox" data-rflag="urgent" data-id="${r.id}" ${r.urgent?'checked':''} ${r.done_at?'disabled':''}><span>긴급</span></label>
+      <label class="flag"><input type="checkbox" data-rflag="check" data-id="${r.id}" ${r.checked_at?'checked':''} ${r.done_at?'disabled':''}><span>확인</span>${r.checked_at?byName(r.checked_name,r.checked_at):''}</label>
+      <label class="flag"><input type="checkbox" data-rflag="done" data-id="${r.id}" ${r.done_at?'checked':''}><span>완료</span>${r.done_at?byName(r.done_name,r.done_at):''}</label>
+    </div>
+    ${memo}
+    <div class="row"><span class="sub grow">접수 ${when(r.created_at)}</span></div></article>`;
 }
 
 /* ---------- 탭: 가입 승인 ---------- */
@@ -398,7 +437,15 @@ document.addEventListener('click',async e=>{
     case 'eye': {const k=t.dataset.k;S.shown=S.shown.includes(k)?S.shown.filter(x=>x!==k):[...S.shown,k];render();break;}
     case 'close': if(!S.busy){S.dialog=null;render();} break;
     case 'confirm': if(S.dialog&&!S.busy){ S.busy=true; render(); await S.dialog.run(); } break;
-    case 'reqF': S.reqF=t.dataset.f; render(); break;
+    case 'reqF': S.reqF=t.dataset.f; S.memoEdit=null; await loadTab(); break;
+    case 'reqClear': S.reqQ=''; S.reqApt=''; await loadTab(); break;
+    case 'memoEdit': S.memoEdit=id; render(); setTimeout(()=>{const m=$('#memo-'+id); if(m){m.focus(); m.setSelectionRange(m.value.length,m.value.length);}},30); break;
+    case 'memoCancel': S.memoEdit=null; render(); break;
+    case 'memoSave': {
+      const v=(($('#memo-'+id)||{}).value||'');
+      try{ await q(db.rpc('save_request_memo',{p_id:id,p_memo:v})); S.memoEdit=null; toast(v.trim()?'메모를 저장했어요.':'메모를 지웠어요.'); }catch(err){ toast(friendly(err),true); }
+      await loadTab(); break;
+    }
     case 'req': {
       const r=S.reqs.find(x=>x.id===id), how=t.dataset.a;
       const label=how==='read'?'확인함으로 표시':how==='hold'?'보류':r.req_type==='schedule'?'일정 변경 확인':'실내세차 승인';
@@ -445,6 +492,17 @@ document.addEventListener('click',async e=>{
 });
 document.addEventListener('change',async e=>{
   const t=e.target;
+  if(t.dataset.rflag){
+    const id=Number(t.dataset.id), f=t.dataset.rflag, on=t.checked;
+    t.disabled=true;
+    try{
+      await q(db.rpc('set_request_flag',{p_id:id,p_flag:f,p_on:on})); kickPush();
+      toast(f==='urgent'?(on?'긴급으로 표시했어요.':'긴급 표시를 뺐어요.'):f==='check'?(on?'확인으로 표시했어요.':'확인을 취소했어요.'):(on?'완료 처리했어요.':'완료를 취소했어요.'));
+    }catch(err){ toast(friendly(err),true); }
+    await refreshCounts(); await loadTab(); return;
+  }
+  if(t.id==='reqApt'){ S.reqApt=t.value; await loadTab(); return; }
+  if(t.id==='reqType'){ S.reqType=t.value; render(); return; }
   if(t.id==='jday'&&t.value){ S.jobDay=t.value; await loadTab(); return; }
   if(t.dataset.jstaff){ await act(()=>q(db.from('wash_jobs').update({staff_id:t.value||null}).eq('id',Number(t.dataset.jstaff))),'담당 직원을 바꿨어요.'); return; }
   if(t.dataset.jint){ await act(()=>q(db.from('wash_jobs').update({interior:t.checked}).eq('id',Number(t.dataset.jint))),null); return; }
@@ -452,10 +510,12 @@ document.addEventListener('change',async e=>{
 });
 document.addEventListener('input',e=>{
   if(e.target.id==='custQ'){ S.custQ=e.target.value; render(); }
+  if(e.target.id==='reqQ'){ S.reqQ=e.target.value; }
   if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nsend'); if(b) b.disabled=!(S.noticeSel.length&&S.notice.trim()); }
 });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} });
 document.addEventListener('submit',async e=>{
+  if(e.target.id==='reqsearch'){ e.preventDefault(); S.reqQ=($('#reqQ')||{}).value||''; await loadTab(); return; }
   if(e.target.id!=='login') return; e.preventDefault();
   const em=$('#em').value.trim(), pw=$('#pw').value;
   if(!em||!pw){ S.err='이메일과 비밀번호를 입력해 주세요.'; render(); return; }
