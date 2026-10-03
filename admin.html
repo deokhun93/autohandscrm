@@ -66,7 +66,14 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .flag:has(input:checked):not(.f-urgent){border-color:var(--ink);background:var(--gold-soft)}
 .by{font-size:11.5px;font-weight:500;color:var(--sub)}
 .memo{background:#FFF8E6;border:1px solid var(--gold-soft);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}.memo p{margin:0;white-space:pre-wrap}
-.memo-edit{display:flex;flex-direction:column;gap:8px}.memo-add{align-self:flex-start}.t-interior{background:var(--gold-soft);color:#6B5418}.t-schedule{background:#ECEAE4}
+.memo-edit{display:flex;flex-direction:column;gap:8px}.memo-add{align-self:flex-start}
+.selbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
+.btn.sm,.btn2.sm{min-height:36px;padding:0 12px;font-size:13px}.btn.danger{background:#7A2323;border-color:#7A2323}.btn.danger:hover{background:#5E1A1A}.btn.danger:disabled{background:#E7E3D9;border-color:#E7E3D9;color:#9A9384}
+.sel{display:inline-grid;place-items:center;width:30px;height:30px;margin:-4px 0 -4px -4px;cursor:pointer}.sel input{width:19px;height:19px;margin:0;accent-color:#7A2323}
+.req.is-sel{outline:2px solid #7A2323;outline-offset:-1px}
+.chip-trash[aria-pressed="true"]{background:#7A2323;border-color:#7A2323;color:#fff}
+.trash-note{margin:0;background:#F1EFE8;color:#6B6A63;border-radius:10px;padding:10px 12px;font-size:13px}
+.p-days{background:#FAEEDA;color:#854F0B}.req.is-trash{background:#FBFAF7}.t-interior{background:var(--gold-soft);color:#6B5418}.t-schedule{background:#ECEAE4}
 .car{font-family:var(--f-en);font-weight:800;font-size:16px;letter-spacing:.02em}
 .text{margin:0;background:var(--muted);border-radius:10px;padding:10px 12px;white-space:pre-wrap}
 .tel-row{display:flex;align-items:center;gap:8px}
@@ -204,7 +211,7 @@ window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리�
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const TABS=[['req','고객 요청'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
-  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null, accs:[],accAll:false, staff:[], customers:[],
+  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0, accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
   custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
 
@@ -227,7 +234,13 @@ const fieldStaff=()=>S.staff.filter(s=>['field','admin','master'].includes(s.rol
 const staffName=id=>(S.staff.find(s=>s.id===id)||{}).name||'미배정';
 async function loadTab(){
   try{
-    if(S.tab==='req') S.reqs=await q(db.rpc('list_requests_admin',{p_state:S.reqF,p_complex:S.reqApt||null,p_q:S.reqQ.trim()||null,p_limit:300}))||[];
+    if(S.tab==='req'){
+      const [list,trash]=await Promise.all([
+        S.reqF==='trash'?Promise.resolve(null):q(db.rpc('list_requests_admin',{p_state:S.reqF,p_complex:S.reqApt||null,p_q:S.reqQ.trim()||null,p_limit:300})),
+        q(db.rpc('list_request_trash'))]);
+      if(list) S.reqs=list; S.trash=trash||[]; S.cntTrash=S.trash.length;
+      const ids=new Set((S.reqF==='trash'?S.trash:S.reqs).map(r=>r.id)); S.sel=S.sel.filter(x=>ids.has(x));
+    }
     if(S.tab==='acc') S.accs=await q(db.rpc('list_customer_accounts',{p_only_pending:!S.accAll}))||[];
     if(S.tab==='jobs'){ await db.rpc('ensure_wash_jobs',{p_from:S.jobDay,p_to:S.jobDay}); }
     if(S.tab==='jobs') S.jobs=await q(db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)').eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[];
@@ -262,15 +275,36 @@ function reqView(){
   const apts=[...new Set([...complexes(),...S.reqs.map(r=>r.complex)].filter(Boolean))].sort((x,y)=>x.localeCompare(y,'ko'));
   const nUrgent=S.reqs.filter(r=>r.urgent&&!r.done_at).length;
   return `<div class="row"><div class="grow"><h1 class="h">고객 요청</h1><p class="sub">고객 앱에서 들어온 메시지 · 실내세차 신청 · 일정 변경요청 — 긴급 표시, 확인·메모, 완료 체크</p></div></div>
-  <div class="chips">${[['open','진행 중'],['urgent','긴급'],['done','완료'],['all','전체']].map(([k,l])=>`<button class="chip${k==='urgent'?' chip-red':''}" aria-pressed="${S.reqF===k}" data-act="reqF" data-f="${k}">${l}${k==='open'&&S.cntReq?` <b>${S.cntReq}</b>`:''}</button>`).join('')}</div>
-  <form id="reqsearch" class="req-tools" role="search">
+  <div class="chips">${[['open','진행 중'],['urgent','긴급'],['done','완료'],['all','전체'],['trash','🗑 휴지통']].map(([k,l])=>`<button class="chip${k==='urgent'?' chip-red':''}${k==='trash'?' chip-trash':''}" aria-pressed="${S.reqF===k}" data-act="reqF" data-f="${k}">${l}${k==='open'&&S.cntReq?` <b>${S.cntReq}</b>`:''}${k==='trash'&&S.cntTrash?` <b>${S.cntTrash}</b>`:''}</button>`).join('')}</div>
+  ${S.reqF==='trash'?trashView():reqListView(list,apts,nUrgent)}`;
+}
+function selBar(ids,isTrash){
+  const n=S.sel.length, all=ids.length&&ids.every(x=>S.sel.includes(x));
+  return `<div class="selbar"><button class="btn2 sm" data-act="selAll" data-ids="${ids.join(',')}">${all?'선택 해제':'현재 목록 전체 선택'}</button>${n?`<button class="link" data-act="selNone">선택 해제</button><b class="sub" style="color:var(--text)">${n}건 선택됨</b>`:''}<span class="grow"></span>
+    ${isTrash?`<button class="btn2 sm" data-act="trRestore" ${n?'':'disabled'}>모두 복원</button><button class="btn sm danger" data-act="trPurge" ${n?'':'disabled'}>선택 항목 완전삭제</button>`
+      :`<button class="btn sm danger" data-act="reqTrash" ${n?'':'disabled'}>🗑 전체삭제${n?` (${n}건)`:''}</button>`}</div>`;
+}
+function trashView(){
+  const list=S.trash;
+  return `<p class="trash-note">휴지통에 있는 메시지는 휴지통으로 이동한 날로부터 30일이 지나면 자동으로 완전히 삭제됩니다. 그 전에는 복원할 수 있어요.</p>
+  ${list.length?selBar(list.map(r=>r.id),true)+`<div class="grid">${list.map(r=>`<article class="card req is-trash${S.sel.includes(r.id)?' is-sel':''}">
+    <div class="row"><label class="sel"><input type="checkbox" data-rsel="${r.id}" ${S.sel.includes(r.id)?'checked':''} aria-label="선택"></label><span class="pill t-${r.req_type}">${RT[r.req_type]||r.req_type}</span><span class="grow"></span><span class="pill p-days">${r.days_left}일 후 완전삭제</span></div>
+    <div class="who"><span class="apt">${esc([r.complex,r.unit].filter(Boolean).join(' ')||'아파트 미입력')}</span><span class="car">${esc(r.car_number||'-')}</span></div>
+    <p class="sub" style="margin-top:-6px">${esc(r.customer_name||'')}</p>
+    <p class="text msg">${esc(r.message)}</p>
+    <p class="sub">접수 ${when(r.created_at)} · 삭제 ${when(r.deleted_at)}${r.deleted_name?' ('+esc(r.deleted_name)+')':''}</p>
+    <div class="row"><button class="btn2 grow" data-act="trRestoreOne" data-id="${r.id}">복원</button><button class="btn2 danger grow" data-act="trPurgeOne" data-id="${r.id}">지금 완전삭제</button></div></article>`).join('')}</div>`
+  :`<div class="empty">휴지통이 비어 있어요.</div>`}`;
+}
+function reqListView(list,apts,nUrgent){
+  return `  <form id="reqsearch" class="req-tools" role="search">
     <select class="inp" id="reqApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.reqApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <select class="inp" id="reqType" aria-label="요청 종류"><option value="all">종류 전체</option>${Object.entries(RT).map(([k,l])=>`<option value="${k}" ${S.reqType===k?'selected':''}>${l}</option>`).join('')}</select>
     <input class="inp grow" id="reqQ" type="search" value="${esc(S.reqQ)}" placeholder="차량번호 · 이름 · 동호수 · 내용 · 메모 검색" aria-label="검색">
     <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.reqQ||S.reqApt?`<button class="link" type="button" data-act="reqClear">초기화</button>`:''}
   </form>
   <p class="note">${S.reqF==='open'?'완료 체크 전인 요청이에요. 긴급 건이 맨 위에 와요.':S.reqF==='urgent'?'완료 전 긴급 건이에요.':S.reqF==='done'?'완료한 요청이에요. 검색으로 지난 내역을 찾을 수 있어요.':'모든 요청이에요.'} · ${list.length}건${nUrgent&&S.reqF!=='urgent'?` · <b style="color:var(--red)">긴급 ${nUrgent}건</b>`:''}</p>
-  ${list.length?`<div class="grid">${list.map(reqCard).join('')}</div>`
+  ${list.length?selBar(list.map(r=>r.id),false)+`<div class="grid">${list.map(reqCard).join('')}</div>`
   :`<div class="empty">${S.reqQ||S.reqApt?'조건에 맞는 요청이 없어요.':'표시할 요청이 없어요.'}</div>`}`;
 }
 function reqCard(r){
@@ -285,8 +319,8 @@ function reqCard(r){
     ?`<div class="memo-edit"><textarea class="inp" id="memo-${r.id}" maxlength="1000" placeholder="조치 내용, 통화 내용 등 내부 메모 (고객에게 안 보여요)">${esc(r.staff_memo||'')}</textarea><div class="row"><span class="grow"></span><button class="link" data-act="memoCancel">취소</button><button class="btn" data-act="memoSave" data-id="${r.id}">메모 저장</button></div></div>`
     :r.staff_memo?`<div class="memo"><p>${esc(r.staff_memo)}</p><div class="row">${byName(r.memo_name,r.memo_at)}<span class="grow"></span><button class="link" data-act="memoEdit" data-id="${r.id}">메모 수정</button></div></div>`
     :`<button class="link memo-add" data-act="memoEdit" data-id="${r.id}">+ 메모 쓰기</button>`;
-  return `<article class="card req${r.urgent?' is-urgent':''}${r.done_at?' is-done':''}">
-    <div class="row"><span class="pill t-${r.req_type}">${RT[r.req_type]||r.req_type}</span>${r.urgent?'<span class="pill p-urgent">긴급</span>':''}${r.done_at?'<span class="pill p-ok">완료</span>':''}<span class="grow"></span><span class="sub" title="고객 앱에 보이는 상태">고객 화면: ${statusPill(r.status,r.req_type)}</span></div>
+  return `<article class="card req${r.urgent?' is-urgent':''}${r.done_at?' is-done':''}${S.sel.includes(r.id)?' is-sel':''}">
+    <div class="row"><label class="sel"><input type="checkbox" data-rsel="${r.id}" ${S.sel.includes(r.id)?'checked':''} aria-label="선택 (휴지통으로 보낼 요청)"></label><span class="pill t-${r.req_type}">${RT[r.req_type]||r.req_type}</span>${r.urgent?'<span class="pill p-urgent">긴급</span>':''}${r.done_at?'<span class="pill p-ok">완료</span>':''}<span class="grow"></span><span class="sub" title="고객 앱에 보이는 상태">고객 화면: ${statusPill(r.status,r.req_type)}</span></div>
     <div class="who"><span class="apt">${esc(where)}</span><span class="car">${esc(r.car_number||'-')}</span></div>
     <p class="sub" style="margin-top:-6px">${esc(r.customer_name||'')}${r.car_model?' · '+esc(r.car_model):''}${r.wash_plan?' · 월 '+r.wash_plan+'회':''}</p>
     ${phoneLine(r.phone,'r'+r.id)}
@@ -411,7 +445,7 @@ function render(){
   if(window.AppNav) AppNav.set('admin', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
   if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
   const L=$('#layer'),d=S.dialog;
-  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:'';
+  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub" style="white-space:pre-line">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:'';
   if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
 }
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3400);}
@@ -437,7 +471,18 @@ document.addEventListener('click',async e=>{
     case 'eye': {const k=t.dataset.k;S.shown=S.shown.includes(k)?S.shown.filter(x=>x!==k):[...S.shown,k];render();break;}
     case 'close': if(!S.busy){S.dialog=null;render();} break;
     case 'confirm': if(S.dialog&&!S.busy){ S.busy=true; render(); await S.dialog.run(); } break;
-    case 'reqF': S.reqF=t.dataset.f; S.memoEdit=null; await loadTab(); break;
+    case 'reqF': S.reqF=t.dataset.f; S.memoEdit=null; S.sel=[]; await loadTab(); break;
+    case 'selAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; const all=ids.every(x=>S.sel.includes(x)); S.sel=all?S.sel.filter(x=>!ids.includes(x)):[...new Set([...S.sel,...ids])]; render(); break; }
+    case 'selNone': S.sel=[]; render(); break;
+    case 'reqTrash': { const ids=[...S.sel]; if(!ids.length) break;
+      ask(`선택한 ${ids.length}건을 휴지통으로 이동할까요?`,'휴지통으로 이동된 메시지는 30일이 지나면 자동으로 완전히 삭제됩니다.\n30일 안에는 [🗑 휴지통]에서 복원할 수 있어요.','확인',
+        ()=>act(async()=>{ const n=await q(db.rpc('trash_requests',{p_ids:ids})); S.sel=[]; toast(`${n||0}건을 휴지통으로 옮겼어요.`); },null)); break; }
+    case 'trRestore': case 'trRestoreOne': { const ids=a==='trRestoreOne'?[id]:[...S.sel]; if(!ids.length) break;
+      ask(`${ids.length}건을 복원할까요?`,'고객 요청 목록으로 다시 돌아가요.','확인',
+        ()=>act(async()=>{ const n=await q(db.rpc('restore_requests',{p_ids:ids})); S.sel=S.sel.filter(x=>!ids.includes(x)); toast(`${n||0}건을 복원했어요.`); },null)); break; }
+    case 'trPurge': case 'trPurgeOne': { const ids=a==='trPurgeOne'?[id]:[...S.sel]; if(!ids.length) break;
+      ask(`${ids.length}건을 지금 완전히 삭제할까요?`,'완전히 삭제하면 되돌릴 수 없어요.','확인',
+        ()=>act(async()=>{ const n=await q(db.rpc('purge_requests',{p_ids:ids})); S.sel=S.sel.filter(x=>!ids.includes(x)); toast(`${n||0}건을 완전히 삭제했어요.`); },null)); break; }
     case 'reqClear': S.reqQ=''; S.reqApt=''; await loadTab(); break;
     case 'memoEdit': S.memoEdit=id; render(); setTimeout(()=>{const m=$('#memo-'+id); if(m){m.focus(); m.setSelectionRange(m.value.length,m.value.length);}},30); break;
     case 'memoCancel': S.memoEdit=null; render(); break;
@@ -501,6 +546,7 @@ document.addEventListener('change',async e=>{
     }catch(err){ toast(friendly(err),true); }
     await refreshCounts(); await loadTab(); return;
   }
+  if(t.dataset.rsel){ const id=Number(t.dataset.rsel); S.sel=t.checked?[...new Set([...S.sel,id])]:S.sel.filter(x=>x!==id); render(); return; }
   if(t.id==='reqApt'){ S.reqApt=t.value; await loadTab(); return; }
   if(t.id==='reqType'){ S.reqType=t.value; render(); return; }
   if(t.id==='jday'&&t.value){ S.jobDay=t.value; await loadTab(); return; }
