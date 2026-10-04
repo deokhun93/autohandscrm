@@ -120,6 +120,7 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
 th{font-size:12px;color:var(--sub);font-weight:700;white-space:nowrap;background:var(--paper);position:sticky;top:0}
+td input.need{border-color:#E8A9A9!important;background:#FFF5F4!important}
 td input,td select{border:1px solid var(--line-2);border-radius:8px;padding:6px 8px;background:#fff;max-width:130px}
 .tbl{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .inp{border:1px solid var(--line-2);border-radius:10px;padding:9px 11px;background:#fff}
@@ -431,7 +432,9 @@ function slotsView(){
   const s=S.slotDay&&map[S.slotDay];
   const capNow=S.capVal!==''?S.capVal:(s?s.capacity:2);
   return `<div class="row"><div class="grow"><h1 class="h">실내세차 일정</h1><p class="sub">단지별로 실내세차 가능한 날짜와 받을 차량 수를 열어 두면, 고객 앱 달력에서 그 날짜만 신청할 수 있어요. 신청이 정원만큼 차면 그 날짜는 자동으로 '마감'돼요.</p></div></div>
-  ${apts.length?`<div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.slotApt===a}" data-act="sapt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>`:'<div class="empty">계약완료 고객이 있는 단지가 없어요.</div>'}
+  ${(()=>{const noApt=S.customers.filter(c=>!(c.complex||'').trim()).length;
+    if(!apts.length) return `<div class="card"><h2 class="h">아직 실내세차를 열 단지가 없어요</h2><p class="sub">실내세차 날짜는 <b>아파트(단지)별</b>로 열어요. 지금 계약완료 고객 ${S.customers.length}명 중 ${noApt}명이 아파트 이름이 비어 있어서 단지 목록이 만들어지지 않았어요.</p><p class="sub">[고객 세차 설정] 탭에서 고객마다 <b>아파트</b> 칸을 입력하고 저장하면 여기에 단지가 나타나고, 그 단지 고객들은 고객 앱에서 실내세차를 신청할 수 있어요.</p><div class="row"><button class="btn" data-act="tab" data-t="cust">고객 세차 설정으로 가기</button></div></div>`;
+    return `<div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.slotApt===a}" data-act="sapt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>${noApt?`<p class="note" style="color:var(--red)">아파트 이름이 비어 있는 계약 고객 ${noApt}명은 실내세차를 신청할 수 없어요. [고객 세차 설정]에서 아파트를 입력해 주세요.</p>`:''}`;})()}
   ${S.slotApt?`<div class="two-col"><div class="card"><div class="cal-head"><button class="btn2" data-act="smonth" data-d="-1" ${S.slotMonth<=0?'disabled':''}>${ic('back')}</button><h2 class="h">${y}년 ${m+1}월 · ${esc(S.slotApt)}</h2><button class="btn2" data-act="smonth" data-d="1" ${S.slotMonth>=3?'disabled':''}>${ic('arrow')}</button></div><div class="cal">${cells}</div><p class="note">숫자는 '신청 대수 / 받을 수 있는 대수'예요. 빨간 동그라미는 아직 배정하지 않은 신청 수예요.</p></div>
   <div class="card">${S.slotDay?`<h2 class="h">${kdate(S.slotDay)}</h2>
     ${s?`<p class="sub">신청 ${s.booked}대 / 받을 수 있는 ${s.capacity}대 ${s.booked>=s.capacity?'· <b style="color:var(--red)">마감</b>':`· 남은 자리 ${s.capacity-s.booked}대`}</p>`:'<p class="sub">아직 신청을 받지 않는 날짜예요.</p>'}
@@ -472,8 +475,8 @@ function custView(){
   const list=S.customers.filter(c=>(S.custApt==='전체'||c.complex===S.custApt)&&(!qq||[c.name,c.car_number,c.unit,c.phone].join(' ').toLowerCase().includes(qq)));
   return `<div class="row"><div class="grow"><h1 class="h">고객 세차 설정</h1><p class="sub">정기권·지정 요일·담당 현장직원을 모두 입력하고 저장하면, 지정 요일 날짜에 직원 앱에 자동으로 나타나요. 월 2회는 계약일 기준 격주예요.</p></div></div>
   <div class="row"><input class="inp" id="custQ" placeholder="이름·차량번호·동 검색" value="${esc(S.custQ)}" style="min-width:220px"><div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.custApt===a}" data-act="capt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div></div>
-  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>차량번호</th><th>정기권</th><th>지정 요일</th><th>차종</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
-    ${list.map(c=>`<tr data-cid="${c.id}"><td><b>${esc(c.name)}</b></td><td>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</td><td>${esc(c.car_number||'-')}</td>
+  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권</th><th>지정 요일</th><th>차종</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
+    ${list.map(c=>`<tr data-cid="${c.id}"><td><b>${esc(c.name)}</b></td><td><input data-f="complex" value="${esc(c.complex||'')}" placeholder="예: 범어파크뷰" ${c.complex?'':'class="need"'}></td><td><input data-f="unit" value="${esc(c.unit||'')}" placeholder="예: 103동 1201호" style="max-width:120px"></td><td>${esc(c.car_number||'-')}</td>
       <td><select data-f="wash_plan"><option value="">없음</option><option value="2" ${c.wash_plan===2?'selected':''}>월 2회</option><option value="4" ${c.wash_plan===4?'selected':''}>월 4회</option></select></td>
       <td><select data-f="wash_weekday"><option value="">미정</option>${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${c.wash_weekday===d?'selected':''}>${WDF[d]}</option>`).join('')}</select></td>
       <td><input data-f="car_model" value="${esc(c.car_model||'')}" placeholder="예: 아반떼"></td>
@@ -895,8 +898,8 @@ document.addEventListener('click',async e=>{
     case 'capt': S.custApt=t.dataset.a; render(); break;
     case 'save-cust': {
       const tr=t.closest('tr'), get=f=>tr.querySelector(`[data-f="${f}"]`).value;
-      const patch={wash_plan:get('wash_plan')?Number(get('wash_plan')):null,wash_weekday:get('wash_weekday')!==''?Number(get('wash_weekday')):null,car_model:get('car_model').trim()||null,car_color:get('car_color').trim()||null,field_staff_id:get('field_staff_id')||null};
-      try{ await q(db.from('customers').update(patch).eq('id',id)); Object.assign(S.customers.find(c=>c.id===id),patch); toast(patch.wash_plan&&patch.wash_weekday!==null&&patch.field_staff_id?`저장했어요. 매주 ${WDF[patch.wash_weekday]}마다 직원 앱에 나타나요.`.replace('매주',patch.wash_plan===2?'격주':'매주'):'저장했어요. 정기권·지정 요일·담당 직원이 모두 있어야 직원 앱에 나타나요.'); }catch(err){ toast(friendly(err),true); }
+      const patch={complex:get('complex').trim(),unit:get('unit').trim(),wash_plan:get('wash_plan')?Number(get('wash_plan')):null,wash_weekday:get('wash_weekday')!==''?Number(get('wash_weekday')):null,car_model:get('car_model').trim()||null,car_color:get('car_color').trim()||null,field_staff_id:get('field_staff_id')||null};
+      try{ await q(db.from('customers').update(patch).eq('id',id)); Object.assign(S.customers.find(c=>c.id===id),patch); if(!S.slotApt&&patch.complex) S.slotApt=patch.complex; toast(patch.wash_plan&&patch.wash_weekday!==null&&patch.field_staff_id?`저장했어요. 매주 ${WDF[patch.wash_weekday]}마다 직원 앱에 나타나요.`.replace('매주',patch.wash_plan===2?'격주':'매주'):'저장했어요. 정기권·지정 요일·담당 직원이 모두 있어야 직원 앱에 나타나요.'); }catch(err){ toast(friendly(err),true); }
       break;
     }
     case 'napt': S.noticeApt=t.dataset.a; render(); break;
