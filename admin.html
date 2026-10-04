@@ -940,7 +940,7 @@ document.addEventListener('click',async e=>{
     case 'intSelAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; S.intSel=t.checked?[...new Set([...S.intSel,...ids])]:S.intSel.filter(x=>!ids.includes(x)); render(); break; }
     case 'intMove': { const ids=[...S.intSel], d=S.intDate; if(!ids.length||!d) break; S.cancelNotify=true;
       const rows=S.intReqs.filter(r=>ids.includes(r.id)), nOk=rows.filter(r=>r.status==='승인').length, tg=S.slots.find(x=>x.slot_date===d);
-      ask(`${ids.length}건의 날짜를 ${kdate(d)}로 바꿀까요?`,`날짜만 바뀌고 상태·현장직원은 그대로예요.${nOk?`\n예약 확정 ${nOk}건은 직원웹 일정의 실내세차도 ${kdate(d)}로 옮겨져요.`:''}${tg?`\n${kdate(d)}: 지금 신청 ${tg.booked}/${tg.capacity}대 — 모자라면 받을 대수가 자동으로 늘어나요.`:`\n${kdate(d)}이 아직 안 연 날짜면 옮긴 대수만큼으로 열어 둬요.`}`,'확인',
+      ask(`${ids.length}건의 날짜를 ${kdate(d)}로 바꿀까요?`,`날짜만 바뀌고 상태·현장직원은 그대로예요.\n원래 날짜는 빠진 자리만큼 받을 수 있는 차량이 줄어서, 그 자리에 새 신청이 들어오지 않아요.${nOk?`\n예약 확정 ${nOk}건은 직원웹 일정의 실내세차도 ${kdate(d)}로 옮겨져요.`:''}${tg?`\n${kdate(d)}: 지금 신청 ${tg.booked}/${tg.capacity}대 — 모자라면 받을 대수가 자동으로 늘어나요.`:`\n${kdate(d)}이 아직 안 연 날짜면 옮긴 대수만큼으로 열어 둬요.`}`,'확인',
         ()=>act(async()=>{ const r=await q(db.rpc('move_interior_requests',{p_ids:ids,p_date:d,p_notify:S.cancelNotify})); const sk=r.skipped||[]; S.intSel=[]; S.intDate='';
           toast(`${r.moved||0}건 날짜를 바꿨어요.${sk.length?` ${sk.length}건은 못 바꿨어요 (${sk.slice(0,2).map(x=>x.car+' '+x.reason).join(', ')})`:''}`,!!sk.length&&!r.moved); },null),
         `<label class="auto"><input type="checkbox" id="cancelNotify" checked><span>고객에게 '실내세차 날짜가 변경되었어요' 알림 보내기</span></label>`); break; }
