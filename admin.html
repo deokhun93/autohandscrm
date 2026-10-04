@@ -258,7 +258,7 @@ window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리�
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const TABS=[['req','고객 요청'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
-  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
+  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',cancelNotify:true,resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
   custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
 
@@ -493,6 +493,7 @@ function intReqPanel(){
       <label class="field"><span>날짜</span><select class="inp" id="intDate" ${anyNew?'':'disabled'}><option value="">고객이 신청한 날짜 그대로</option>${S.slots.filter(x=>x.slot_date>keyOf(new Date())).map(x=>`<option value="${x.slot_date}" ${S.intDate===x.slot_date?'selected':''}>${kdate(x.slot_date)} (${x.booked}/${x.capacity})</option>`).join('')}</select></label>
       <label class="field"><span>현장직원</span><select class="inp" id="intStaff"><option value="">고객 담당 직원 그대로</option>${fs.map(f=>`<option value="${f.id}" ${S.intStaff===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></label>
       <button class="btn" data-act="intAssign" ${n?'':'disabled'}>${ic('check')}배정 완료 · 고객 알림</button>
+      <button class="btn sm danger" data-act="intCancel" ${n?'':'disabled'}>🗑 삭제</button>
     </div>
     ${tgt&&anyNew&&tgt.booked+selRows.filter(r=>r.status!=='승인'&&r.target_date!==S.intDate).length>tgt.capacity?'<p class="note" style="color:var(--red)">이 날짜로 옮기면 받을 수 있는 대수를 넘어요. 위에서 그날 대수를 늘리거나 다른 날짜를 골라 주세요.</p>':''}
     ${selRows.some(r=>r.status==='승인')?'<p class="note">이미 예약 확정된 신청은 날짜는 그대로 두고 현장직원만 바뀌어요. 고객에게 알림은 다시 가지 않아요.</p>':''}
@@ -935,6 +936,11 @@ document.addEventListener('click',async e=>{
         ()=>act(async()=>{ const kept=await q(db.rpc('set_interior_closed_weekdays',{p_complex:S.slotApt,p_weekdays:days,p_all:S.wdAll})); S.wdDraft=null; S.wdAll=false;
           toast(kept?`저장했어요. 신청이 있어서 남겨 둔 날짜가 ${kept}개 있어요. 그 신청을 다른 날로 배정해 주세요.`:'휴무 요일을 저장했어요.'); },null)); break; }
     case 'intSelAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; S.intSel=t.checked?[...new Set([...S.intSel,...ids])]:S.intSel.filter(x=>!ids.includes(x)); render(); break; }
+    case 'intCancel': { const ids=[...S.intSel]; if(!ids.length) break; S.cancelNotify=true;
+      const rows=S.intReqs.filter(r=>ids.includes(r.id)), nOk=rows.filter(r=>r.status==='승인').length;
+      ask(`선택한 ${ids.length}건을 삭제할까요?`,`신청·예약이 취소되고 목록에서 사라져요. 그 날짜 자리도 다시 비어요.${nOk?`\n예약 확정 ${nOk}건은 직원웹 일정에서도 실내세차가 빠져요. (정기세차 날이면 외부세차만 남아요)`:''}\n삭제한 건은 되돌릴 수 없어요.`,'확인',
+        ()=>act(async()=>{ const n=await q(db.rpc('cancel_interior_requests',{p_ids:ids,p_notify:S.cancelNotify})); S.intSel=[]; toast(`${n||0}건을 삭제했어요.${S.cancelNotify?' 고객에게 취소 알림을 보냈어요.':''}`); },null),
+        `<label class="auto"><input type="checkbox" id="cancelNotify" checked><span>고객에게 '실내세차 예약이 취소되었어요' 알림 보내기</span></label>`); break; }
     case 'intAssign': { const ids=[...S.intSel]; if(!ids.length) break;
       const rows=S.intReqs.filter(r=>ids.includes(r.id)), nNew=rows.filter(r=>r.status!=='승인').length;
       const dTxt=S.intDate?kdate(S.intDate):'고객이 신청한 날짜', sTxt=S.intStaff?staffName(S.intStaff):'각 고객의 담당 현장직원';
@@ -980,6 +986,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.respick){ const id=Number(t.dataset.respick); S.resPick=t.checked?[...new Set([...S.resPick,id])]:S.resPick.filter(x=>x!==id); if(S.dialog) S.dialog.extra=resAddHtml(); render(); return; }
   if(t.id==='resStaff'){ S.resStaff=t.value; if(S.dialog) S.dialog.extra=resAddHtml(); return; }
   if(t.id==='resNotify'){ S.resNotify=t.checked; if(S.dialog) S.dialog.extra=resAddHtml(); return; }
+  if(t.id==='cancelNotify'){ S.cancelNotify=t.checked; if(S.dialog) S.dialog.extra=`<label class="auto"><input type="checkbox" id="cancelNotify" ${t.checked?'checked':''}><span>고객에게 '실내세차 예약이 취소되었어요' 알림 보내기</span></label>`; return; }
   if(t.id==='wdAll'){ S.wdAll=t.checked; if(!S.wdDraft) S.wdDraft=[...S.closedWd]; render(); return; }
   if(t.id==='intDate'){ S.intDate=t.value; render(); return; }
   if(t.id==='intStaff'){ S.intStaff=t.value; return; }
