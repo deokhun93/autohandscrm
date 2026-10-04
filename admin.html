@@ -171,6 +171,11 @@ textarea.inp{width:100%;min-height:80px;resize:vertical}
 .pw{position:relative}.pw input{padding-right:48px;width:100%}
 .pw-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:42px;height:42px;display:grid;place-items:center;border:0;background:none;color:#6B7280;border-radius:8px;cursor:pointer}
 .auto{display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer;user-select:none}.auto input{width:20px;height:20px;accent-color:#0C1422;margin:0;flex:none}
+.cls{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;margin-left:4px;vertical-align:1px;background:var(--slate);color:var(--blue)}
+.cls.cls-suv{background:#1D3A6E;color:#fff}.cls.cls-none{background:#FDECEA;color:var(--red)}
+.fee3{display:flex;flex-direction:column;gap:1px;font-size:12px;line-height:1.45;color:var(--sub)}.fee3 b{color:var(--text);font-size:13px}
+.bill-amt{display:flex;flex-direction:column;gap:1px;font-size:12px;color:var(--sub);min-width:200px}.bill-amt b{color:var(--text);font-size:13px}
+td select.need{border-color:#E8A9A9!important;background:#FFF5F4!important}
 </style>
 </head>
 <body>
@@ -264,6 +269,11 @@ const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:nul
 
 /* ---------- 데이터 ---------- */
 async function q(p){ const {data,error}=await p; if(error) throw error; return data; }
+/* 차급(소형·중형·대형·SUV) · 실내세차 금액 — SQL 20 실행 전이면 조용히 건너뜀 */
+async function loadCls(){ try{ const {data,error}=await db.rpc('list_customer_car_classes'); if(!error){ const m={}; (data||[]).forEach(r=>m[r.customer_id]=r); S.cls=m; } }catch(_){} }
+const CLASSES=['소형','중형','대형','SUV'];
+const clsTag=id=>{ const r=S.cls&&S.cls[id]; if(!r) return ''; return `<span class="cls ${r.car_class==='SUV'?'cls-suv':r.car_class?'':'cls-none'}" title="실내세차 ${Number(r.price||0).toLocaleString('ko-KR')}원${r.class_source==='미분류'?' · 고객 세차 설정에서 차급을 골라 주세요':''}">${r.car_class||'미분류'}</span>`; };
+const clsPrice=id=>{ const r=S.cls&&S.cls[id]; return r?Number(r.price||0).toLocaleString('ko-KR')+'원':''; };
 async function loadBase(){
   const me=await q(db.from('profiles').select('id,name,role,status').eq('id',S.session.user.id).maybeSingle());
   S.me=me;
@@ -273,6 +283,7 @@ async function loadBase(){
     q(db.from('customers').select('id,name,phone,complex,unit,car_number,car_model,car_color,wash_plan,wash_weekday,field_staff_id,product,contract_date').eq('status','계약완료').is('deleted_at',null).order('complex').order('unit'))
   ]);
   S.staff=staff||[]; S.customers=cust||[];
+  await loadCls();
   if(!S.slotApt) S.slotApt=complexes()[0]||'';
   return true;
 }
@@ -482,11 +493,11 @@ function intReqPanel(){
   const tgt=S.intDate&&S.slots.find(x=>x.slot_date===S.intDate);
   return `<div class="card"><div class="row"><div class="grow"><h2 class="h">실내세차 신청 고객 · ${esc(S.slotApt)}</h2><p class="sub">체크 → 날짜·현장직원 지정 → [배정 완료]를 누르면 예약이 확정되고, 직원웹 그 날짜 일정에 실내세차로 들어가고, 고객에게 '실내세차 예약이 완료되었어요' 알림이 가요.</p></div></div>
     <div class="mini-tabs">${[['all',`배정 대기 ${all.filter(r=>r.status!=='승인').length}`],['done',`예약 확정 ${all.filter(r=>r.status==='승인').length}`],['day',S.slotDay?`${kdate(S.slotDay)} 신청`:'선택한 날짜']].map(([k,l])=>`<button class="mtab" aria-selected="${S.intView===k}" data-act="intView" data-f="${k}" ${k==='day'&&!S.slotDay?'disabled':''}>${l}</button>`).join('')}</div>
-    ${list.length?`<div class="tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="intSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="전체 선택"></th><th>희망일</th><th>상태</th><th>동·호수</th><th>차량번호</th><th>고객</th><th>연락처</th><th>차종·색상</th><th>현장직원</th><th>신청 시각</th></tr></thead><tbody>
+    ${list.length?`<div class="tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="intSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="전체 선택"></th><th>희망일</th><th>상태</th><th>동·호수</th><th>차량번호</th><th>고객</th><th>연락처</th><th>차종·색상</th><th>실내세차 금액</th><th>현장직원</th><th>신청 시각</th></tr></thead><tbody>
       ${list.map(r=>`<tr class="${S.intSel.includes(r.id)?'picked':''}"><td class="ck"><input type="checkbox" data-intsel="${r.id}" ${S.intSel.includes(r.id)?'checked':''} aria-label="${esc(r.car_number||'')} 선택"></td>
         <td class="nowrap"><b>${kdate(r.target_date)}</b></td><td>${r.status==='승인'?'<span class="pill p-ok">예약 확정</span>':r.status==='보류'?'<span class="pill p-hold">보류</span>':'<span class="pill p-new">배정 대기</span>'}</td>
         <td>${esc(r.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b></td><td>${esc(r.name||'')}</td><td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td>
-        <td>${esc([r.car_model,r.car_color].filter(Boolean).join(' · ')||'-')}</td><td class="nowrap">${r.status==='승인'?esc(r.assigned_staff_name||'미배정'):`<span class="sub">담당: ${esc(r.default_staff_id?staffName(r.default_staff_id):'미배정')}</span>`}</td><td class="nowrap sub">${when(r.created_at)}</td></tr>`).join('')}
+        <td>${esc([r.car_model,r.car_color].filter(Boolean).join(' · ')||'-')}${clsTag(r.customer_id)}</td><td class="nowrap">${clsPrice(r.customer_id)||'-'}</td><td class="nowrap">${r.status==='승인'?esc(r.assigned_staff_name||'미배정'):`<span class="sub">담당: ${esc(r.default_staff_id?staffName(r.default_staff_id):'미배정')}</span>`}</td><td class="nowrap sub">${when(r.created_at)}</td></tr>`).join('')}
     </tbody></table></div>`:`<div class="empty">${S.intView==='done'?'예약 확정된 신청이 없어요.':S.intView==='day'?'이 날짜 신청이 없어요.':'배정을 기다리는 신청이 없어요.'}</div>`}
     <div class="assign-bar">
       <b>${n?`${n}건 선택`:'신청을 체크해 주세요'}</b>
@@ -508,11 +519,13 @@ function custView(){
   const list=S.customers.filter(c=>(S.custApt==='전체'||c.complex===S.custApt)&&(!qq||[c.name,c.car_number,c.unit,c.phone].join(' ').toLowerCase().includes(qq)));
   return `<div class="row"><div class="grow"><h1 class="h">고객 세차 설정</h1><p class="sub">정기권·지정 요일·담당 현장직원을 모두 입력하고 저장하면, 지정 요일 날짜에 직원 앱에 자동으로 나타나요. 월 2회는 계약일 기준 격주예요.</p></div></div>
   <div class="row"><input class="inp" id="custQ" placeholder="이름·차량번호·동 검색" value="${esc(S.custQ)}" style="min-width:220px"><div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.custApt===a}" data-act="capt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div></div>
-  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권</th><th>지정 요일</th><th>차종</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
+  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권</th><th>지정 요일</th><th>차종</th><th>차급</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
     ${list.map(c=>`<tr data-cid="${c.id}"><td><b>${esc(c.name)}</b></td><td><input data-f="complex" value="${esc(c.complex||'')}" placeholder="예: 범어파크뷰" ${c.complex?'':'class="need"'}></td><td><input data-f="unit" value="${esc(c.unit||'')}" placeholder="예: 103동 1201호" style="max-width:120px"></td><td>${esc(c.car_number||'-')}</td>
       <td><select data-f="wash_plan"><option value="">없음</option><option value="2" ${c.wash_plan===2?'selected':''}>월 2회</option><option value="4" ${c.wash_plan===4?'selected':''}>월 4회</option></select></td>
       <td><select data-f="wash_weekday"><option value="">미정</option>${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${c.wash_weekday===d?'selected':''}>${WDF[d]}</option>`).join('')}</select></td>
       <td><input data-f="car_model" value="${esc(c.car_model||'')}" placeholder="예: 아반떼"></td>
+      <td>${(()=>{const r=S.cls&&S.cls[c.id], man=r&&r.class_source==='직접'?r.car_class:''; if(!S.cls) return '<span class="sub">SQL 20 필요</span>';
+        return `<select data-f="car_class" data-was="${esc(man)}" ${r&&r.class_source==='미분류'?'class="need"':''} title="실내세차 ${clsPrice(c.id)}"><option value="">${!r||man?'자동':r.car_class?`자동 (${r.car_class})`:'미분류'}</option>${CLASSES.map(k=>`<option value="${k}" ${man===k?'selected':''}>${k}${k==='SUV'?'':' (세단)'}</option>`).join('')}</select>`;})()}</td>
       <td><input data-f="car_color" value="${esc(c.car_color||'')}" placeholder="예: 흰색" style="max-width:90px"></td>
       <td><select data-f="field_staff_id"><option value="">미배정</option>${fs.map(s=>`<option value="${s.id}" ${s.id===c.field_staff_id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></td>
       <td><button class="btn2" data-act="save-cust" data-id="${c.id}">저장</button></td></tr>`).join('')}
@@ -556,7 +569,7 @@ function cmgrView(){
     ${list.map(c=>{const nn=S.noteCnt[c.id]||{total:0,starred:0}, open=S.cmOpen.includes(c.id), st=cmState(c), sel=S.cmSel.includes(c.id);
       return `<tr class="cm-row ${st.cls}${open?' open':''}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-cmsel="${c.id}" ${sel?'checked':''} aria-label="${esc(c.car_number||'')} 선택"></td><td>${esc(c.complex||'-')}</td><td>${esc(c.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(c.car_number||'-')}</b></td>
       <td><span class="pill st-${st.k}">${esc(st.label)}</span></td><td><b>${esc(c.name||'')}</b></td>
-      <td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td><td>${esc(c.car_model||'-')}</td><td>${esc(c.car_color||'-')}</td><td class="nowrap">${c.wash_plan?'월 '+c.wash_plan+'회':'-'}</td><td class="nowrap">${c.wash_weekday!=null?WDF[c.wash_weekday]:'-'}</td><td class="nowrap">${esc(c.field_staff_id?staffName(c.field_staff_id):'미배정')}</td><td class="nowrap">${c.contract_date?esc(String(c.contract_date).slice(2).replace(/-/g,'.')):'-'}</td>
+      <td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td><td>${esc(c.car_model||'-')}${clsTag(c.id)}</td><td>${esc(c.car_color||'-')}</td><td class="nowrap">${c.wash_plan?'월 '+c.wash_plan+'회':'-'}</td><td class="nowrap">${c.wash_weekday!=null?WDF[c.wash_weekday]:'-'}</td><td class="nowrap">${esc(c.field_staff_id?staffName(c.field_staff_id):'미배정')}</td><td class="nowrap">${c.contract_date?esc(String(c.contract_date).slice(2).replace(/-/g,'.')):'-'}</td>
       <td><button class="memo-tog" data-act="cmToggle" data-id="${c.id}" aria-expanded="${open}">${nn.starred?`<span class="star">⭐${nn.starred}</span>`:''}<span>메모 ${nn.total}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td></tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box">${notesPanel(c)}</div></td></tr>`:''}`;}).join('')}
   </tbody></table></div>`:`<div class="empty">${S.cmQ||S.cmApt||S.cmSt!=='all'?'조건에 맞는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`}`;
@@ -610,7 +623,7 @@ function collView(){
   const ids=list.map(r=>r.id), allSel=ids.length&&ids.every(x=>S.collSel.includes(x)), n=S.collSel.length;
   const sumUnpaid=list.reduce((a,r)=>a+(r.unpaid_amount||0),0);
   const COLS=17;
-  return `<div class="row"><div class="grow"><h1 class="h">수금관리</h1><p class="sub">매달 1일에 청구가 자동으로 생기고, [입금 확인]을 누르면 수금완료예요. 납부일이 지나면 미납, 2개월 이상 밀리면 장기미납으로 자동으로 옮겨져요. 고객관리와 따로 관리하는 명단이에요.</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">수금관리</h1><p class="sub">매달 1일에 청구가 자동으로 생기고, [입금 확인]을 누르면 수금완료예요. 납부일이 지나면 미납, 2개월 이상 밀리면 장기미납으로 자동으로 옮겨져요. 고객관리와 따로 관리하는 명단이에요.<br>예약 확정된 실내세차(세단 10,000원 · SUV 15,000원)는 그 달 청구에 자동으로 더해져요: 외부세차비용 + 실내세차비용 = 매월 요금.</p></div></div>
   <div class="coll-tools">
     <label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="collFile" accept=".xlsx,.xls,.csv" hidden></label>
     <button class="btn2 sm" data-act="collTpl">엑셀 양식 받기</button>
@@ -627,14 +640,14 @@ function collView(){
   <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}명 선택됨`:`${list.length}명${sumUnpaid?` · 미입금 합계 ${won0(sumUnpaid)}`:''}`}</b>${n?`<button class="link" data-act="collSelNone">선택 해제</button>`:''}<span class="grow"></span>
     <button class="btn2 sm" data-act="collPayMonth" ${n?'':'disabled'}>이번 달 입금 확인</button>
     <button class="btn sm danger" data-act="collDel" ${n?'':'disabled'}>🗑 명단에서 삭제</button></div>
-  ${list.length?`<div class="tbl cm-tbl coll-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="collSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>상태</th><th>고객(입금자명)</th><th>연락처</th><th>차종</th><th>색상</th><th>정기권</th><th>지정 요일</th><th>담당 직원</th><th>계약일</th><th>수금</th><th>월 요금 · 납부일</th><th>미입금</th><th>수금 메모</th></tr></thead><tbody>
+  ${list.length?`<div class="tbl cm-tbl coll-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="collSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>상태</th><th>고객(입금자명)</th><th>연락처</th><th>차종</th><th>색상</th><th>정기권</th><th>지정 요일</th><th>담당 직원</th><th>계약일</th><th>수금</th><th>이번 달 요금 · 납부일</th><th>미입금</th><th>수금 메모</th></tr></thead><tbody>
     ${list.map(r=>{const open=S.collOpen.includes(r.id), sel=S.collSel.includes(r.id);
       return `<tr class="cm-row coll-${{'미수금':'due','수금완료':'ok','미납':'late','장기미납':'long'}[r.coll_state]||'none'}${open?' open':''}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-collsel="${r.id}" ${sel?'checked':''} aria-label="${esc(r.car_number||r.name||'')} 선택"></td>
       <td>${esc(r.complex||'-')}</td><td>${esc(r.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b></td><td>${esc(r.wash_status||'-')}</td>
       <td><b>${esc(r.name||'-')}</b>${r.payer_name&&r.payer_name!==r.name?`<small class="by"> (${esc(r.payer_name)})</small>`:''}</td>
-      <td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td><td>${esc(r.car_model||'-')}</td><td>${esc(r.car_color||'-')}</td><td class="nowrap">${esc(r.wash_plan||'-')}</td><td class="nowrap">${esc(r.wash_weekday||'-')}</td><td class="nowrap">${esc(r.staff_name||'-')}</td><td class="nowrap">${ymd(r.contract_date)}</td>
+      <td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td><td>${esc(r.car_model||'-')}${r.car_class!==undefined?`<span class="cls ${r.car_class==='SUV'?'cls-suv':r.car_class?'':'cls-none'}">${esc(r.car_class||'미분류')}</span>`:''}</td><td>${esc(r.car_color||'-')}</td><td class="nowrap">${esc(r.wash_plan||'-')}</td><td class="nowrap">${esc(r.wash_weekday||'-')}</td><td class="nowrap">${esc(r.staff_name||'-')}</td><td class="nowrap">${ymd(r.contract_date)}</td>
       <td class="nowrap">${collPill(r.coll_state)}${r.overdue_months>1?` <small class="by">${r.overdue_months}개월</small>`:''}${r.coll_state!=='수금완료'&&r.coll_state!=='청구없음'?` <button class="link" data-act="collPay" data-id="${r.id}">입금 확인</button>`:''}</td>
-      <td class="nowrap">${won0(r.fee)} · ${r.due_day}일</td><td class="nowrap">${r.unpaid_amount?`<b style="color:var(--red)">${won0(r.unpaid_amount)}</b>`:'-'}</td>
+      <td class="nowrap">${r.cur_total===undefined?`${won0(r.fee)} · ${r.due_day}일`:`<div class="fee3"><span>외부세차비용 : ${won0(r.cur_external)}</span><span>실내세차비용 : ${won0(r.cur_interior||0)}${r.cur_interior_count?` (${r.cur_interior_count}회)`:''}</span><b>매월 요금 : ${won0(r.cur_total)}</b><span>납부일 매달 ${r.due_day}일</span></div>`}</td><td class="nowrap">${r.unpaid_amount?`<b style="color:var(--red)">${won0(r.unpaid_amount)}</b>`:'-'}</td>
       <td><button class="memo-tog" data-act="collToggle" data-id="${r.id}" aria-expanded="${open}">${r.star_count?`<span class="star">⭐${r.star_count}</span>`:''}<span>메모 ${r.note_count}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td></tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box coll-box">${collPanel(r)}</div></td></tr>`:''}`;}).join('')}
   </tbody></table></div>`:`<div class="empty">${S.coll.length?'이 탭에 해당하는 고객이 없어요.':'아직 수금 명단이 없어요. [엑셀 넣기] · [고객관리에서 불러오기] · [+ 직접 추가]로 시작하세요.'}</div>`}`;
@@ -643,7 +656,7 @@ function collPanel(r){
   const bills=S.cbills[r.id], notes=S.cnotes[r.id], star=!!S.cnStar[r.id];
   return `<div class="row"><b>${esc(r.car_number||'')} · ${esc([r.complex,r.unit].filter(Boolean).join(' '))} · ${esc(r.name||'')}</b><span class="grow"></span><button class="btn2 sm" data-act="collEdit" data-id="${r.id}">정보 · 요금 수정</button></div>
   <div class="coll-grid">
-    <div><h3 class="h3">월별 청구 · 입금</h3>${!bills?'<p class="sub">불러오는 중...</p>':bills.length?`<ul class="bills">${bills.map(b=>`<li class="${b.paid_at?'paid':b.overdue?'late':''}"><b>${b.bill_month.slice(0,7).replace('-','년 ')}월</b><span>${won0(b.amount)}</span><span class="sub">납부일 ${ymd(b.due_date)}</span><span class="grow"></span>${b.paid_at?`<span class="pill cs-ok">입금 ${ymd(b.paid_at)}${b.paid_name?' · '+esc(b.paid_name):''}</span><button class="link" data-act="collUnpay" data-id="${b.id}" data-m="${r.id}">취소</button>`:`<span class="pill ${b.overdue?'cs-late':'cs-due'}">${b.overdue?'미납':'입금 전'}</span><button class="btn2 sm" data-act="collPayOne" data-id="${b.id}" data-m="${r.id}">입금 확인</button>`}</li>`).join('')}</ul>`:'<p class="sub">청구 내역이 없어요.</p>'}</div>
+    <div><h3 class="h3">월별 청구 · 입금</h3>${!bills?'<p class="sub">불러오는 중...</p>':bills.length?`<ul class="bills">${bills.map(b=>`<li class="${b.paid_at?'paid':b.overdue?'late':''}"><b>${b.bill_month.slice(0,7).replace('-','년 ')}월</b>${b.total_amount===undefined?`<span>${won0(b.amount)}</span>`:`<span class="bill-amt"><span>외부세차비용 : ${won0(b.amount)}</span><span>실내세차비용 : ${won0(b.interior_amount||0)}${b.interior_count?` (${b.interior_count}회 · ${esc(b.interior_dates||'')})`:''}</span><b>매월 요금 : ${won0(b.total_amount)}</b></span>`}<span class="sub">납부일 ${ymd(b.due_date)}</span><span class="grow"></span>${b.paid_at?`<span class="pill cs-ok">입금 ${ymd(b.paid_at)}${b.paid_name?' · '+esc(b.paid_name):''}</span><button class="link" data-act="collUnpay" data-id="${b.id}" data-m="${r.id}">취소</button>`:`<span class="pill ${b.overdue?'cs-late':'cs-due'}">${b.overdue?'미납':'입금 전'}</span><button class="btn2 sm" data-act="collPayOne" data-id="${b.id}" data-m="${r.id}">입금 확인</button>`}</li>`).join('')}</ul>`:'<p class="sub">청구 내역이 없어요.</p>'}</div>
     <div><h3 class="h3">수금 메모 <span class="sub">(고객관리 메모와 별도)</span></h3>
       <div class="note-new"><textarea class="inp" id="cnote-${r.id}" maxlength="2000" placeholder="입금 약속일, 통화 내용 등">${esc(S.cnDraft[r.id]||'')}</textarea>
       <div class="row"><label class="flag f-star"><input type="checkbox" data-cnstar="${r.id}" ${star?'checked':''}><span>⭐ 중요</span></label><span class="grow"></span><button class="btn" data-act="cnoteAdd" data-id="${r.id}">메모 저장</button></div></div>
@@ -698,7 +711,7 @@ async function collExport(tpl){
   try{
     const X=await loadXLSX();
     const rows=tpl?[{아파트:'범어파크뷰',동호수:'103동 1201호',차량번호:'12가3456',상태:'세차중','고객(입금자명)':'홍길동(홍엄마)',연락처:'010-1234-5678',차종:'아반떼',색상:'흰색',정기권:'월 4회',지정요일:'화요일',담당직원:'김덕훈',계약일:'2026-09-01',월요금:55000,납부일:10,미납개월:0,고객메모:'자동이체 예정'}]
-      :(S.collTab==='전체'?S.coll:S.coll.filter(r=>r.coll_state===S.collTab)).filter(r=>!S.collApt||r.complex===S.collApt).map(r=>({아파트:r.complex,동호수:r.unit,차량번호:r.car_number,상태:r.wash_status,'고객(입금자명)':r.payer_name&&r.payer_name!==r.name?`${r.name}(${r.payer_name})`:r.name,연락처:r.phone,차종:r.car_model,색상:r.car_color,정기권:r.wash_plan,지정요일:r.wash_weekday,담당직원:r.staff_name,계약일:r.contract_date||'',월요금:r.fee??'',납부일:r.due_day,수금상태:r.coll_state,미납개월:r.overdue_months,미입금액:r.unpaid_amount,최근입금일:r.last_paid||'',고객메모:r.notes_text||''}));
+      :(S.collTab==='전체'?S.coll:S.coll.filter(r=>r.coll_state===S.collTab)).filter(r=>!S.collApt||r.complex===S.collApt).map(r=>({아파트:r.complex,동호수:r.unit,차량번호:r.car_number,상태:r.wash_status,'고객(입금자명)':r.payer_name&&r.payer_name!==r.name?`${r.name}(${r.payer_name})`:r.name,연락처:r.phone,차종:r.car_model,색상:r.car_color,정기권:r.wash_plan,지정요일:r.wash_weekday,담당직원:r.staff_name,계약일:r.contract_date||'',월요금:r.fee??'',외부세차비용:r.cur_external??'',실내세차비용:r.cur_interior??'',실내세차횟수:r.cur_interior_count??'',매월요금:r.cur_total??'',차급:r.car_class||'',납부일:r.due_day,수금상태:r.coll_state,미납개월:r.overdue_months,미입금액:r.unpaid_amount,최근입금일:r.last_paid||'',고객메모:r.notes_text||''}));
     const ws=X.utils.json_to_sheet(rows,{header:tpl?XH:[...XH.slice(0,14),'수금상태','미납개월','미입금액','최근입금일','고객메모']});
     ws['!cols']=(tpl?XH:[...XH.slice(0,14),'수금상태','미납개월','미입금액','최근입금일','고객메모']).map(h=>({wch:h==='고객메모'?40:Math.max(8,h.length*2+2)}));
     const wb=X.utils.book_new(); X.utils.book_append_sheet(wb,ws,tpl?'수금명단 양식':'수금관리');
@@ -958,7 +971,10 @@ document.addEventListener('click',async e=>{
     case 'save-cust': {
       const tr=t.closest('tr'), get=f=>tr.querySelector(`[data-f="${f}"]`).value;
       const patch={complex:get('complex').trim(),unit:get('unit').trim(),wash_plan:get('wash_plan')?Number(get('wash_plan')):null,wash_weekday:get('wash_weekday')!==''?Number(get('wash_weekday')):null,car_model:get('car_model').trim()||null,car_color:get('car_color').trim()||null,field_staff_id:get('field_staff_id')||null};
-      try{ await q(db.from('customers').update(patch).eq('id',id)); Object.assign(S.customers.find(c=>c.id===id),patch); if(!S.slotApt&&patch.complex) S.slotApt=patch.complex; toast(patch.wash_plan&&patch.wash_weekday!==null&&patch.field_staff_id?`저장했어요. 매주 ${WDF[patch.wash_weekday]}마다 직원 앱에 나타나요.`.replace('매주',patch.wash_plan===2?'격주':'매주'):'저장했어요. 정기권·지정 요일·담당 직원이 모두 있어야 직원 앱에 나타나요.'); }catch(err){ toast(friendly(err),true); }
+      const clsSel=tr.querySelector('[data-f="car_class"]');
+      try{ await q(db.from('customers').update(patch).eq('id',id)); Object.assign(S.customers.find(c=>c.id===id),patch);
+        if(clsSel&&clsSel.value!==clsSel.dataset.was) await q(db.rpc('set_customer_car_class',{p_id:id,p_class:clsSel.value||null}));
+        if(S.cls){ await loadCls(); render(); } if(!S.slotApt&&patch.complex) S.slotApt=patch.complex; toast(patch.wash_plan&&patch.wash_weekday!==null&&patch.field_staff_id?`저장했어요. 매주 ${WDF[patch.wash_weekday]}마다 직원 앱에 나타나요.`.replace('매주',patch.wash_plan===2?'격주':'매주'):'저장했어요. 정기권·지정 요일·담당 직원이 모두 있어야 직원 앱에 나타나요.'); }catch(err){ toast(friendly(err),true); }
       break;
     }
     case 'napt': S.noticeApt=t.dataset.a; render(); break;
