@@ -176,6 +176,24 @@ textarea.inp{width:100%;min-height:80px;resize:vertical}
 .fee3{display:flex;flex-direction:column;gap:1px;font-size:12px;line-height:1.45;color:var(--sub)}.fee3 b{color:var(--text);font-size:13px}
 .bill-amt{display:flex;flex-direction:column;gap:1px;font-size:12px;color:var(--sub);min-width:200px}.bill-amt b{color:var(--text);font-size:13px}
 td select.need{border-color:#E8A9A9!important;background:#FFF5F4!important}
+.live-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.live-sum>div{border-radius:14px;padding:12px 14px;border:1px solid var(--line);background:var(--card)}
+.live-sum b{display:block;font-size:26px;font-weight:900;line-height:1.1}.live-sum span{font-size:12.5px;font-weight:700}.live-sum small{display:block;font-size:12px;color:var(--sub);margin-top:2px}
+.live-sum .t{background:var(--ink);color:#fff;border-color:var(--ink)}.live-sum .t small{color:#C4CBD7}.live-sum .d{background:var(--ok);border-color:transparent}.live-sum .u{background:#FDECEA;border-color:transparent}.live-sum .u b{color:var(--red)}
+.bar{height:8px;border-radius:99px;background:var(--muted);overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--gold),#3E9B63)}
+.apt-card{border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
+.apt-card .ah{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 14px;background:var(--muted)}
+.apt-card .ah h3{margin:0;font-size:16px}.apt-card table{width:100%;border-collapse:collapse}.apt-card td,.apt-card th{padding:9px 12px;border-top:1px solid var(--line);text-align:left;font-size:13.5px}
+.apt-card th{font-size:12px;color:var(--sub);font-weight:700;background:#fff}.num-u{color:var(--red);font-weight:800}.num-d{color:#1F5136;font-weight:800}
+.fr-list{display:flex;flex-direction:column;gap:10px}
+.fr{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:12px 14px;display:flex;gap:12px}
+.fr.new{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold-soft)}.fr.done{background:#F4FAF6}.fr.picked{background:var(--gold-soft)}
+.fr .bd{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}.fr .body{white-space:pre-wrap;font-size:14.5px;margin:0}
+.fr-ph{display:flex;gap:8px;flex-wrap:wrap}.fr-ph button{width:84px;height:84px;padding:0;border:1px solid var(--line-2);border-radius:10px;overflow:hidden;background:var(--muted);cursor:zoom-in}.fr-ph img{width:100%;height:100%;object-fit:cover}
+.fr .reply{display:flex;gap:8px}.fr .reply input{flex:1}
+.pv{position:fixed;inset:0;background:rgba(5,9,16,.92);z-index:80;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;padding:16px}
+.pv img{max-width:100%;max-height:82vh;border-radius:8px}.pv .pvb{display:flex;gap:10px}.pv .pvb button,.pv .pvb a{background:#fff;border:0;border-radius:10px;padding:9px 16px;font-weight:700;color:var(--ink);text-decoration:none}
+@media(max-width:700px){.live-sum{grid-template-columns:repeat(2,minmax(0,1fr))}.fr-ph button{width:70px;height:70px}}
 </style>
 </head>
 <body>
@@ -261,8 +279,9 @@ let deferredInstall=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;if(typeof render==='function'&&S.ready)render();});
 window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리자 앱을 설치했어요. 홈 화면의 오토핸즈 관리자 아이콘으로 열어 주세요.');render();});
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-const TABS=[['req','고객 요청'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
+const TABS=[['req','고객 요청'],['live','실시간 세차 현황'],['field','현장전달'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
+  liveDay:keyOf(new Date()),live:null,liveAt:null,frows:null,frState:'open',frMine:false,frSel:[],frReply:{},fmgr:[],purl:{},pview:null,cntField:0,cntFieldAll:0,
   reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',cancelNotify:true,resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
   custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
@@ -311,6 +330,17 @@ async function loadTab(){
       const live=new Set((st||[]).map(r=>r.id)); S.customers=S.customers.filter(c=>live.has(c.id)); S.cmSel=S.cmSel.filter(x=>live.has(x));
       await Promise.all(S.cmOpen.map(loadNotes));
     }
+    if(S.tab==='live'){
+      try{ await db.rpc('ensure_wash_jobs',{p_from:S.liveDay,p_to:S.liveDay}); }catch(_){}
+      S.live=await q(db.rpc('list_wash_live',{p_date:S.liveDay}))||[]; S.liveAt=new Date();
+    }
+    if(S.tab==='field'){
+      const [rows,mg]=await Promise.all([q(db.rpc('list_field_reports',{p_state:S.frState,p_mine:S.frMine})),q(db.rpc('list_field_managers'))]);
+      S.frows=rows||[]; S.fmgr=mg||[];
+      const live=new Set(S.frows.map(r=>r.id)); S.frSel=S.frSel.filter(x=>live.has(x));
+      await signPhotos(S.frows.flatMap(r=>r.photos||[]));
+      try{ const c=await db.rpc('count_field_reports'); if(!c.error&&c.data&&c.data[0]){ S.cntField=c.data[0].new_mine; S.cntFieldAll=c.data[0].new_all; } }catch(_){}
+    }
     if(S.tab==='acc') S.accs=await q(db.rpc('list_customer_accounts',{p_only_pending:!S.accAll}))||[];
     if(S.tab==='jobs'){ await db.rpc('ensure_wash_jobs',{p_from:S.jobDay,p_to:S.jobDay}); }
     if(S.tab==='jobs') S.jobs=await q(db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)').eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[];
@@ -326,6 +356,7 @@ async function refreshCounts(){
   try{
     const [r,a]=await Promise.all([db.rpc('list_requests_admin',{p_state:'open',p_complex:null,p_q:null,p_limit:1000}),db.rpc('list_customer_accounts',{p_only_pending:true})]);
     S.cntReq=(r.data||[]).length; S.cntAcc=(a.data||[]).length;
+    const f=await db.rpc('count_field_reports'); if(!f.error&&f.data&&f.data[0]){ S.cntField=f.data[0].new_mine; S.cntFieldAll=f.data[0].new_all; }
   }catch(_){}
 }
 function monthRange(){ const b=new Date(); b.setDate(1); b.setMonth(b.getMonth()+S.slotMonth); const y=b.getFullYear(),m=b.getMonth(); return {y,m,from:keyOf(new Date(y,m,1)),to:keyOf(new Date(y,m+1,0))}; }
@@ -338,6 +369,70 @@ function phoneLine(phone,key){
 }
 const RT={msg:'고객 메시지',interior:'실내세차 신청',schedule:'일정 변경'};
 const statusPill=(st,type)=>{const label=st==='확인'&&type==='schedule'?'적용됨':st;return `<span class="pill ${st==='접수'?'p-new':st==='보류'?'p-hold':'p-ok'}">${esc(label)}</span>`;};
+
+/* ---------- 탭: 실시간 세차 현황 ---------- */
+const pct=(a,b)=>b?Math.round(a*100/b):0;
+function liveSum(rows){ const z={total:0,done:0,waiting:0,skipped:0,ext_total:0,ext_done:0,int_total:0,int_done:0,report_count:0}; rows.forEach(r=>Object.keys(z).forEach(k=>z[k]+=r[k]||0)); return z; }
+function liveView(){
+  const rows=S.live, isToday=S.liveDay===keyOf(new Date());
+  const head=`<div class="row"><div class="grow"><h1 class="h">실시간 세차 현황</h1><p class="sub">아파트별 · 현장직원별 배정 · 완료 · 미완료 대수예요. 이 화면을 열어 두면 30초마다 자동으로 새로 고쳐요.${S.liveAt?` · 마지막 갱신 ${String(S.liveAt.getHours()).padStart(2,'0')}:${String(S.liveAt.getMinutes()).padStart(2,'0')}:${String(S.liveAt.getSeconds()).padStart(2,'0')}`:''}</p></div></div>
+  <div class="row"><button class="btn2" data-act="lday" data-d="-1">이전</button><input type="date" class="inp" id="lday" value="${S.liveDay}" aria-label="날짜"><button class="btn2" data-act="lday" data-d="1">다음</button>${isToday?'':`<button class="btn2" data-act="ltoday">오늘</button>`}<span class="grow"></span><button class="btn2" data-act="lreload">${ic('refresh',14)}지금 새로고침</button></div>`;
+  if(!rows) return head+'<div class="empty">불러오는 중...</div>';
+  if(!rows.length) return head+`<div class="empty">${kdate(S.liveDay)}에 배정된 세차가 없어요.</div>`;
+  const T=liveSum(rows), apts=[...new Set(rows.map(r=>r.complex))];
+  const unT=T.total-T.done;
+  return head+`<div class="live-sum">
+    <div class="t"><span>총 배정받은 대수</span><b>${T.total}대</b><small>실외 ${T.ext_total}대 · 실내 ${T.int_total}대</small></div>
+    <div class="d"><span>세차완료</span><b>${T.done}대</b><small>실외 ${T.ext_done}대 · 실내 ${T.int_done}대</small></div>
+    <div class="u"><span>미완료</span><b>${unT}대</b><small>세차대기 ${T.waiting}대${T.skipped?` · 미작업 ${T.skipped}대`:''}</small></div>
+    <div><span>진행률</span><b>${pct(T.done,T.total)}%</b><div class="bar" style="margin-top:6px"><i style="width:${pct(T.done,T.total)}%"></i></div>${T.report_count?`<small>📝 현장전달 ${T.report_count}건</small>`:''}</div></div>
+  <p class="note">실외 = 외부세차만 · 실내 = 실내세차가 포함된 차량(외부 + 실내)이에요. 미완료 = 세차대기 + 미작업.</p>
+  ${apts.map(a=>{const rs=rows.filter(r=>r.complex===a), A=liveSum(rs);
+    return `<section class="apt-card"><div class="ah"><h3>${esc(a)}</h3><span class="sub">배정 <b style="color:var(--text)">${A.total}대</b> (실외 ${A.ext_total}대, 실내 ${A.int_total}대) · 완료 <span class="num-d">${A.done}대</span> · 미완료 <span class="num-u">${A.total-A.done}대</span></span><span class="grow"></span><div class="bar" style="width:140px"><i style="width:${pct(A.done,A.total)}%"></i></div><b>${pct(A.done,A.total)}%</b></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>현장직원</th><th>배정받은 차</th><th>세차완료</th><th>미완료</th><th>진행률</th><th>마지막 완료</th><th>현장전달</th></tr></thead><tbody>
+    ${rs.map(r=>`<tr><td><b>${esc(r.staff_name||'미배정')}</b></td><td class="nowrap"><b>${r.total}대</b> <span class="sub">(실외 ${r.ext_total}대, 실내 ${r.int_total}대)</span></td>
+      <td class="nowrap"><span class="num-d">${r.done}대</span>${r.int_total?` <span class="sub">(실내 ${r.int_done}/${r.int_total})</span>`:''}</td>
+      <td class="nowrap"><span class="${r.total-r.done?'num-u':''}">${r.total-r.done}대</span>${r.skipped?` <span class="sub">(미작업 ${r.skipped})</span>`:''}</td>
+      <td class="nowrap"><div class="row" style="gap:8px"><div class="bar" style="width:90px"><i style="width:${pct(r.done,r.total)}%"></i></div>${pct(r.done,r.total)}%</div></td>
+      <td class="nowrap sub">${r.last_done_at?when(r.last_done_at):'-'}</td><td>${r.report_count?`<button class="link" data-act="tab" data-t="field">📝 ${r.report_count}건</button>`:'-'}</td></tr>`).join('')}
+    </tbody></table></div></section>`;}).join('')}`;
+}
+
+/* ---------- 탭: 현장전달 ---------- */
+async function signPhotos(paths){
+  const need=[...new Set(paths)].filter(p=>p&&!S.purl[p]); if(!need.length) return;
+  try{ const {data}=await db.storage.from('field-photos').createSignedUrls(need,3600); (data||[]).forEach(d=>{ if(d.signedUrl) S.purl[d.path]=d.signedUrl; }); }catch(_){}
+}
+function photoViewer(){
+  const v=S.pview, src=S.purl[v.list[v.i]]||'';
+  return `<div class="pv" data-act="pvClose"><img src="${src}" alt="현장 사진 ${v.i+1}" data-stop>
+    <div class="pvb" data-stop>${v.list.length>1?`<button data-act="pvMove" data-d="-1">◀ 이전</button><span style="color:#fff;align-self:center">${v.i+1} / ${v.list.length}</span><button data-act="pvMove" data-d="1">다음 ▶</button>`:''}<a href="${src}" target="_blank" rel="noopener">원본 열기</a><button data-act="pvClose">닫기</button></div></div>`;
+}
+function fieldView(){
+  const rows=S.frows, n=S.frSel.length, admins=S.staff.filter(s=>['admin','master'].includes(s.role));
+  const ids=(rows||[]).map(r=>r.id), allSel=ids.length&&ids.every(x=>S.frSel.includes(x));
+  const head=`<div class="row"><div class="grow"><h1 class="h">현장전달</h1><p class="sub">현장직원이 직원웹에서 배정 차량에 남긴 특이사항 메모 · 사진이에요. 메모가 오면 그 직원의 담당 관리자 휴대폰으로 알림이 가요.</p></div></div>
+  <div class="row"><div class="chips">${[['open','처리 전'],['new','미확인'],['done','처리완료'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.frState===k}" data-act="frState" data-f="${k}">${l}${k==='new'&&S.cntFieldAll?` <b>${S.cntFieldAll}</b>`:''}</button>`).join('')}</div>
+    <label class="auto"><input type="checkbox" id="frMine" ${S.frMine?'checked':''}><span>내 담당만 보기${S.cntField?` (미확인 ${S.cntField})`:''}</span></label></div>
+  <div class="selbar"><label class="row" style="gap:6px"><input type="checkbox" data-act="frSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''}><b class="sub" style="color:var(--text)">${n?`${n}건 선택됨`:'전체 선택'}</b></label><span class="grow"></span>
+    <button class="btn2 sm" data-act="frBulk" data-f="read" ${n?'':'disabled'}>확인함</button><button class="btn2 sm" data-act="frBulk" data-f="done" ${n?'':'disabled'}>처리완료</button><button class="btn sm danger" data-act="frDel" ${n?'':'disabled'}>🗑 삭제</button></div>`;
+  const mgr=`<details class="card" id="mgrBox" ${(S.mgrOpen===undefined?(S.fmgr.length&&!S.fmgr.some(m=>m.manager_id)):S.mgrOpen)?'open':''}><summary style="cursor:pointer;font-weight:800">현장직원별 담당 관리자 설정 <span class="sub">(${S.fmgr.filter(m=>m.manager_id).length}/${S.fmgr.length}명 지정)</span></summary>
+    <p class="sub" style="margin:8px 0">현장직원이 메모를 보내면 여기서 정한 담당 관리자에게만 알림이 가요. '관리자 전체'로 두면 관리자 모두에게 가요.</p>
+    ${S.fmgr.length?`<div class="tbl"><table><thead><tr><th>현장직원</th><th>담당 관리자</th></tr></thead><tbody>${S.fmgr.map(m=>`<tr><td><b>${esc(m.staff_name||'')}</b></td><td><select data-fmgr="${m.staff_id}" aria-label="${esc(m.staff_name||'')} 담당 관리자"><option value="">관리자 전체</option>${admins.map(a=>`<option value="${a.id}" ${a.id===m.manager_id?'selected':''}>${esc(a.name)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table></div>`:'<p class="sub">승인된 현장직원(field) 계정이 없어요.</p>'}</details>`;
+  if(!rows) return head+'<div class="empty">불러오는 중...</div>'+mgr;
+  return head+(rows.length?`<div class="fr-list">${rows.map(r=>{const sel=S.frSel.includes(r.id), ph=r.photos||[];
+    return `<article class="fr ${r.done_at?'done':!r.read_at?'new':''}${sel?' picked':''}"><input type="checkbox" data-frsel="${r.id}" ${sel?'checked':''} aria-label="선택" style="margin-top:4px">
+      <div class="bd"><div class="row" style="gap:8px;flex-wrap:wrap"><b class="car" style="font-size:15px">${esc(r.car_number||'-')}</b>${r.interior?'<span class="pill p-new">실내 포함</span>':''}<span class="sub">${esc([r.complex,r.unit].filter(Boolean).join(' '))}${r.car_model?' · '+esc(r.car_model):''}${r.customer_name?' · '+esc(r.customer_name):''}</span><span class="grow"></span>
+        ${r.done_at?'<span class="pill p-ok">처리완료</span>':r.read_at?'<span class="pill p-hold">확인함</span>':'<span class="pill p-new">새 메모</span>'}</div>
+        <span class="sub">${kdate(r.wash_date)} · <b style="color:var(--text)">${esc(r.staff_name||'')}</b> → ${esc(r.manager_name||'관리자 전체')} · ${when(r.created_at)}${r.job_status?` · 세차 ${esc(r.job_status)}`:''}</span>
+        ${r.body?`<p class="body">${esc(r.body)}</p>`:''}
+        ${ph.length?`<div class="fr-ph">${ph.map((p,i)=>`<button data-act="pvOpen" data-id="${r.id}" data-i="${i}" aria-label="사진 ${i+1} 크게 보기">${S.purl[p]?`<img src="${S.purl[p]}" alt="" loading="lazy">`:'📷'}</button>`).join('')}</div>`:''}
+        <div class="reply"><input class="inp" id="frr-${r.id}" maxlength="500" placeholder="처리 메모 (직원웹에 보여요) 예: 고객 통화 완료" value="${esc(S.frReply[r.id]!==undefined?S.frReply[r.id]:(r.reply||''))}"><button class="btn2 sm" data-act="frReply" data-id="${r.id}">저장</button></div>
+        <div class="row" style="gap:8px;flex-wrap:wrap"><span class="sub">${r.read_at?`확인 ${esc(r.read_name||'')} ${when(r.read_at)}`:''}${r.done_at?` · 처리완료 ${esc(r.done_name||'')} ${when(r.done_at)}`:''}</span><span class="grow"></span>
+          ${r.read_at?'':`<button class="btn2 sm" data-act="frFlag" data-f="read" data-on="1" data-id="${r.id}">확인함</button>`}
+          ${r.done_at?`<button class="link" data-act="frFlag" data-f="done" data-on="0" data-id="${r.id}">처리완료 취소</button>`:`<button class="btn sm" data-act="frFlag" data-f="done" data-on="1" data-id="${r.id}">처리완료</button>`}</div></div></article>`;}).join('')}</div>`
+    :`<div class="empty">${S.frState==='done'?'처리완료된 메모가 없어요.':S.frState==='new'?'확인 안 한 메모가 없어요.':'현장전달 메모가 없어요.'}<br><span class="note">현장직원이 직원웹 배정 차량의 [📝 특이사항 메모]로 보내면 여기에 모여요.</span></div>`)+mgr;
+}
 
 /* ---------- 탭: 고객 요청 ---------- */
 const byName=(name,ts)=>name||ts?`<small class="by">${esc(name||'')}${ts?' · '+when(ts):''}</small>`:'';
@@ -752,16 +847,17 @@ function render(){
   } else if(!S.me||S.me.status!=='승인'||!['admin','master'].includes(S.me.role)){
     R.innerHTML=`<div class="login"><div class="card"><h2 class="h">관리자만 들어올 수 있어요</h2><p class="sub">관리자 계정으로 로그인해 주세요. 현장직원은 직원 앱을 이용해 주세요.</p><div class="row"><a class="btn2" href="/field">직원 앱으로</a><button class="btn2" data-act="logout">로그아웃</button></div></div></div>`;
   } else {
-    const views={req:reqView,cmgr:cmgrView,coll:collView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
+    const views={req:reqView,live:liveView,field:fieldView,cmgr:cmgrView,coll:collView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
     R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div>
       ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<button class="tl" data-act="push-on" aria-label="휴대폰 알림" style="${pushState==='on'?'color:var(--gold-2)':''}">${ic('bell',14)}<span${pushState==='on'?' class="lbl"':''}>${pushState==='on'?'알림 켜짐':'알림 켜기'}</span></button><a href="/" aria-label="영업 CRM">${ic('arrow',14)}<span class="lbl">영업 CRM</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
-    <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}</button>`).join('')}</div></nav>
+    <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}</button>`).join('')}</div></nav>
     <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${views[S.tab]()}</main>`;
   }
   if(window.AppNav&&!AppNav.getToken) AppNav.getToken=async()=>{ const {data}=await db.auth.getSession(); return data&&data.session?data.session.access_token:null; };
   if(window.AppNav) AppNav.set('admin', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
   if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
   const L=$('#layer'),d=S.dialog;
+  if(S.pview){ L.innerHTML=photoViewer(); return; }
   L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub" style="white-space:pre-line">${esc(d.body)}</p>${d.extra||''}<div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:noteModalView();
   if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
 }
@@ -919,6 +1015,19 @@ document.addEventListener('click',async e=>{
       break;
     }
     case 'acc-reject': { const u=t.dataset.u; ask('가입을 거절할까요?','고객 앱에 "가입이 승인되지 않았어요" 안내가 보여요. 고객이 정보를 고쳐 다시 요청할 수 있어요.','거절',()=>act(()=>q(db.rpc('reject_customer_account',{p_user:u})),'거절했어요.')); break; }
+    case 'lday': {const [y,m,d]=S.liveDay.split('-').map(Number);S.liveDay=keyOf(new Date(y,m-1,d+Number(t.dataset.d)));S.live=null;render();await loadTab();break;}
+    case 'ltoday': S.liveDay=keyOf(new Date()); S.live=null; render(); await loadTab(); break;
+    case 'lreload': await loadTab(); toast('새로 불러왔어요.'); break;
+    case 'frState': S.frState=t.dataset.f; S.frSel=[]; S.frows=null; render(); await loadTab(); break;
+    case 'frSelAll': { const ids=(t.dataset.ids||'').split(',').filter(Boolean).map(Number); const all=ids.every(x=>S.frSel.includes(x)); S.frSel=all?S.frSel.filter(x=>!ids.includes(x)):[...new Set([...S.frSel,...ids])]; render(); break; }
+    case 'frFlag': await act(async()=>{ await q(db.rpc('set_field_report_flag',{p_ids:[id],p_flag:t.dataset.f,p_on:t.dataset.on==='1'})); },t.dataset.f==='read'?'확인함으로 표시했어요.':t.dataset.on==='1'?'처리완료했어요.':'처리완료를 취소했어요.'); break;
+    case 'frBulk': { const ids=[...S.frSel]; if(!ids.length) break; const f=t.dataset.f; await act(async()=>{ const n=await q(db.rpc('set_field_report_flag',{p_ids:ids,p_flag:f,p_on:true})); S.frSel=[]; toast(`${n||0}건을 ${f==='read'?'확인함':'처리완료'}으로 표시했어요.`); },null); break; }
+    case 'frDel': { const ids=[...S.frSel]; if(!ids.length) break; const paths=(S.frows||[]).filter(r=>ids.includes(r.id)).flatMap(r=>r.photos||[]);
+      ask(`선택한 ${ids.length}건을 삭제할까요?`,'메모와 첨부 사진이 함께 지워지고 되돌릴 수 없어요.','삭제',()=>act(async()=>{ const n=await q(db.rpc('delete_field_reports',{p_ids:ids})); if(paths.length) await db.storage.from('field-photos').remove(paths).catch(()=>{}); S.frSel=[]; toast(`${n||0}건을 삭제했어요.`); },null)); break; }
+    case 'frReply': { const el=$('#frr-'+id), v=el?el.value:''; try{ await q(db.rpc('save_field_report_reply',{p_id:id,p_reply:v})); delete S.frReply[id]; toast(v.trim()?'처리 메모를 저장했어요. 직원웹에도 보여요.':'처리 메모를 지웠어요.'); await loadTab(); }catch(err){ toast(friendly(err),true); } break; }
+    case 'pvOpen': { const r=(S.frows||[]).find(x=>x.id===id); if(!r) break; S.pview={list:r.photos||[],i:Number(t.dataset.i)||0}; render(); break; }
+    case 'pvMove': if(S.pview){ const L=S.pview.list.length; S.pview.i=(S.pview.i+Number(t.dataset.d)+L)%L; render(); } break;
+    case 'pvClose': if(!e.target.closest('[data-stop]')||t.tagName==='BUTTON'){ S.pview=null; render(); } break;
     case 'jday': {const [y,m,d]=S.jobDay.split('-').map(Number);S.jobDay=keyOf(new Date(y,m-1,d+Number(t.dataset.d)));await loadTab();break;}
     case 'gen': ask(`${kdate(S.jobDay)} 일정을 만들까요?`,'지정 요일이 이 날인 계약 고객을 담당 직원에게 자동 배정해요. 이미 있는 차량은 다시 넣지 않아요.','일정 만들기',()=>act(async()=>{const n=await q(db.rpc('generate_wash_jobs',{p_date:S.jobDay}));toast(`${n||0}대를 새로 넣었어요.`);},null)); break;
     case 'add-job': {
@@ -983,6 +1092,7 @@ document.addEventListener('click',async e=>{
     case 'nsend': ask(`${S.noticeSel.length}명에게 공지를 보낼까요?`,S.notice.trim(),'보내기',()=>act(async()=>{const n=await q(db.rpc('send_customer_notice',{p_customer_ids:S.noticeSel,p_title:'공지사항',p_body:S.notice.trim()}));toast(`${n||0}명에게 보냈어요.`);S.notice='';S.noticeSel=[];},null)); break;
   }
 });
+document.addEventListener('toggle',e=>{ if(e.target&&e.target.id==='mgrBox') S.mgrOpen=e.target.open; },true);
 document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.dataset.rflag){
@@ -1018,12 +1128,17 @@ document.addEventListener('change',async e=>{
   if(t.id==='collApt'){ S.collApt=t.value; render(); return; }
   if(t.id==='collFile'&&t.files&&t.files[0]){ const f=t.files[0]; t.value=''; await collImportFile(f); return; }
   if(t.id==='reqType'){ S.reqType=t.value; render(); return; }
+  if(t.id==='lday'&&t.value){ S.liveDay=t.value; S.live=null; render(); await loadTab(); return; }
+  if(t.id==='frMine'){ S.frMine=t.checked; S.frows=null; render(); await loadTab(); return; }
+  if(t.dataset.frsel){ const id=Number(t.dataset.frsel); S.frSel=t.checked?[...new Set([...S.frSel,id])]:S.frSel.filter(x=>x!==id); render(); return; }
+  if(t.dataset.fmgr){ const sid=t.dataset.fmgr, mid=t.value||null; t.disabled=true; try{ await q(db.rpc('set_field_manager',{p_staff:sid,p_manager:mid})); toast(mid?`담당 관리자를 ${staffName(mid)}(으)로 정했어요.`:'관리자 전체로 바꿨어요.'); }catch(err){ toast(friendly(err),true); } await loadTab(); return; }
   if(t.id==='jday'&&t.value){ S.jobDay=t.value; await loadTab(); return; }
   if(t.dataset.jstaff){ await act(()=>q(db.from('wash_jobs').update({staff_id:t.value||null}).eq('id',Number(t.dataset.jstaff))),'담당 직원을 바꿨어요.'); return; }
   if(t.dataset.jint){ await act(()=>q(db.from('wash_jobs').update({interior:t.checked}).eq('id',Number(t.dataset.jint))),null); return; }
   if(t.dataset.nsel){ const id=Number(t.dataset.nsel); S.noticeSel=t.checked?[...new Set([...S.noticeSel,id])]:S.noticeSel.filter(x=>x!==id); render(); }
 });
 document.addEventListener('input',e=>{
+  if(e.target.id&&e.target.id.startsWith('frr-')){ S.frReply[Number(e.target.id.slice(4))]=e.target.value; return; }
   if(e.target.id==='custQ'){ S.custQ=e.target.value; render(); }
   if(e.target.id==='reqQ'){ S.reqQ=e.target.value; }
   if(e.target.id==='cmQ'){ S.cmQin=e.target.value; }
@@ -1063,7 +1178,17 @@ async function start(){
   try{ sessionStorage.setItem(STAFF_ALIVE_KEY,'1'); }catch(_){}
   staffStartBeat();
   S.session=data.session; S.ready=true;
+  { const h=(location.hash||'').slice(1); if(TABS.some(([k])=>k===h)) S.tab=h; }
   if(S.session) await start(); else render();
+  // 실시간 세차 현황 · 현장전달: 30초마다 자동 새로고침 (입력 중이거나 창이 숨겨져 있으면 건너뜀)
+  let tick=0;
+  setInterval(async()=>{
+    if(!S.session||!S.me||S.dialog||S.pview||S.busy||document.visibilityState!=='visible') return;
+    const ae=document.activeElement; if(ae&&/INPUT|TEXTAREA|SELECT/.test(ae.tagName)&&ae.type!=='checkbox') return;
+    tick++;
+    if(S.tab==='live'||S.tab==='field') await loadTab();
+    else if(tick%2===0){ const a=S.cntReq,b=S.cntAcc,c=S.cntFieldAll; await refreshCounts(); if(a!==S.cntReq||b!==S.cntAcc||c!==S.cntFieldAll) render(); }
+  },30000);
   db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; render(); return; } if(!was){ S.err=''; await start(); } });
 })();
 </script>

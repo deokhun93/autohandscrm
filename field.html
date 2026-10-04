@@ -92,6 +92,14 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .pw{position:relative}.pw input{padding-right:48px;width:100%}
 .pw-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:42px;height:42px;display:grid;place-items:center;border:0;background:none;color:#6B7280;border-radius:8px;cursor:pointer}
 .auto{display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer;user-select:none}.auto input{width:20px;height:20px;accent-color:#0C1422;margin:0;flex:none}
+.memo-line{margin:0;display:flex;flex-direction:column;gap:3px;font-size:12.5px;background:#EEF2F8;border-radius:10px;padding:8px 10px;color:var(--text)}
+.memo-line .st{font-size:11px;font-weight:700;color:var(--sub)}.memo-line .st b{color:#1F5136}.memo-line .rp{color:#1D3A6E;font-weight:600}
+.sheet{width:100%;max-width:440px;background:var(--paper);border-radius:20px;padding:20px 16px 16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(12,20,34,.3);max-height:92vh;overflow:auto}
+.sheet .acts{display:flex;gap:10px}.sheet .acts>*{flex:1}
+.ph-grid{display:flex;flex-wrap:wrap;gap:8px}.ph-grid .ph{position:relative;width:72px;height:72px;border-radius:10px;overflow:hidden;border:1px solid var(--line-2);background:#fff}
+.ph-grid .ph img{width:100%;height:100%;object-fit:cover}.ph-grid .ph button{position:absolute;top:2px;right:2px;width:24px;height:24px;border-radius:50%;border:0;background:rgba(12,20,34,.75);color:#fff;font-size:14px;line-height:24px;padding:0}
+.ph-add{width:72px;height:72px;border-radius:10px;border:1.5px dashed var(--line-2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--sub);cursor:pointer;background:#fff}
+.ph-add span{font-size:22px;line-height:1}
 </style>
 </head>
 <body>
@@ -175,7 +183,7 @@ const hm=ts=>{const d=new Date(ts);return `${pad(d.getHours())}:${pad(d.getMinut
 const SWATCH={'흰색':'#fff','화이트':'#fff','검정':'#1B2433','검정색':'#1B2433','블랙':'#1B2433','회색':'#94A3B8','그레이':'#94A3B8','은색':'#CBD5E1','실버':'#CBD5E1','파란색':'#3B82F6','빨간색':'#DC2626','노란색':'#FDE047','초록색':'#16A34A','갈색':'#92400E','남색':'#1E3A8A'};
 function friendly(err){const m=(err&&err.message)||String(err||'');if(/Invalid login credentials/i.test(m))return '이메일 또는 비밀번호가 맞지 않아요.';if(/Failed to fetch|network/i.test(m))return '인터넷 연결을 확인해 주세요.';if(/[가-힣]/.test(m))return m;return '문제가 생겼어요. 잠시 후 다시 시도해 주세요.';}
 
-const S={ready:false,session:null,me:null,day:keyOf(new Date()),jobs:[],sum:null,reqs:[],sel:[],notice:'',apt:'전체',busy:false,dialog:null,err:''};
+const S={ready:false,session:null,me:null,day:keyOf(new Date()),jobs:[],sum:null,reqs:[],reps:[],memo:null,sel:[],notice:'',apt:'전체',busy:false,dialog:null,err:''};
 
 async function loadMe(){
   const {data,error}=await db.from('profiles').select('id,name,role,status').eq('id',S.session.user.id).maybeSingle();
@@ -194,6 +202,7 @@ async function loadAll(){
     ]);
     if(jobs.error) throw jobs.error; if(sum.error) throw sum.error;
     S.jobs=jobs.data||[]; S.sum=(sum.data&&sum.data[0])||null; S.reqs=reqs.error?[]:(reqs.data||[]);
+    try{ const r=await db.rpc('list_my_field_reports',{p_date:S.day}); S.reps=r.error?[]:(r.data||[]); }catch(_){ S.reps=[]; }
     S.sel=S.sel.filter(id=>S.jobs.some(j=>j.customer_id===id));
     S.err='';
   }catch(e){ S.err=friendly(e); }
@@ -229,7 +238,9 @@ function jobCard(j){
     <dl class="kv"><dt>차종</dt><dd>${esc(c.car_model||'-')}</dd><dt>색상</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>아파트단지</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
     ${j.interior?`<label class="int-check ${j.interior_done?'on':''}"><input type="checkbox" data-int="${j.id}" ${j.interior_done?'checked':''} ${open?'':'disabled'}><span class="box">${ic('check')}</span>실내세차 완료</label>${open&&needInt?'<p class="note">실내세차를 체크해야 완료 알림을 보낼 수 있어요.</p>':''}`:''}
     ${msg?`<p class="req-line">${ic('msg',16)}<span><b>고객 요청</b> ${esc(msg.message)}</span></p>`:''}
-    <div class="act">${act}</div></article>`;
+    ${S.reps.filter(r=>r.job_id===j.id).map(r=>`<p class="memo-line"><span>📝 ${esc(r.body||'(사진만 보냄)')}${r.photos&&r.photos.length?` · 📷 ${r.photos.length}장`:''}</span><span class="st">${hm(r.created_at)} → ${esc(r.manager_name||'관리자')} · ${r.done_at?'<b>처리완료</b>':r.read_at?'<b>관리자 확인함</b>':'전달됨'}</span>${r.reply?`<span class="rp">관리자: ${esc(r.reply)}</span>`:''}</p>`).join('')}
+    <div class="act">${act}</div>
+    <button class="btn2" data-act="memo" data-id="${j.id}" style="width:100%">📝 특이사항 메모 · 사진 → 담당 관리자</button></article>`;
 }
 function homeView(){
   const s=S.sum||{today_total:0,today_done:0,today_wait:0,today_skip:0,month_done:0};
@@ -257,6 +268,59 @@ function noticeCard(list){
     <div class="act"><button class="link" data-act="sel-all">${allOn?'선택 해제':'목록 전체 선택'}</button><span style="font-weight:700;font-size:13px">${n}대 선택</span></div>
     <button class="btn full" id="nt-send" data-act="notice" ${n&&S.notice.trim()&&!S.busy?'':'disabled'}>선택한 고객에게 공지 보내기<span class="arr">${ic('send')}</span></button></section>`;
 }
+/* ---------- 현장전달: 특이사항 메모 + 사진 ---------- */
+const MAX_PH=5;
+function memoSheet(){
+  const m=S.memo; if(!m) return '';
+  const j=S.jobs.find(x=>x.id===m.jobId)||{}, c=j.customers||{};
+  return `<div class="scrim" data-act="memo-close"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="mm-h" data-stop>
+    <div><h2 class="h" id="mm-h">📝 특이사항 메모</h2><p class="sub">${esc(c.car_number||'')} · ${esc([c.complex,c.unit].filter(Boolean).join(' '))}</p></div>
+    <div class="field"><label for="memo-body">메모 내용</label><textarea id="memo-body" maxlength="1000" placeholder="예: 운전석 문 아래 찍힘 있음 / 차량 위치 변경됨 / 고객 요청사항 등">${esc(m.body)}</textarea></div>
+    <div><p style="margin:0 0 6px;font-weight:700;font-size:13px">사진 <span class="sub">(최대 ${MAX_PH}장)</span></p>
+      <div class="ph-grid">${m.files.map((f,i)=>`<div class="ph"><img src="${f.url}" alt="첨부 사진 ${i+1}"><button type="button" data-act="memo-rm" data-i="${i}" aria-label="사진 ${i+1} 빼기">×</button></div>`).join('')}
+      ${m.files.length<MAX_PH?`<label class="ph-add"><span>📷</span>사진 추가<input type="file" id="memo-file" accept="image/*" multiple hidden></label>`:''}</div></div>
+    <p class="note" style="margin:0">보내면 담당 관리자 휴대폰으로 바로 알림이 가요.</p>
+    <div class="acts"><button class="btn2" data-act="memo-close" ${S.busy?'disabled':''}>취소</button><button class="btn plain" data-act="memo-send" ${S.busy||(!m.body.trim()&&!m.files.length)?'disabled':''}>${S.busy?(m.prog||'보내는 중...'):'관리자에게 보내기'}</button></div>
+  </div></div>`;
+}
+// 사진 줄이기 (긴 쪽 1600px, JPEG) — 데이터·저장공간 절약
+async function shrinkImage(file){
+  try{
+    const url=URL.createObjectURL(file);
+    const img=await new Promise((ok,no)=>{const im=new Image();im.onload=()=>ok(im);im.onerror=no;im.src=url;});
+    const k=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
+    const cv=document.createElement('canvas'); cv.width=Math.round(img.naturalWidth*k); cv.height=Math.round(img.naturalHeight*k);
+    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); URL.revokeObjectURL(url);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.8));
+    if(blob) return {blob,ext:'jpg',type:'image/jpeg'};
+  }catch(_){}
+  const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+  return {blob:file,ext,type:file.type||'image/jpeg'};
+}
+async function sendMemo(){
+  const m=S.memo; if(!m||S.busy) return;
+  const body=m.body.trim(); if(!body&&!m.files.length) return;
+  S.busy=true; render();
+  const paths=[];
+  try{
+    for(let i=0;i<m.files.length;i++){
+      m.prog=`사진 올리는 중 ${i+1}/${m.files.length}`; render();
+      const {blob,ext,type}=await shrinkImage(m.files[i].file);
+      const path=`${S.me.id}/${S.day}/${Date.now()}-${i}-${Math.random().toString(36).slice(2,7)}.${ext}`;
+      const up=await db.storage.from('field-photos').upload(path,blob,{contentType:type,upsert:false});
+      if(up.error) throw up.error;
+      paths.push(path);
+    }
+    m.prog='보내는 중...'; render();
+    const {error}=await db.rpc('submit_field_report',{p_job_id:m.jobId,p_body:body,p_photos:paths});
+    if(error) throw error;
+    m.files.forEach(f=>URL.revokeObjectURL(f.url));
+    S.memo=null; S.busy=false; kickPush(); toast('담당 관리자에게 전달했어요.'); await loadAll();
+  }catch(err){
+    if(paths.length) db.storage.from('field-photos').remove(paths).catch(()=>{});
+    S.busy=false; m.prog=''; toast(/bucket|not found/i.test(err.message||'')?'사진 저장소가 아직 준비되지 않았어요. 관리자에게 21번 SQL 실행을 요청해 주세요.':friendly(err),true); render();
+  }
+}
 function render(){
   const scr=$('#screen');
   if(!db){ scr.innerHTML='<div class="loading">인터넷 연결을 확인한 뒤 새로고침해 주세요.</div>'; return; }
@@ -267,7 +331,7 @@ function render(){
   if(window.AppNav) AppNav.set('field', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
   if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
   const L=$('#layer'),d=S.dialog;
-  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn plain" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:'';
+  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn plain" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:memoSheet();
   if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
 }
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`${ic(err?'bell':'check')}<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3200);}
@@ -291,6 +355,10 @@ document.addEventListener('click',async e=>{
     case 'today': S.day=keyOf(new Date()); S.sel=[]; await loadAll(); break;
     case 'apt': S.apt=t.dataset.a; render(); break;
     case 'close': if(!S.busy){S.dialog=null;render();} break;
+    case 'memo': S.memo={jobId:id,body:'',files:[],prog:''}; render(); setTimeout(()=>{const el=$('#memo-body'); if(el) el.focus();},40); break;
+    case 'memo-close': if(!S.busy&&(e.target===t||t.tagName==='BUTTON')){ if(S.memo) S.memo.files.forEach(f=>URL.revokeObjectURL(f.url)); S.memo=null; render(); } break;
+    case 'memo-rm': if(S.memo&&!S.busy){ const i=Number(t.dataset.i); const f=S.memo.files.splice(i,1)[0]; if(f) URL.revokeObjectURL(f.url); render(); } break;
+    case 'memo-send': await sendMemo(); break;
     case 'done': S.dialog={title:'고객에게 완료 알림을 보낼까요?',body:`${(j.customers||{}).car_number||''} 세차를 완료로 처리하고 고객 앱에 '세차가 완료되었어요' 알림을 보내요.`,ok:'알림 보내기',run:()=>upd(id,{status:'완료'},'완료 알림을 보냈어요. +'+won(PAY))}; render(); break;
     case 'skip': S.dialog={title:'미작업으로 처리할까요?',body:'차량이 없거나 세차를 못 한 경우에 눌러 주세요. 회사에 미작업으로 보고돼요.',ok:'미작업 처리',run:()=>upd(id,{status:'미작업'},'미작업으로 처리했어요.')}; render(); break;
     case 'undo': await upd(id,{status:'대기'},'다시 대기로 바꿨어요.'); break;
@@ -311,9 +379,14 @@ document.addEventListener('change',async e=>{
   if(t.id==='day'&&t.value){ S.day=t.value; S.sel=[]; await loadAll(); return; }
   if(t.dataset.sel){ const id=Number(t.dataset.sel); S.sel=t.checked?[...new Set([...S.sel,id])]:S.sel.filter(x=>x!==id); render(); return; }
   if(t.dataset.int){ await upd(Number(t.dataset.int),{interior_done:t.checked},null); }
+  if(t.id==='memo-file'&&S.memo){
+    const room=MAX_PH-S.memo.files.length, list=[...t.files].filter(f=>/^image\//.test(f.type)||/\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
+    if(list.length>room) toast(`사진은 ${MAX_PH}장까지 넣을 수 있어요.`,true);
+    list.slice(0,room).forEach(f=>S.memo.files.push({file:f,url:URL.createObjectURL(f)})); render();
+  }
 });
-document.addEventListener('input',e=>{ if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nt-send'); if(b) b.disabled=!(S.sel.length&&S.notice.trim()); } });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} });
+document.addEventListener('input',e=>{ if(e.target.id==='memo-body'&&S.memo){ S.memo.body=e.target.value; const b=document.querySelector('[data-act="memo-send"]'); if(b) b.disabled=S.busy||(!S.memo.body.trim()&&!S.memo.files.length); return; } if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nt-send'); if(b) b.disabled=!(S.sel.length&&S.notice.trim()); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} else if(e.key==='Escape'&&S.memo&&!S.busy){S.memo=null;render();} });
 document.addEventListener('submit',async e=>{
   if(e.target.id!=='login') return; e.preventDefault();
   const em=$('#em').value.trim(), pw=$('#pw').value;
@@ -334,7 +407,7 @@ document.addEventListener('submit',async e=>{
   S.session=data.session; S.ready=true;
   if(S.session) await loadAll(); else render();
   db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; S.jobs=[]; render(); return; } if(!was){ S.err=''; await loadAll(); } });
-  setInterval(()=>{ const ae=document.activeElement; if(S.session&&S.me&&!S.dialog&&!(ae&&/INPUT|TEXTAREA/.test(ae.tagName))&&document.visibilityState==='visible') loadAll(); },60000);
+  setInterval(()=>{ const ae=document.activeElement; if(S.session&&S.me&&!S.dialog&&!S.memo&&!(ae&&/INPUT|TEXTAREA/.test(ae.tagName))&&document.visibilityState==='visible') loadAll(); },60000);
 })();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}</script>
