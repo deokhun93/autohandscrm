@@ -204,6 +204,14 @@ tr.round-full td{background:#F4FAF6}.rt-done{color:#1F5136;font-weight:800}.mont
 .nt-item.imp{border-color:#E8A9A9;box-shadow:0 0 0 2px #FDECEA}.nt-item .body{white-space:pre-wrap;margin:0;font-size:14px}
 .nt-read{font-size:12.5px;color:var(--sub)}.nt-read b{color:var(--text)}
 @media(max-width:700px){.nt-form{grid-template-columns:1fr}}
+.td-add{display:grid;grid-template-columns:2fr 1.4fr 110px 150px 150px auto;gap:8px;align-items:end}
+.td-list{display:flex;flex-direction:column;gap:6px}.td{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:10px 12px}
+.td input[type=checkbox]{width:22px;height:22px;margin-top:1px;accent-color:#2E7D4F;flex:none}.td .bd{flex:1;min-width:0}.td .tt{font-weight:800;font-size:14.5px}
+.td.done{background:#F4F4F1}.td.done .tt{text-decoration:line-through;color:var(--sub)}.td.late{border-color:#E8A9A9;background:#FFF7F6}
+.pr{font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;margin-right:6px;vertical-align:1px}.pr1{background:#C62828;color:#fff}.pr2{background:#F59E0B;color:#3B2600}.pr3{background:var(--slate);color:var(--blue)}.pr4{background:var(--muted);color:var(--sub)}
+.td .mt{font-size:12px;color:var(--sub);margin-top:3px}.td .mm{font-size:13px;margin-top:3px;white-space:pre-wrap}.late-t{color:var(--red);font-weight:800}
+.sec-h{display:flex;align-items:center;gap:10px;margin:6px 0 0}.sec-h h2{margin:0;font-size:18px}
+@media(max-width:900px){.td-add{grid-template-columns:1fr 1fr}.td-add .full{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -289,8 +297,9 @@ let deferredInstall=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;if(typeof render==='function'&&S.ready)render();});
 window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리자 앱을 설치했어요. 홈 화면의 오토핸즈 관리자 아이콘으로 열어 주세요.');render();});
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-const TABS=[['today','오늘의 공지'],['req','고객 요청'],['live','실시간 세차 현황'],['field','현장전달'],['round','회차 현황'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','고객 공지 보내기']];
+const TABS=[['today','오늘 (공지·할 일)'],['req','고객 요청'],['live','실시간 세차 현황'],['field','현장전달'],['round','회차 현황'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','고객 공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
+  tdScope:'today',todos:null,tdForm:null,cntTodo:0,
   ntScope:'now',notices:null,ntForm:null,
   rdMonth:0,rounds:null,rdTab:'전체',rdApt:'',rdQ:'',rdSel:[],rdCancel:false,
   liveDay:keyOf(new Date()),live:null,liveAt:null,frows:null,frState:'open',frMine:false,frSel:[],frReply:{},fmgr:[],purl:{},pview:null,cntField:0,cntFieldAll:0,
@@ -342,7 +351,7 @@ async function loadTab(){
       const live=new Set((st||[]).map(r=>r.id)); S.customers=S.customers.filter(c=>live.has(c.id)); S.cmSel=S.cmSel.filter(x=>live.has(x));
       await Promise.all(S.cmOpen.map(loadNotes));
     }
-    if(S.tab==='today') S.notices=await q(db.rpc('list_staff_notices',{p_scope:S.ntScope}))||[];
+    if(S.tab==='today'){ const [nt,td]=await Promise.all([q(db.rpc('list_staff_notices',{p_scope:S.ntScope})),q(db.rpc('list_admin_todos',{p_scope:S.tdScope}))]); S.notices=nt||[]; S.todos=td||[]; }
     if(S.tab==='round'){
       S.rounds=await q(db.rpc('list_wash_rounds',{p_month:rdMonthKey()}))||[];
       const live=new Set(S.rounds.map(r=>r.customer_id)); S.rdSel=S.rdSel.filter(x=>live.has(x));
@@ -373,6 +382,7 @@ async function refreshCounts(){
   try{
     const [r,a]=await Promise.all([db.rpc('list_requests_admin',{p_state:'open',p_complex:null,p_q:null,p_limit:1000}),db.rpc('list_customer_accounts',{p_only_pending:true})]);
     S.cntReq=(r.data||[]).length; S.cntAcc=(a.data||[]).length;
+    try{ const c=await db.rpc('count_admin_todos'); if(!c.error&&c.data&&c.data[0]) S.cntTodo=c.data[0].today_open; }catch(_){}
     const f=await db.rpc('count_field_reports'); if(!f.error&&f.data&&f.data[0]){ S.cntField=f.data[0].new_mine; S.cntFieldAll=f.data[0].new_all; }
   }catch(_){}
 }
@@ -403,7 +413,9 @@ function todayView(){
     </div>
     <div class="row" style="margin-top:10px"><span class="grow"></span>${f.id?`<button class="btn2" data-act="ntCancel">고치기 취소</button>`:''}<button class="btn" data-act="ntSave">${f.id?'고친 내용 저장':'공지 올리기 · 알림 보내기'}</button></div></section>`;
   const list=S.notices;
-  return `<div class="row"><div class="grow"><h1 class="h">오늘의 공지</h1><p class="sub">총무 · 관리자가 전 직원에게 알릴 내용을 올려요. 직원이 [확인했어요]를 누르면 누가 읽었는지 여기에서 보여요.</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">오늘</h1><p class="sub">총무 · 관리자가 함께 보는 오늘의 할 일과, 전 직원에게 보내는 오늘의 공지예요.</p></div></div>
+  ${todoSection()}
+  <div class="sec-h"><h2>📢 오늘의 공지</h2><span class="sub">직원이 [확인했어요]를 누르면 누가 읽었는지 보여요.</span></div>
   ${form}
   <div class="chips">${[['now','지금 보이는 공지'],['next','예정'],['past','지난 공지'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.ntScope===k}" data-act="ntScope" data-f="${k}">${l}</button>`).join('')}</div>
   ${!list?'<div class="empty">불러오는 중...</div>':list.length?`<div class="fr-list">${list.map(n=>`<article class="nt-item${n.important?' imp':''}">
@@ -415,6 +427,37 @@ function todayView(){
       <button class="btn2 sm" data-act="ntEdit" data-id="${n.id}">고치기</button><button class="btn sm danger" data-act="ntDel" data-id="${n.id}">🗑 삭제</button></div></article>`).join('')}</div>`
   :`<div class="empty">${S.ntScope==='now'?'지금 보이는 공지가 없어요. 위에서 새 공지를 올려 보세요.':'공지가 없어요.'}</div>`}`;
 }
+/* ---------- 오늘의 할 일 (총무 요청 ⑧) ---------- */
+const PR={1:'긴급',2:'높음',3:'보통',4:'낮음'};
+function tdBlank(){ return {id:null,title:'',memo:'',priority:3,assignee:'',due:keyOf(new Date())}; }
+function tdDue(t){ if(!t.due_date) return '기한 없음'; const today=keyOf(new Date()); if(t.done_at) return kdate(t.due_date)+' 마감';
+  if(t.due_date<today){ const d=Math.round((new Date(today)-new Date(t.due_date))/864e5); return `<span class="late-t">지연 ${d}일 (${kdate(t.due_date)} 마감)</span>`; }
+  return t.due_date===today?'<b>오늘 마감</b>':kdate(t.due_date)+' 마감'; }
+function todoSection(){
+  const f=S.tdForm||(S.tdForm=tdBlank()), admins=S.staff.filter(s=>['admin','master'].includes(s.role)), list=S.todos;
+  const open=(list||[]).filter(t=>!t.done_at).length;
+  return `<div class="sec-h"><h2>✅ 오늘의 할 일</h2><span class="sub">${list?`남은 할 일 ${open}개`:''}</span></div>
+  <section class="card"><div class="td-add">
+    <label class="field full"><span style="font-weight:700;font-size:13px">${f.id?'할 일 고치기':'할 일'}</span><input class="inp" id="tdTitle" maxlength="200" value="${esc(f.title)}" placeholder="예: 미납 고객 3명 입금 확인 전화"></label>
+    <label class="field full"><span style="font-weight:700;font-size:13px">메모 <span class="sub">(선택)</span></span><input class="inp" id="tdMemo" maxlength="1000" value="${esc(f.memo)}" placeholder="자세한 내용"></label>
+    <label class="field"><span style="font-weight:700;font-size:13px">우선순위</span><select class="inp" id="tdPri">${[1,2,3,4].map(k=>`<option value="${k}" ${Number(f.priority)===k?'selected':''}>${PR[k]}</option>`).join('')}</select></label>
+    <label class="field"><span style="font-weight:700;font-size:13px">담당</span><select class="inp" id="tdWho"><option value="">공용 (누구나)</option>${admins.map(a=>`<option value="${a.id}" ${f.assignee===a.id?'selected':''}>${esc(a.name)}${a.id===S.me.id?' (나)':''}</option>`).join('')}</select></label>
+    <label class="field"><span style="font-weight:700;font-size:13px">마감일 <span class="sub">(비우면 기한 없음)</span></span><input class="inp" type="date" id="tdDue" value="${esc(f.due)}"></label>
+    <div class="row" style="gap:6px">${f.id?`<button class="btn2" data-act="tdCancel">취소</button>`:''}<button class="btn" data-act="tdSave">${f.id?'저장':'+ 추가'}</button></div>
+  </div><p class="note" style="margin:8px 0 0">담당을 다른 관리자로 정하면 그 사람 휴대폰으로 알림이 가요.</p></section>
+  <div class="chips">${[['today','오늘 할 일'],['mine','내 할 일'],['open','남은 할 일 전체'],['done','완료'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.tdScope===k}" data-act="tdScope" data-f="${k}">${l}</button>`).join('')}</div>
+  ${!list?'<div class="empty">불러오는 중...</div>':list.length?`<div class="td-list">${list.map(t=>`<div class="td${t.done_at?' done':t.overdue?' late':''}"><input type="checkbox" data-tddone="${t.id}" ${t.done_at?'checked':''} aria-label="${esc(t.title)} 완료">
+    <div class="bd"><div><span class="pr pr${t.priority}">${PR[t.priority]}</span><span class="tt">${esc(t.title)}</span></div>${t.memo?`<div class="mm">${esc(t.memo)}</div>`:''}
+      <div class="mt">담당 <b style="color:var(--text)">${esc(t.assignee_name||'공용')}</b> · ${tdDue(t)} · ${esc(t.author||'')} ${when(t.created_at)}${t.done_at?` · <b style="color:#1F5136">완료 ${esc(t.done_name||'')} ${when(t.done_at)}</b>`:''}</div></div>
+    ${t.done_at?'':`<button class="link" data-act="tdEdit" data-id="${t.id}">고치기</button>`}<button class="link" data-act="tdDel" data-id="${t.id}" style="color:var(--err)">삭제</button></div>`).join('')}</div>`
+  :`<div class="empty">${S.tdScope==='today'?'오늘 할 일이 없어요. 위에서 추가해 보세요.':'할 일이 없어요.'}</div>`}`;
+}
+function tdRead(){ const g=id=>($('#'+id)||{}); const f=S.tdForm||(S.tdForm=tdBlank());
+  if(g('tdTitle').value!==undefined){ f.title=g('tdTitle').value; f.memo=g('tdMemo').value; f.priority=Number(g('tdPri').value)||3; f.assignee=g('tdWho').value||''; f.due=g('tdDue').value||''; } return f; }
+async function tdSave(){ const f=tdRead(); if(!f.title.trim()){ toast('할 일을 적어 주세요.',true); $('#tdTitle')&&$('#tdTitle').focus(); return; }
+  try{ await q(db.rpc('save_admin_todo',{p_id:f.id,p_title:f.title,p_memo:f.memo,p_priority:f.priority,p_assignee:f.assignee||null,p_due:f.due||null}));
+    kickPush(); toast(f.id?'저장했어요.':'할 일을 추가했어요.'); const keep={priority:f.priority,assignee:f.assignee,due:f.due}; S.tdForm={...tdBlank(),...(f.id?{}:keep)}; await refreshCounts(); await loadTab(); setTimeout(()=>$('#tdTitle')&&$('#tdTitle').focus(),30); }
+  catch(err){ toast(friendly(err),true); } }
 function ntRead(){ const g=id=>($('#'+id)||{}); const f=S.ntForm||(S.ntForm=ntBlank());
   f.title=g('ntTitle').value??f.title; f.body=g('ntBody').value??f.body; f.target=g('ntTarget').value||f.target; f.important=!!g('ntImp').checked; f.start=g('ntStart').value||f.start; f.end=g('ntEnd').value??f.end; return f; }
 
@@ -947,7 +990,7 @@ function render(){
     const views={today:todayView,req:reqView,live:liveView,field:fieldView,round:roundView,cmgr:cmgrView,coll:collView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
     R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div>
       ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<button class="tl" data-act="push-on" aria-label="휴대폰 알림" style="${pushState==='on'?'color:var(--gold-2)':''}">${ic('bell',14)}<span${pushState==='on'?' class="lbl"':''}>${pushState==='on'?'알림 켜짐':'알림 켜기'}</span></button><a href="/" aria-label="영업 CRM">${ic('arrow',14)}<span class="lbl">영업 CRM</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
-    <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}</button>`).join('')}</div></nav>
+    <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}${k==='today'&&S.cntTodo?`<span class="cnt">${S.cntTodo}</span>`:''}</button>`).join('')}</div></nav>
     <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${views[S.tab]()}</main>`;
   }
   if(window.AppNav&&!AppNav.getToken) AppNav.getToken=async()=>{ const {data}=await db.auth.getSession(); return data&&data.session?data.session.access_token:null; };
@@ -1112,6 +1155,11 @@ document.addEventListener('click',async e=>{
       break;
     }
     case 'acc-reject': { const u=t.dataset.u; ask('가입을 거절할까요?','고객 앱에 "가입이 승인되지 않았어요" 안내가 보여요. 고객이 정보를 고쳐 다시 요청할 수 있어요.','거절',()=>act(()=>q(db.rpc('reject_customer_account',{p_user:u})),'거절했어요.')); break; }
+    case 'tdScope': S.tdScope=t.dataset.f; S.todos=null; render(); await loadTab(); break;
+    case 'tdSave': await tdSave(); break;
+    case 'tdCancel': S.tdForm=tdBlank(); render(); break;
+    case 'tdEdit': { const x=(S.todos||[]).find(y=>y.id===id); if(!x) break; S.tdForm={id:x.id,title:x.title,memo:x.memo||'',priority:x.priority,assignee:x.assignee||'',due:x.due_date||''}; render(); setTimeout(()=>{const el=$('#tdTitle'); if(el){ el.focus(); el.scrollIntoView({block:'center'}); }},30); break; }
+    case 'tdDel': { const x=(S.todos||[]).find(y=>y.id===id); ask('이 할 일을 삭제할까요?',x?x.title:'','삭제',()=>act(()=>q(db.rpc('delete_admin_todos',{p_ids:[id]})),'삭제했어요.')); break; }
     case 'ntScope': S.ntScope=t.dataset.f; S.notices=null; render(); await loadTab(); break;
     case 'ntCancel': S.ntForm=ntBlank(); render(); break;
     case 'ntEdit': { const n=(S.notices||[]).find(x=>x.id===id); if(!n) break; S.ntForm={id:n.id,title:n.title||'',body:n.body||'',target:n.target,important:n.important,start:n.start_date,end:n.end_date||''}; render(); window.scrollTo({top:0,behavior:'smooth'}); break; }
@@ -1248,6 +1296,8 @@ document.addEventListener('change',async e=>{
   if(t.id==='collApt'){ S.collApt=t.value; render(); return; }
   if(t.id==='collFile'&&t.files&&t.files[0]){ const f=t.files[0]; t.value=''; await collImportFile(f); return; }
   if(t.id==='reqType'){ S.reqType=t.value; render(); return; }
+  if(t.dataset.tddone){ const id=Number(t.dataset.tddone), on=t.checked; t.disabled=true; try{ await q(db.rpc('set_admin_todo_done',{p_ids:[id],p_done:on})); toast(on?'완료했어요.':'완료를 취소했어요.'); }catch(err){ toast(friendly(err),true); } await refreshCounts(); await loadTab(); return; }
+  if(/^td(Pri|Who|Due)$/.test(t.id)){ tdRead(); return; }
   if(/^nt(Target|Imp|Start|End)$/.test(t.id)){ ntRead(); if(t.id==='ntStart') render(); return; }
   if(t.id==='rdApt'){ S.rdApt=t.value; render(); return; }
   if(t.id==='rdCancel'){ S.rdCancel=t.checked; render(); return; }
@@ -1263,6 +1313,7 @@ document.addEventListener('change',async e=>{
 });
 document.addEventListener('input',e=>{
   if(/^nt(Title|Body)$/.test(e.target.id)){ ntRead(); return; }
+  if(/^td(Title|Memo)$/.test(e.target.id)){ tdRead(); return; }
   if(e.target.id==='rdQ'){ S.rdQ=e.target.value; const pos=e.target.selectionStart; render(); const el=$('#rdQ'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} } return; }
   if(e.target.id==='rdTplIn'){ S.rdTplDraft=e.target.value; const pv=$('#rdPrev'); const r=(S.rounds||[]).find(x=>x.customer_id===S.rdSel[0]); if(pv&&r) pv.textContent=rdFill(S.rdTplDraft,r); if(S.dialog&&S.rdRows) S.dialog.extra=rdNoticeExtra(S.rdRows); return; }
   if(e.target.id==='rdTitle'){ S.rdTitle=e.target.value; return; }
@@ -1280,7 +1331,7 @@ document.addEventListener('input',e=>{
   if(e.target.id&&e.target.id.startsWith('note-')){ S.noteDraft[Number(e.target.id.slice(5))]=e.target.value; }
   if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nsend'); if(b) b.disabled=!(S.noticeSel.length&&S.notice.trim()); }
 });
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} else if(e.key==='Escape'&&S.noteModal&&!S.busy){S.noteModal=null;render();} });
+document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.target.id==='tdTitle'||e.target.id==='tdMemo')&&!e.isComposing){ e.preventDefault(); tdSave(); return; } if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} else if(e.key==='Escape'&&S.noteModal&&!S.busy){S.noteModal=null;render();} });
 document.addEventListener('submit',async e=>{
   if(e.target.id==='rdsearch'){ e.preventDefault(); return; }
   if(e.target.id==='collsearch'){ e.preventDefault(); S.collQin=($('#collQ')||{}).value||''; S.collQ=S.collQin.trim(); render(); return; }
