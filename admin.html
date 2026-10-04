@@ -479,7 +479,7 @@ function cmgrView(){
 function notesPanel(c){
   const list=S.notes[c.id];
   const star=!!S.noteStar[c.id];
-  return `<div class="row"><b>${esc(c.car_number||'')} · ${esc([c.complex,c.unit].filter(Boolean).join(' '))}</b><span class="sub">메모·처리이력 · 메모를 누르면 크게 보고 수정할 수 있어요</span></div>
+  return `<div class="row"><b>${esc(c.car_number||'')} · ${esc([c.complex,c.unit].filter(Boolean).join(' '))}</b><span class="sub grow">메모·처리이력 · 메모를 누르면 크게 보고 수정할 수 있어요</span><button class="btn2 sm" data-act="custApp" data-id="${c.id}" title="이 고객이 앱에서 보는 화면을 읽기 전용으로 열어요">📱 고객앱 화면 보기</button></div>
   <div class="note-new">
     <textarea class="inp" id="note-${c.id}" maxlength="2000" placeholder="조치 내용, 특이사항 등을 적어 주세요. 예) 앞범퍼 기존 스크래치 있음">${esc(S.noteDraft[c.id]||'')}</textarea>
     <div class="row"><label class="flag f-star"><input type="checkbox" data-nstar="${c.id}" ${star?'checked':''}><span>⭐ 중요</span></label><button class="btn2 sm" type="button" data-act="noteEmoji" data-id="${c.id}" title="글 속에 ⭐ 넣기">⭐ 넣기</button><span class="grow"></span><button class="btn" data-act="noteAdd" data-id="${c.id}">메모 저장</button></div>
@@ -540,6 +540,7 @@ function render(){
     <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}</button>`).join('')}</div></nav>
     <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${views[S.tab]()}</main>`;
   }
+  if(window.AppNav&&!AppNav.getToken) AppNav.getToken=async()=>{ const {data}=await db.auth.getSession(); return data&&data.session?data.session.access_token:null; };
   if(window.AppNav) AppNav.set('admin', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
   if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
   const L=$('#layer'),d=S.dialog;
@@ -574,6 +575,7 @@ document.addEventListener('click',async e=>{
     case 'selNone': S.sel=[]; render(); break;
     case 'cmClear': S.cmQ=''; S.cmQin=''; S.cmApt=''; render(); break;
     case 'cmSt': S.cmSt=t.dataset.f; render(); break;
+    case 'custApp': if(window.AppNav&&AppNav.openCustomerApp) AppNav.openCustomerApp(id); break;
     case 'cmSelNone': S.cmSel=[]; render(); break;
     case 'cmSelAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; S.cmSel=t.checked?[...new Set([...S.cmSel,...ids])]:S.cmSel.filter(x=>!ids.includes(x)); render(); break; }
     case 'cmSet': { const ids=[...S.cmSel], st=t.dataset.s; if(!ids.length) break;

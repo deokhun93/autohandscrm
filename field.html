@@ -263,6 +263,7 @@ function render(){
   if(!S.ready) return;
   const fid=document.activeElement&&document.activeElement.id;
   scr.innerHTML=!S.session?loginView():(!S.me||S.me.status!=='승인')?blockedView():homeView();
+  if(window.AppNav&&!AppNav.getToken) AppNav.getToken=async()=>{ const {data}=await db.auth.getSession(); return data&&data.session?data.session.access_token:null; };
   if(window.AppNav) AppNav.set('field', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
   if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
   const L=$('#layer'),d=S.dialog;

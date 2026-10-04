@@ -391,6 +391,9 @@ const STAFF_BEAT_KEY='crm-alive-at';
 function staffBeat(){ try{ localStorage.setItem(STAFF_BEAT_KEY,String(Date.now())); }catch(_){} }
 function staffAlive(){ try{ return sessionStorage.getItem(STAFF_ALIVE_KEY)==='1' || (Date.now()-Number(localStorage.getItem(STAFF_BEAT_KEY)||0))<180000; }catch(_){ return false; } }
 let staffBeating=false;
+// 고객웹을 지금 로그인한 관리자 정보로 '관리자 보기(읽기 전용)'로 열기
+function openCustomerAppAsStaff(cid){ const w=window.open('about:blank','_blank'); const base='https://autohands-web.vercel.app/app';
+  supabase.auth.getSession().then(({data})=>{ const tk=data&&data.session?data.session.access_token:null; const url=base+(tk?'#staff='+encodeURIComponent(tk)+(cid?'&cid='+cid:''):''); if(w){ try{w.opener=null;}catch(_){} w.location.href=url; } else location.href=url; }).catch(()=>{ if(w) w.location.href=base; }); }
 function staffStartBeat(){ if(staffBeating) return; staffBeating=true; staffBeat(); setInterval(staffBeat,30000); addEventListener('pagehide',staffBeat); document.addEventListener('visibilitychange',staffBeat); }
 
 function staffGetAuto() { try { return localStorage.getItem(STAFF_AUTO_KEY) !== '0'; } catch (e) { return true; } }
@@ -2265,6 +2268,7 @@ function Dashboard({ currentUser, onLogout }) {
             { label: '홈페이지', href: 'https://autohands-web.vercel.app/', ext: true },
           ].map(l => (
             <a key={l.label} href={l.href} {...(l.ext ? { target: '_blank', rel: 'noopener' } : {})} aria-current={l.current ? 'page' : undefined}
+              onClick={l.label === '고객웹' ? (e) => { e.preventDefault(); openCustomerAppAsStaff(); } : undefined}
               style={l.current ? { background: '#FFFFFF', color: '#1C2620' } : { background: '#2A362E', color: '#D5DED8', border: '1px solid #3D4A41' }}
               className="text-[12px] font-medium px-3 py-1 rounded-full whitespace-nowrap no-underline">
               {l.label}{l.ext ? ' ↗' : ''}

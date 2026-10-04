@@ -78,11 +78,24 @@
     if (!a) return;
     // 지금 보고 있는 앱을 다시 누르면 맨 위로만 올려요
     if (a.dataset.appnav === current) { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    // 고객웹: 지금 로그인한 관리자 정보로 '관리자 보기(읽기 전용)'를 열어요
+    if (a.dataset.appnav === 'customer' && window.AppNav.getToken) { e.preventDefault(); window.AppNav.openCustomerApp(); return; }
     // 같은 회사 주소(관리자·직원)는 지금 창 안에서 이동 → 바에서 언제든 다시 돌아올 수 있어요
     if (!a.target) { e.preventDefault(); location.assign(a.getAttribute('href')); }
   });
 
+  var CUSTOMER_APP = 'https://autohands-web.vercel.app/app';
+  function openCustomerApp(cid) {
+    var w = window.open('about:blank', '_blank');   // 누르자마자 창을 열어야 팝업 차단에 안 걸려요
+    Promise.resolve(window.AppNav.getToken ? window.AppNav.getToken() : null).then(function (tk) {
+      var url = CUSTOMER_APP + (tk ? '#staff=' + encodeURIComponent(tk) + (cid ? '&cid=' + cid : '') : '');
+      if (w) { try { w.opener = null; } catch (_) {} w.location.href = url; } else location.href = url;
+    }).catch(function () { if (w) w.location.href = CUSTOMER_APP; });
+  }
+
   window.AppNav = {
+    getToken: null,          // 관리자웹·직원웹이 로그인 토큰을 알려주는 함수를 넣어요
+    openCustomerApp: openCustomerApp,
     set: function (cur, show) {
       if (cur === current && !!show === visible && nav) return;
       current = cur; visible = !!show;
