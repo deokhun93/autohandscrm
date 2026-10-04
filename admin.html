@@ -212,6 +212,9 @@ tr.round-full td{background:#F4FAF6}.rt-done{color:#1F5136;font-weight:800}.mont
 .td .mt{font-size:12px;color:var(--sub);margin-top:3px}.td .mm{font-size:13px;margin-top:3px;white-space:pre-wrap}.late-t{color:var(--red);font-weight:800}
 .sec-h{display:flex;align-items:center;gap:10px;margin:6px 0 0}.sec-h h2{margin:0;font-size:18px}
 @media(max-width:900px){.td-add{grid-template-columns:1fr 1fr}.td-add .full{grid-column:1/-1}}
+.pill.st-new{background:#DCE8FB;color:#1D3A6E}.pill.st-move{background:#EADCF7;color:#5B2E8C}
+.cm-row.is-move td{background:#F6EFFC}.chip.cst-new[aria-pressed="true"]{background:#1D3A6E;border-color:#1D3A6E;color:#fff}.chip.cst-move[aria-pressed="true"]{background:#6B3FA0;border-color:#6B3FA0;color:#fff}
+.btn2.st-move{color:#5B2E8C;border-color:#CDB4EA}
 </style>
 </head>
 <body>
@@ -778,26 +781,31 @@ function cmState(c){
     if(days!=null&&days<=7) return {k:'soon',label:`재개 임박 · ${md} (D-${days})`,cls:'is-soon',days};
     return {k:'pause',label:`일시정지 · ${md} 재개`,cls:'is-pause',days};
   }
+  if(st.wash_status==='이관중') return {k:'move',label:'이관중',cls:'is-move'};
+  // 신규: 계약일로부터 30일 이내 (자동)
+  if(c.contract_date){ const d=Math.round((new Date(keyOf(new Date())+'T00:00:00')-new Date(String(c.contract_date).slice(0,10)+'T00:00:00'))/86400000);
+    if(d>=0&&d<30) return {k:'new',label:`신규 · 계약 ${d+1}일째`,cls:''}; }
   return {k:'on',label:'세차중',cls:''};
 }
 function cmgrView(){
   const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
   const qq=S.cmQ.replace(/\s/g,'').toLowerCase();
   const base=S.customers.filter(c=>(!S.cmApt||c.complex===S.cmApt)&&(!qq||[c.car_number,c.name,c.unit,c.phone,c.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq)));
-  const cnt={all:base.length,on:0,pause:0,soon:0,cancel:0}; base.forEach(c=>cnt[cmState(c).k]++);
+  const cnt={all:base.length,on:0,new:0,pause:0,soon:0,move:0,cancel:0}; base.forEach(c=>cnt[cmState(c).k]++);
   const list=base.filter(c=>{const k=cmState(c).k;return S.cmSt==='all'||k===S.cmSt||(S.cmSt==='pause'&&k==='soon');});
   const ids=list.map(c=>c.id), allSel=ids.length&&ids.every(x=>S.cmSel.includes(x)), n=S.cmSel.length;
   const COLS=14;
-  return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.<br>신규 = 계약일로부터 30일 이내 (자동) · 이관중 = 관리자가 직접 표시 (세차 일정은 그대로)</p></div></div>
   <form id="cmsearch" class="req-tools" role="search">
     <select class="inp" id="cmApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.cmApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <input class="inp grow" id="cmQ" type="search" value="${esc(S.cmQin)}" placeholder="차량번호 · 이름 · 동호수 · 연락처 검색" aria-label="검색">
     <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.cmQ||S.cmApt?`<button class="link" type="button" data-act="cmClear">초기화</button>`:''}
   </form>
-  <div class="chips">${[['all','전체'],['on','세차중'],['pause','일시정지'],['soon','재개 임박'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
+  <div class="chips">${[['all','전체'],['on','세차중'],['new','신규'],['pause','일시정지'],['soon','재개 임박'],['move','이관중'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
   <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}<span class="grow"></span>
     <button class="btn2 sm" data-act="cmSet" data-s="세차중" ${n?'':'disabled'}>세차중으로</button>
     <button class="btn2 sm st-pause" data-act="cmPause" ${n?'':'disabled'}>일시중지</button>
+    <button class="btn2 sm st-move" data-act="cmSet" data-s="이관중" ${n?'':'disabled'}>이관중</button>
     <button class="btn2 sm st-cancel" data-act="cmSet" data-s="해지" ${n?'':'disabled'}>해지</button>
     <button class="btn sm danger" data-act="cmTrash" ${n?'':'disabled'}>🗑 삭제</button></div>
   ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="cmSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>상태</th><th>고객</th><th>연락처</th><th>차종</th><th>색상</th><th>정기권</th><th>지정 요일</th><th>담당 직원</th><th>계약일</th><th>고객 메모</th></tr></thead><tbody>
@@ -1076,9 +1084,9 @@ document.addEventListener('click',async e=>{
     case 'cmSelNone': S.cmSel=[]; render(); break;
     case 'cmSelAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; S.cmSel=t.checked?[...new Set([...S.cmSel,...ids])]:S.cmSel.filter(x=>!ids.includes(x)); render(); break; }
     case 'cmSet': { const ids=[...S.cmSel], st=t.dataset.s; if(!ids.length) break;
-      const body=st==='해지'?'해지하면 정기세차 일정이 더 이상 만들어지지 않고, 오늘 이후 잡혀 있던 대기 일정도 지워져요. 목록에서는 회색으로 보여요.\n나중에 [세차중으로]를 누르면 다시 일정이 만들어져요.'
-        :'일시정지·해지를 풀고 다시 정기세차 일정이 만들어지게 해요.';
-      ask(`선택한 ${ids.length}대를 ${st==='해지'?'해지':'세차중으로'} 처리할까요?`,body,'확인',()=>act(async()=>{ const n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:st,p_resume:null})); S.cmSel=[]; toast(`${n||0}대를 ${st} 처리했어요.`); },null)); break; }
+      const body=st==='이관중'?'이관중으로 표시만 해요. 세차 일정은 그대로 만들어지고, 그 차량 메모에 기록이 남아요.\n이관이 끝나면 [세차중으로]를 눌러 표시를 풀어 주세요.':st==='해지'?'해지하면 정기세차 일정이 더 이상 만들어지지 않고, 오늘 이후 잡혀 있던 대기 일정도 지워져요. 목록에서는 회색으로 보여요.\n나중에 [세차중으로]를 누르면 다시 일정이 만들어져요.'
+        :'일시정지·해지·이관중을 풀고 다시 정기세차 일정이 만들어지게 해요.';
+      ask(`선택한 ${ids.length}대를 ${st==='해지'?'해지':st==='이관중'?'이관중으로':'세차중으로'} 처리할까요?`,body,'확인',()=>act(async()=>{ const n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:st,p_resume:null})); S.cmSel=[]; toast(`${n||0}대를 ${st} 처리했어요.`); },null)); break; }
     case 'cmPause': { const ids=[...S.cmSel]; if(!ids.length) break;
       const tmr=new Date(); tmr.setDate(tmr.getDate()+1); const min=keyOf(tmr);
       if(!S.pauseDate||S.pauseDate<min){ const d=new Date(); d.setDate(d.getDate()+14); S.pauseDate=keyOf(d); }
