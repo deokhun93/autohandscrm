@@ -15,6 +15,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/appnav.js"></script>
+<script src="/staffnotice.js" defer></script>
 <style>
 :root{--ink:#0C1422;--paper:#F7F5F0;--card:#fff;--muted:#F1EEE6;--gold:#C9A44C;--gold-2:#E2C77F;--gold-soft:#F1E7CC;--gold-dark:#8A6D25;--blue:#1D3A6E;
 --text:#1B2433;--sub:#6B7280;--line:#E4E0D6;--line-2:#D9D4C7;--ok:#DCEFE3;--ok-ink:#1F5136;--skip:#ECEAE4;--slate:#E6EAF2;--err:#B4472E;--red:#C62828;
@@ -198,6 +199,11 @@ td select.need{border-color:#E8A9A9!important;background:#FFF5F4!important}
 .rd i.on{background:#2E7D4F;border-color:#2E7D4F;color:#fff}.rd i.sk{background:#FDECEA;border-color:#F0B4B4;color:var(--red)}
 tr.round-full td{background:#F4FAF6}.rt-done{color:#1F5136;font-weight:800}.month-nav{display:flex;align-items:center;gap:8px}.month-nav b{font-size:17px;min-width:110px;text-align:center}
 .tpl-box{display:flex;flex-direction:column;gap:8px;text-align:left;width:100%}.tpl-box textarea{min-height:110px}.tpl-prev{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;white-space:pre-wrap;font-size:13px}
+.nt-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.nt-form .full{grid-column:1/-1}.nt-form textarea{min-height:110px}
+.nt-item{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.nt-item.imp{border-color:#E8A9A9;box-shadow:0 0 0 2px #FDECEA}.nt-item .body{white-space:pre-wrap;margin:0;font-size:14px}
+.nt-read{font-size:12.5px;color:var(--sub)}.nt-read b{color:var(--text)}
+@media(max-width:700px){.nt-form{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -283,8 +289,9 @@ let deferredInstall=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;if(typeof render==='function'&&S.ready)render();});
 window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리자 앱을 설치했어요. 홈 화면의 오토핸즈 관리자 아이콘으로 열어 주세요.');render();});
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-const TABS=[['req','고객 요청'],['live','실시간 세차 현황'],['field','현장전달'],['round','회차 현황'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
+const TABS=[['today','오늘의 공지'],['req','고객 요청'],['live','실시간 세차 현황'],['field','현장전달'],['round','회차 현황'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','고객 공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
+  ntScope:'now',notices:null,ntForm:null,
   rdMonth:0,rounds:null,rdTab:'전체',rdApt:'',rdQ:'',rdSel:[],rdCancel:false,
   liveDay:keyOf(new Date()),live:null,liveAt:null,frows:null,frState:'open',frMine:false,frSel:[],frReply:{},fmgr:[],purl:{},pview:null,cntField:0,cntFieldAll:0,
   reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',cancelNotify:true,resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
@@ -335,6 +342,7 @@ async function loadTab(){
       const live=new Set((st||[]).map(r=>r.id)); S.customers=S.customers.filter(c=>live.has(c.id)); S.cmSel=S.cmSel.filter(x=>live.has(x));
       await Promise.all(S.cmOpen.map(loadNotes));
     }
+    if(S.tab==='today') S.notices=await q(db.rpc('list_staff_notices',{p_scope:S.ntScope}))||[];
     if(S.tab==='round'){
       S.rounds=await q(db.rpc('list_wash_rounds',{p_month:rdMonthKey()}))||[];
       const live=new Set(S.rounds.map(r=>r.customer_id)); S.rdSel=S.rdSel.filter(x=>live.has(x));
@@ -378,6 +386,37 @@ function phoneLine(phone,key){
 }
 const RT={msg:'고객 메시지',interior:'실내세차 신청',schedule:'일정 변경'};
 const statusPill=(st,type)=>{const label=st==='확인'&&type==='schedule'?'적용됨':st;return `<span class="pill ${st==='접수'?'p-new':st==='보류'?'p-hold':'p-ok'}">${esc(label)}</span>`;};
+
+/* ---------- 탭: 오늘의 공지 (총무 요청 ⑦) ---------- */
+const NT_TG={all:'전 직원',field:'현장직원만',sales:'영업만'};
+function ntBlank(){ return {id:null,title:'',body:'',target:'all',important:false,start:keyOf(new Date()),end:''}; }
+function todayView(){
+  const f=S.ntForm||(S.ntForm=ntBlank());
+  const form=`<section class="card"><h2 class="h">${f.id?'공지 고치기':'새 공지 쓰기'}</h2><p class="sub">올리면 영업CRM · 관리자웹 · 직원웹 맨 위에 '📢 오늘의 공지'로 보이고, 대상 직원 휴대폰으로 알림이 가요.</p>
+    <div class="nt-form">
+      <label class="field full"><span style="font-weight:700;font-size:13px">제목</span><input class="inp" id="ntTitle" maxlength="80" value="${esc(f.title)}" placeholder="예: 오늘 오후 비 예보"></label>
+      <label class="field full"><span style="font-weight:700;font-size:13px">내용</span><textarea class="inp" id="ntBody" maxlength="2000" placeholder="예: 오후 3시 이후 비 예보가 있어요. 오전에 최대한 마무리해 주세요.">${esc(f.body)}</textarea></label>
+      <label class="field"><span style="font-weight:700;font-size:13px">대상</span><select class="inp" id="ntTarget">${Object.entries(NT_TG).map(([k,l])=>`<option value="${k}" ${f.target===k?'selected':''}>${l}</option>`).join('')}</select></label>
+      <label class="auto" style="align-self:end"><input type="checkbox" id="ntImp" ${f.important?'checked':''}><span>🔴 중요 공지 (빨간 테두리)</span></label>
+      <label class="field"><span style="font-weight:700;font-size:13px">보여줄 날 (시작)</span><input class="inp" type="date" id="ntStart" value="${esc(f.start)}"></label>
+      <label class="field"><span style="font-weight:700;font-size:13px">끝나는 날 <span class="sub">(비우면 하루만)</span></span><input class="inp" type="date" id="ntEnd" value="${esc(f.end)}" min="${esc(f.start)}"></label>
+    </div>
+    <div class="row" style="margin-top:10px"><span class="grow"></span>${f.id?`<button class="btn2" data-act="ntCancel">고치기 취소</button>`:''}<button class="btn" data-act="ntSave">${f.id?'고친 내용 저장':'공지 올리기 · 알림 보내기'}</button></div></section>`;
+  const list=S.notices;
+  return `<div class="row"><div class="grow"><h1 class="h">오늘의 공지</h1><p class="sub">총무 · 관리자가 전 직원에게 알릴 내용을 올려요. 직원이 [확인했어요]를 누르면 누가 읽었는지 여기에서 보여요.</p></div></div>
+  ${form}
+  <div class="chips">${[['now','지금 보이는 공지'],['next','예정'],['past','지난 공지'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.ntScope===k}" data-act="ntScope" data-f="${k}">${l}</button>`).join('')}</div>
+  ${!list?'<div class="empty">불러오는 중...</div>':list.length?`<div class="fr-list">${list.map(n=>`<article class="nt-item${n.important?' imp':''}">
+    <div class="row" style="gap:8px;flex-wrap:wrap">${n.important?'<span class="pill st-soon">중요</span>':''}<span class="pill p-hold">${NT_TG[n.target]||'전 직원'}</span><b style="font-size:15.5px">${esc(n.title||'(제목 없음)')}</b><span class="grow"></span>
+      <span class="sub">${kdate(n.start_date)}${n.end_date&&n.end_date!==n.start_date?' ~ '+kdate(n.end_date):''}</span></div>
+    ${n.body?`<p class="body">${esc(n.body)}</p>`:''}
+    <div class="nt-read">읽음 <b>${n.read_count}</b> / 대상 ${n.target_count}명${n.readers?` · 읽은 사람: ${esc(n.readers)}`:''}${n.unread?`<br>아직 안 읽음: ${esc(n.unread)}`:''}</div>
+    <div class="row" style="gap:8px"><span class="sub">${esc(n.author||'')} · ${when(n.created_at)}${n.updated_at?` · 수정 ${esc(n.editor||'')} ${when(n.updated_at)}`:''}</span><span class="grow"></span>
+      <button class="btn2 sm" data-act="ntEdit" data-id="${n.id}">고치기</button><button class="btn sm danger" data-act="ntDel" data-id="${n.id}">🗑 삭제</button></div></article>`).join('')}</div>`
+  :`<div class="empty">${S.ntScope==='now'?'지금 보이는 공지가 없어요. 위에서 새 공지를 올려 보세요.':'공지가 없어요.'}</div>`}`;
+}
+function ntRead(){ const g=id=>($('#'+id)||{}); const f=S.ntForm||(S.ntForm=ntBlank());
+  f.title=g('ntTitle').value??f.title; f.body=g('ntBody').value??f.body; f.target=g('ntTarget').value||f.target; f.important=!!g('ntImp').checked; f.start=g('ntStart').value||f.start; f.end=g('ntEnd').value??f.end; return f; }
 
 /* ---------- 탭: 회차 현황 (총무 요청 ⑥) ---------- */
 function rdMonthDate(){ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()+S.rdMonth); return d; }
@@ -905,7 +944,7 @@ function render(){
   } else if(!S.me||S.me.status!=='승인'||!['admin','master'].includes(S.me.role)){
     R.innerHTML=`<div class="login"><div class="card"><h2 class="h">관리자만 들어올 수 있어요</h2><p class="sub">관리자 계정으로 로그인해 주세요. 현장직원은 직원 앱을 이용해 주세요.</p><div class="row"><a class="btn2" href="/field">직원 앱으로</a><button class="btn2" data-act="logout">로그아웃</button></div></div></div>`;
   } else {
-    const views={req:reqView,live:liveView,field:fieldView,round:roundView,cmgr:cmgrView,coll:collView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
+    const views={today:todayView,req:reqView,live:liveView,field:fieldView,round:roundView,cmgr:cmgrView,coll:collView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
     R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div>
       ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<button class="tl" data-act="push-on" aria-label="휴대폰 알림" style="${pushState==='on'?'color:var(--gold-2)':''}">${ic('bell',14)}<span${pushState==='on'?' class="lbl"':''}>${pushState==='on'?'알림 켜짐':'알림 켜기'}</span></button><a href="/" aria-label="영업 CRM">${ic('arrow',14)}<span class="lbl">영업 CRM</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
     <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}</button>`).join('')}</div></nav>
@@ -1073,6 +1112,14 @@ document.addEventListener('click',async e=>{
       break;
     }
     case 'acc-reject': { const u=t.dataset.u; ask('가입을 거절할까요?','고객 앱에 "가입이 승인되지 않았어요" 안내가 보여요. 고객이 정보를 고쳐 다시 요청할 수 있어요.','거절',()=>act(()=>q(db.rpc('reject_customer_account',{p_user:u})),'거절했어요.')); break; }
+    case 'ntScope': S.ntScope=t.dataset.f; S.notices=null; render(); await loadTab(); break;
+    case 'ntCancel': S.ntForm=ntBlank(); render(); break;
+    case 'ntEdit': { const n=(S.notices||[]).find(x=>x.id===id); if(!n) break; S.ntForm={id:n.id,title:n.title||'',body:n.body||'',target:n.target,important:n.important,start:n.start_date,end:n.end_date||''}; render(); window.scrollTo({top:0,behavior:'smooth'}); break; }
+    case 'ntSave': { const f=ntRead(); if(!f.title.trim()&&!f.body.trim()){ toast('제목이나 내용을 적어 주세요.',true); break; } if(f.end&&f.end<f.start){ toast('끝나는 날은 시작일보다 빠를 수 없어요.',true); break; }
+      const isNew=!f.id, later=f.start>keyOf(new Date());
+      ask(isNew?'공지를 올릴까요?':'고친 내용을 저장할까요?',isNew?`${NT_TG[f.target]}에게 ${later?kdate(f.start)+'부터 ':''}보이고, ${later?'그날 ':''}휴대폰 알림이 가요.`:'이미 보낸 휴대폰 알림은 다시 가지 않아요. 화면의 공지 내용만 바뀌어요.',isNew?'올리기':'저장',
+        ()=>act(async()=>{ await q(db.rpc('save_staff_notice',{p_id:f.id,p_title:f.title,p_body:f.body,p_target:f.target,p_important:f.important,p_start:f.start||null,p_end:f.end||null})); S.ntForm=ntBlank(); if(window.StaffNotice) StaffNotice.reload(); },isNew?'공지를 올렸어요.':'저장했어요.')); break; }
+    case 'ntDel': { const n=(S.notices||[]).find(x=>x.id===id); ask('이 공지를 삭제할까요?',`'${n?n.title:''}' 공지가 모든 직원 화면에서 사라져요.`,'삭제',()=>act(async()=>{ await q(db.rpc('delete_staff_notices',{p_ids:[id]})); if(window.StaffNotice) StaffNotice.reload(); },'삭제했어요.')); break; }
     case 'rdMonth': S.rdMonth=Math.min(0,S.rdMonth+Number(t.dataset.d)); S.rounds=null; S.rdSel=[]; render(); await loadTab(); break;
     case 'rdThis': S.rdMonth=0; S.rounds=null; S.rdSel=[]; render(); await loadTab(); break;
     case 'rdTab': S.rdTab=t.dataset.f; render(); break;
@@ -1201,6 +1248,7 @@ document.addEventListener('change',async e=>{
   if(t.id==='collApt'){ S.collApt=t.value; render(); return; }
   if(t.id==='collFile'&&t.files&&t.files[0]){ const f=t.files[0]; t.value=''; await collImportFile(f); return; }
   if(t.id==='reqType'){ S.reqType=t.value; render(); return; }
+  if(/^nt(Target|Imp|Start|End)$/.test(t.id)){ ntRead(); if(t.id==='ntStart') render(); return; }
   if(t.id==='rdApt'){ S.rdApt=t.value; render(); return; }
   if(t.id==='rdCancel'){ S.rdCancel=t.checked; render(); return; }
   if(t.dataset.rdsel){ const id=Number(t.dataset.rdsel); S.rdSel=t.checked?[...new Set([...S.rdSel,id])]:S.rdSel.filter(x=>x!==id); render(); return; }
@@ -1214,6 +1262,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.nsel){ const id=Number(t.dataset.nsel); S.noticeSel=t.checked?[...new Set([...S.noticeSel,id])]:S.noticeSel.filter(x=>x!==id); render(); }
 });
 document.addEventListener('input',e=>{
+  if(/^nt(Title|Body)$/.test(e.target.id)){ ntRead(); return; }
   if(e.target.id==='rdQ'){ S.rdQ=e.target.value; const pos=e.target.selectionStart; render(); const el=$('#rdQ'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} } return; }
   if(e.target.id==='rdTplIn'){ S.rdTplDraft=e.target.value; const pv=$('#rdPrev'); const r=(S.rounds||[]).find(x=>x.customer_id===S.rdSel[0]); if(pv&&r) pv.textContent=rdFill(S.rdTplDraft,r); if(S.dialog&&S.rdRows) S.dialog.extra=rdNoticeExtra(S.rdRows); return; }
   if(e.target.id==='rdTitle'){ S.rdTitle=e.target.value; return; }
@@ -1246,7 +1295,7 @@ document.addEventListener('submit',async e=>{
   S.busy=false; if(error){ S.err=friendly(error); render(); $('#em').value=em; }
 });
 async function start(){
-  try{ const ok=await loadBase(); if(ok){ await refreshCounts(); await loadTab(); return; } }catch(e){ S.err=friendly(e); }
+  try{ const ok=await loadBase(); if(ok){ if(window.StaffNotice) StaffNotice.reload(); await refreshCounts(); await loadTab(); return; } }catch(e){ S.err=friendly(e); }
   render();
 }
 (async function boot(){

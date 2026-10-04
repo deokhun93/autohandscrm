@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Noto+Sans+KR:wght@400;500;700;900&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/appnav.js"></script>
+<script src="/staffnotice.js" defer></script>
 <style>
 :root{--ink:#0C1422;--paper:#F7F5F0;--card:#fff;--muted:#F1EEE6;--gold:#C9A44C;--gold-2:#E2C77F;--gold-soft:#F1E7CC;--gold-dark:#8A6D25;--blue:#1D3A6E;
 --text:#1B2433;--sub:#6B7280;--line:#E4E0D6;--line-2:#D9D4C7;--ok:#DCEFE3;--ok-ink:#1F5136;--wait:#F1E7CC;--skip:#ECEAE4;--err:#B4472E;
@@ -187,7 +188,7 @@ const S={ready:false,session:null,me:null,day:keyOf(new Date()),jobs:[],sum:null
 
 async function loadMe(){
   const {data,error}=await db.from('profiles').select('id,name,role,status').eq('id',S.session.user.id).maybeSingle();
-  if(error) throw error; S.me=data;
+  if(error) throw error; S.me=data; if(window.StaffNotice) StaffNotice.reload();
 }
 async function loadAll(){
   try{
