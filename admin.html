@@ -101,6 +101,8 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .wd-tog small{font-size:11px;font-weight:600;color:var(--ok-ink)}.wd-tog.sun{color:#C62828}.wd-tog.sat{color:#1D3A6E}
 .wd-tog[aria-pressed="true"]{background:#E6E3DB;border-color:#B8B2A3;color:#8A8577}.wd-tog[aria-pressed="true"] small{color:#8A8577}
 .wd-pick{border:0;background:none;cursor:pointer;border-radius:6px;padding:2px 0}.wd-pick:hover{background:var(--gold-soft);color:var(--text)}
+.res-add{display:flex;flex-direction:column;gap:8px;text-align:left}.res-list{max-height:38vh;overflow:auto;display:flex;flex-direction:column;gap:5px;border:1px solid var(--line);border-radius:10px;padding:6px;background:#fff}
+.res-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;cursor:pointer}.res-item:hover{background:var(--gold-soft)}.res-item input{width:18px;height:18px;accent-color:var(--ink)}.res-item span{color:var(--sub);font-size:13px}.res-item small{margin-left:auto;color:var(--sub)}.res-item.dis{opacity:.5;cursor:default}
 .side-col{display:flex;flex-direction:column;gap:16px}.mg-row{align-items:flex-end;gap:8px}.mg-row .field{flex:1;min-width:140px}.mg-row .field span{font-size:12px;font-weight:700;color:var(--sub)}.mg-tilde{padding-bottom:10px;color:var(--sub)}
 .sel-days{display:flex;flex-wrap:wrap;gap:5px}.close-row{gap:8px}
 .cap-inp{width:72px;text-align:center;font-weight:800;font-size:16px}
@@ -256,7 +258,7 @@ window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리�
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const TABS=[['req','고객 요청'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
-  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'', accs:[],accAll:false, staff:[], customers:[],
+  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
   custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
 
@@ -457,8 +459,20 @@ function slotsView(){
     <button class="btn2 st-cancel" data-act="slotMagam" ${s&&s.capacity===0?'disabled':''}>${s&&s.capacity===0?'마감됨':'마감'}</button>
     ${!s?'<p class="note">[마감]을 누르면 이 날짜는 고객 앱에 \'마감\'으로 보이고 신청을 받지 않아요.</p>':s.capacity===0?'<p class="note">이 날짜는 마감되어 새 신청을 받지 않아요. 대수를 다시 저장하면 마감이 풀려요.</p>':'<p class="note">[마감]을 누르면 이 날짜는 새 신청을 받지 않아요. 이미 들어온 신청은 그대로 남아요.</p>'}
     ${s?(s.booked?'<p class="note">신청한 고객이 있어서 이 날짜는 닫을 수 없어요.</p>':`<button class="btn2 danger" data-act="close-slot">이 날짜 신청 닫기</button>`):''}
+  <button class="btn2" data-act="resAdd">+ 예약 차량 직접 추가</button>
   <p class="note">달력에서 다른 날짜를 누르면 그 날짜로 바뀌어요.</p></div></div></div>
   ${intReqPanel()}`:''}`;
+}
+function resAddHtml(){
+  const qq=S.resQ.replace(/\s/g,'').toLowerCase(), fs=fieldStaff();
+  const pool=S.customers.filter(c=>c.complex===S.slotApt);
+  const booked=new Set(S.intReqs.filter(r=>r.target_date===S.slotDay).map(r=>r.customer_id));
+  const list=pool.filter(c=>!qq||[c.car_number,c.name,c.unit].join('').replace(/\s/g,'').toLowerCase().includes(qq)).slice(0,80);
+  return `<div class="res-add"><input class="inp" id="resQ" type="search" placeholder="차량번호 · 이름 · 동호수 검색" value="${esc(S.resQ)}">
+    <div class="res-list">${list.length?list.map(c=>{const has=booked.has(c.id);return `<label class="res-item ${has?'dis':''}"><input type="checkbox" data-respick="${c.id}" ${S.resPick.includes(c.id)?'checked':''} ${has?'disabled':''}><b>${esc(c.car_number||'-')}</b><span>${esc(c.name||'')} · ${esc(c.unit||'')}</span>${has?'<small>이미 예약</small>':''}</label>`;}).join(''):'<p class="sub">이 단지 계약 고객 중 맞는 차량이 없어요.</p>'}</div>
+    <p class="sub"><b>${S.resPick.length}대 선택</b> · ${esc(S.slotApt)} 계약 고객 ${pool.length}명 중</p>
+    <label class="field"><span style="font-weight:700;font-size:13px">현장직원</span><select class="inp" id="resStaff"><option value="">고객 담당 직원 그대로</option>${fs.map(f=>`<option value="${f.id}" ${S.resStaff===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></label>
+    <label class="auto"><input type="checkbox" id="resNotify" ${S.resNotify?'checked':''}><span>고객에게 '실내세차 예약이 완료되었어요' 알림 보내기</span></label></div>`;
 }
 function intReqPanel(){
   const all=S.intReqs, fs=fieldStaff();
@@ -900,6 +914,12 @@ document.addEventListener('click',async e=>{
     case 'sapt': S.slotApt=t.dataset.a; S.slotDay=null; S.slotDays=[]; S.wdDraft=null; S.wdAll=false; await loadTab(); break;
     case 'smonth': S.slotMonth=Math.max(0,Math.min(3,S.slotMonth+Number(t.dataset.d))); S.slotDay=null; S.slotDays=[]; if(S.intView==='day') S.intView='all'; await loadTab(); break;
     case 'sday': S.slotDay=t.dataset.k; S.capVal=''; if(S.intView==='day'||S.intReqs.some(r=>r.target_date===S.slotDay&&r.status!=='승인')) S.intView='day'; S.intSel=[]; render(); break;
+    case 'resAdd': { if(!S.slotDay) break; S.resPick=[]; S.resQ=''; S.resStaff=''; S.resNotify=true;
+      const openDlg=()=>ask(`${kdate(S.slotDay)} 예약 차량 직접 추가`,'전화 등으로 미리 예약받은 차량을 골라 이 날짜에 넣어요. 예약 확정 상태로 들어가고 직원웹 그 날짜 일정에 실내세차로 추가돼요.\n받을 대수보다 많아지면 대수가 자동으로 늘어나요.','추가',
+        ()=>{ if(!S.resPick.length){ toast('추가할 차량을 골라 주세요.',true); S.busy=false; render(); return; }
+          return act(async()=>{ const r=await q(db.rpc('add_interior_reservations',{p_complex:S.slotApt,p_date:S.slotDay,p_customer_ids:S.resPick,p_staff:S.resStaff||null,p_notify:S.resNotify}));
+            const sk=r.skipped||[]; toast(`${r.added||0}대 추가했어요${sk.length?` · ${sk.length}대 건너뜀 (${sk.slice(0,2).map(x=>x.car+' '+x.reason).join(', ')})`:''} · 받을 대수 ${r.capacity??'-'}대`,!!sk.length&&!r.added); S.resPick=[]; },null); },resAddHtml());
+      S.resOpen=openDlg; openDlg(); break; }
     case 'slotMagam': { const d=S.slotDay; if(!d) break;
       ask(`${kdate(d)}을 마감할까요?`,'새 실내세차 신청을 더 받지 않아요. 이미 들어온 신청은 그대로 남고, 고객 앱에는 \'마감\'으로 보여요.\n대수를 다시 저장하면 마감이 풀려요.','확인',
         ()=>act(()=>q(db.rpc('set_interior_capacity',{p_complex:S.slotApt,p_date:d,p_capacity:0})),`${kdate(d)} 마감했어요.`)); break; }
@@ -957,6 +977,9 @@ document.addEventListener('change',async e=>{
   if(t.id==='payDate'){ S.payDate=t.value; return; }
   if(t.dataset.cf&&S.cform){ S.cform[t.dataset.cf]=t.value; return; }
   if(t.dataset.intsel){ const id=Number(t.dataset.intsel); S.intSel=t.checked?[...new Set([...S.intSel,id])]:S.intSel.filter(x=>x!==id); render(); return; }
+  if(t.dataset.respick){ const id=Number(t.dataset.respick); S.resPick=t.checked?[...new Set([...S.resPick,id])]:S.resPick.filter(x=>x!==id); if(S.dialog) S.dialog.extra=resAddHtml(); render(); return; }
+  if(t.id==='resStaff'){ S.resStaff=t.value; if(S.dialog) S.dialog.extra=resAddHtml(); return; }
+  if(t.id==='resNotify'){ S.resNotify=t.checked; if(S.dialog) S.dialog.extra=resAddHtml(); return; }
   if(t.id==='wdAll'){ S.wdAll=t.checked; if(!S.wdDraft) S.wdDraft=[...S.closedWd]; render(); return; }
   if(t.id==='intDate'){ S.intDate=t.value; render(); return; }
   if(t.id==='intStaff'){ S.intStaff=t.value; return; }
@@ -974,6 +997,7 @@ document.addEventListener('input',e=>{
   if(e.target.id==='reqQ'){ S.reqQ=e.target.value; }
   if(e.target.id==='cmQ'){ S.cmQin=e.target.value; }
   if(e.target.id==='nm-body'){ S.nmBody=e.target.value; }
+  if(e.target.id==='resQ'){ S.resQ=e.target.value; if(S.dialog){ S.dialog.extra=resAddHtml(); render(); const el=$('#resQ'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } } }
   if(e.target.id==='collQ'){ S.collQin=e.target.value; }
   if(e.target.dataset&&e.target.dataset.cf&&S.cform){ S.cform[e.target.dataset.cf]=e.target.value; }
   if(e.target.id==='payDate'){ S.payDate=e.target.value; }
