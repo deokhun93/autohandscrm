@@ -100,6 +100,7 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .wd-tog small{font-size:11px;font-weight:600;color:var(--ok-ink)}.wd-tog.sun{color:#C62828}.wd-tog.sat{color:#1D3A6E}
 .wd-tog[aria-pressed="true"]{background:#E6E3DB;border-color:#B8B2A3;color:#8A8577}.wd-tog[aria-pressed="true"] small{color:#8A8577}
 .wd-pick{border:0;background:none;cursor:pointer;border-radius:6px;padding:2px 0}.wd-pick:hover{background:var(--gold-soft);color:var(--text)}
+.side-col{display:flex;flex-direction:column;gap:16px}.mg-row{align-items:flex-end;gap:8px}.mg-row .field{flex:1;min-width:140px}.mg-row .field span{font-size:12px;font-weight:700;color:var(--sub)}.mg-tilde{padding-bottom:10px;color:var(--sub)}
 .sel-days{display:flex;flex-wrap:wrap;gap:5px}.close-row{gap:8px}
 .cap-inp{width:72px;text-align:center;font-weight:800;font-size:16px}
 .assign-bar{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:10px 12px}.assign-bar .field span{font-size:12px;font-weight:700;color:var(--sub)}.assign-bar b{align-self:center;min-width:110px}
@@ -254,7 +255,7 @@ window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리�
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const TABS=[['req','고객 요청'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','공지 보내기']];
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
-  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[], accs:[],accAll:false, staff:[], customers:[],
+  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'', accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
   custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
 
@@ -432,30 +433,43 @@ function slotsView(){
   const apts=complexes(), {y,m}=monthRange(), first=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate(), t=keyOf(new Date());
   const map=Object.fromEntries(S.slots.map(s=>[s.slot_date,s]));
   const waitBy={}; S.intReqs.filter(r=>r.status!=='승인').forEach(r=>waitBy[r.target_date]=(waitBy[r.target_date]||0)+1);
-  let cells=WD.map((w,i)=>`<button class="wd wd-pick" data-act="swd" data-w="${i}" title="이 달 ${w}요일 모두 고르기">${w}</button>`).join(''); for(let i=0;i<first;i++) cells+='<span></span>';
+  let cells=WD.map(w=>`<span class="wd">${w}</span>`).join(''); for(let i=0;i<first;i++) cells+='<span></span>';
   for(let d=1;d<=days;d++){ const k=`${y}-${pad(m+1)}-${pad(d)}`, s=map[k], past=k<=t, off=!s&&S.closedWd.includes(new Date(y,m,d).getDay());
-    cells+=`<button class="day ${past?'past':s?(s.booked>=s.capacity?'full':'open'):off?'off':''} ${S.slotDays.includes(k)?'dsel':''}" data-act="sday" data-k="${k}" ${past||off?'disabled':''}>${d}${s?`<small>${s.capacity===0?'마감':s.booked+'/'+s.capacity}</small>`:off?'<small>휴무</small>':''}${waitBy[k]?`<i class="wait-dot" title="배정 대기 ${waitBy[k]}건">${waitBy[k]}</i>`:''}</button>`; }
+    cells+=`<button class="day ${past?'past':s?(s.booked>=s.capacity?'full':'open'):off?'off':''} ${S.slotDay===k?'dsel':''}" data-act="sday" data-k="${k}" ${past||off?'disabled':''}>${d}${s?`<small>${s.capacity===0?'마감':s.booked+'/'+s.capacity}</small>`:off?'<small>휴무</small>':''}${waitBy[k]?`<i class="wait-dot" title="배정 대기 ${waitBy[k]}건">${waitBy[k]}</i>`:''}</button>`; }
   const s=S.slotDay&&map[S.slotDay];
   const wd=S.wdDraft||S.closedWd, wdChanged=S.wdDraft&&(S.wdDraft.slice().sort().join()!==S.closedWd.slice().sort().join()||S.wdAll);
   const wdBar=`<div class="card wd-card"><div class="row"><div class="grow"><h2 class="h">실내세차 휴무 요일 · ${esc(S.slotApt)}</h2><p class="sub">실내세차를 하지 않는 요일을 눌러 닫아 두세요. 닫힌 요일은 달력에 '휴무'로 보이고 날짜를 열 수 없어요.</p></div></div>
     <div class="row wd-row">${[1,2,3,4,5,6,0].map(i=>`<button class="wd-tog ${i===0?'sun':i===6?'sat':''}" data-act="wdTog" data-w="${i}" aria-pressed="${wd.includes(i)}">${WD[i]}<small>${wd.includes(i)?'휴무':'운영'}</small></button>`).join('')}</div>
     <div class="row"><label class="auto"><input type="checkbox" id="wdAll" ${S.wdAll?'checked':''}><span>모든 단지에 똑같이 적용</span></label><span class="grow"></span>${S.wdDraft?`<button class="link" data-act="wdCancel">취소</button>`:''}<button class="btn sm" data-act="wdSave" ${wdChanged?'':'disabled'}>${ic('check',14)}휴무 요일 저장</button></div></div>`;
-  const sel=S.slotDays.slice().sort(), one=sel.length===1?map[sel[0]]:null;
-  const capNow=S.capVal!==''?S.capVal:(one&&one.capacity?one.capacity:2);
+  const capNow=S.capVal!==''?S.capVal:(s&&s.capacity?s.capacity:2);
   return `<div class="row"><div class="grow"><h1 class="h">실내세차 일정</h1><p class="sub">단지별로 실내세차 가능한 날짜와 받을 차량 수를 열어 두면, 고객 앱 달력에서 그 날짜만 신청할 수 있어요. 신청이 정원만큼 차면 그 날짜는 자동으로 '마감'돼요.</p></div></div>
   ${(()=>{const noApt=S.customers.filter(c=>!(c.complex||'').trim()).length;
     if(!apts.length) return `<div class="card"><h2 class="h">아직 실내세차를 열 단지가 없어요</h2><p class="sub">실내세차 날짜는 <b>아파트(단지)별</b>로 열어요. 지금 계약완료 고객 ${S.customers.length}명 중 ${noApt}명이 아파트 이름이 비어 있어서 단지 목록이 만들어지지 않았어요.</p><p class="sub">[고객 세차 설정] 탭에서 고객마다 <b>아파트</b> 칸을 입력하고 저장하면 여기에 단지가 나타나고, 그 단지 고객들은 고객 앱에서 실내세차를 신청할 수 있어요.</p><div class="row"><button class="btn" data-act="tab" data-t="cust">고객 세차 설정으로 가기</button></div></div>`;
     return `<div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.slotApt===a}" data-act="sapt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>${noApt?`<p class="note" style="color:var(--red)">아파트 이름이 비어 있는 계약 고객 ${noApt}명은 실내세차를 신청할 수 없어요. [고객 세차 설정]에서 아파트를 입력해 주세요.</p>`:''}`;})()}
   ${S.slotApt?`${wdBar}<div class="two-col"><div class="card"><div class="cal-head"><button class="btn2" data-act="smonth" data-d="-1" ${S.slotMonth<=0?'disabled':''}>${ic('back')}</button><h2 class="h">${y}년 ${m+1}월 · ${esc(S.slotApt)}</h2><button class="btn2" data-act="smonth" data-d="1" ${S.slotMonth>=3?'disabled':''}>${ic('arrow')}</button></div><div class="cal">${cells}</div><p class="note">숫자는 '신청 대수 / 받을 수 있는 대수'예요. 빨간 동그라미는 아직 배정하지 않은 신청 수예요.</p></div>
-  <div class="card">${sel.length?`<div class="row"><h2 class="h grow">${sel.length===1?kdate(sel[0]):`${sel.length}일 선택`}</h2><button class="link" data-act="sdayClear">선택 해제</button></div>
-    ${sel.length>1?`<div class="sel-days">${sel.map(k=>{const x=map[k];return `<span class="pill ${x?(x.capacity===0||x.booked>=x.capacity?'p-hold':'p-ok'):''}">${k.slice(5).replace('-','/')} ${x?(x.capacity===0?'마감':x.booked+'/'+x.capacity):'닫힘'}</span>`;}).join('')}</div>`
-      :one?`<p class="sub">신청 ${one.booked}대 / 받을 수 있는 ${one.capacity}대 ${one.capacity===0?'· <b style="color:var(--red)">마감</b> (새 신청 안 받음)':one.booked>=one.capacity?'· <b style="color:var(--red)">마감</b>':`· 남은 자리 ${one.capacity-one.booked}대`}</p>`:'<p class="sub">아직 신청을 받지 않는 날짜예요.</p>'}
-    <div class="row"><label for="capVal" class="grow" style="font-weight:700">${sel.length>1?'고른 날짜마다 받을 수 있는 차량':'이 날 받을 수 있는 차량'}</label><button class="btn2 sm" data-act="capStep" data-d="-1">−</button><input class="inp cap-inp" id="capVal" type="number" min="1" max="50" value="${esc(capNow)}"><span>대</span><button class="btn2 sm" data-act="capStep" data-d="1">+</button></div>
-    <button class="btn" data-act="capSave">${ic('check')}${sel.length>1?`${sel.length}일 대수 저장 (닫힌 날짜는 열기)`:one?'대수 저장':'이 날짜 신청 열기'}</button>
-    <div class="row close-row"><button class="btn2 st-cancel grow" data-act="slotMagam">마감${sel.length>1?` (${sel.length}일)`:''}</button><button class="btn2 danger grow" data-act="close-slot">신청 닫기${sel.length>1?` (${sel.length}일)`:''}</button></div>
-    <p class="note">[마감]: 새 신청을 더 받지 않아요. 이미 들어온 신청은 그대로 있고, 고객 앱에는 '마감'으로 보여요. 대수를 다시 저장하면 풀려요.<br>[신청 닫기]: 신청이 없는 날짜를 아예 닫아요. 신청이 있는 날짜는 남겨 둬요.</p>`
-  :'<p class="sub">달력에서 날짜를 눌러 고르세요. <b>여러 날짜를 눌러 한꺼번에</b> 정할 수 있고, 맨 위 요일(일·월·화…)을 누르면 이 달 그 요일이 모두 골라져요.</p>'}</div></div>
+  <div class="side-col"><div class="card">${S.slotDay?`<h2 class="h">${kdate(S.slotDay)}</h2>
+    ${s?`<p class="sub">신청 ${s.booked}대 / 받을 수 있는 ${s.capacity}대 ${s.capacity===0?'· <b style="color:var(--red)">마감</b> (새 신청 안 받음)':s.booked>=s.capacity?'· <b style="color:var(--red)">마감</b>':`· 남은 자리 ${s.capacity-s.booked}대`}</p>`:'<p class="sub">아직 신청을 받지 않는 날짜예요.</p>'}
+    <div class="row"><label for="capVal" class="grow" style="font-weight:700">이 날 받을 수 있는 차량</label><button class="btn2 sm" data-act="capStep" data-d="-1">−</button><input class="inp cap-inp" id="capVal" type="number" min="1" max="50" value="${esc(capNow)}"><span>대</span><button class="btn2 sm" data-act="capStep" data-d="1">+</button></div>
+    <button class="btn" data-act="capSave">${ic('check')}${s?'대수 저장':'이 날짜 신청 열기'}</button>
+    ${s?(s.booked?'<p class="note">신청한 고객이 있어서 이 날짜는 닫을 수 없어요.</p>':`<button class="btn2 danger" data-act="close-slot">이 날짜 신청 닫기</button>`):''}`
+  :'<p class="sub">달력에서 날짜를 눌러 신청을 열거나 받을 대수를 정하세요.</p>'}</div>
+  ${magamCard(map)}</div></div>
   ${intReqPanel()}`:''}`;
+}
+function magamCard(map){
+  const ds=magamDates(), open=ds.filter(k=>map[k]||S.slots.some(x=>x.slot_date===k));
+  const tmr=new Date(); tmr.setDate(tmr.getDate()+1); const min=keyOf(tmr);
+  return `<div class="card magam-card"><h2 class="h">날짜 지정 마감</h2><p class="sub">마감할 날짜(또는 기간)를 정하고 [마감]을 누르면, 그 날짜는 새 실내세차 신청을 받지 않아요. 이미 들어온 신청은 그대로 남고, 고객 앱에는 '마감'으로 보여요.</p>
+    <div class="row mg-row"><label class="field"><span>시작일</span><input class="inp" type="date" id="mgFrom" min="${min}" value="${esc(S.mgFrom)}"></label><span class="mg-tilde">~</span><label class="field"><span>종료일 (하루만이면 비워 두세요)</span><input class="inp" type="date" id="mgTo" min="${esc(S.mgFrom||min)}" value="${esc(S.mgTo)}"></label></div>
+    ${ds.length?`<p class="note">${ds.length===1?kdate(ds[0]):`${kdate(ds[0])} ~ ${kdate(ds[ds.length-1])} · ${ds.length}일`} · 이 달 열린 날짜 ${open.length}일${ds.length>open.length?' (열리지 않은 날짜는 건너뛰어요)':''}</p>`:''}
+    <button class="btn2 st-cancel" data-act="slotMagam" ${ds.length?'':'disabled'}>마감</button>
+    <p class="note">마감을 풀려면 위 칸에서 그 날짜를 눌러 받을 대수를 다시 저장하면 돼요.</p></div>`;
+}
+function magamDates(){
+  if(!S.mgFrom) return [];
+  const to=S.mgTo&&S.mgTo>=S.mgFrom?S.mgTo:S.mgFrom, out=[]; const [y,m,d]=S.mgFrom.split('-').map(Number); let dt=new Date(y,m-1,d);
+  while(keyOf(dt)<=to&&out.length<120){ out.push(keyOf(dt)); dt.setDate(dt.getDate()+1); }
+  return out;
 }
 function intReqPanel(){
   const all=S.intReqs, fs=fieldStaff();
@@ -896,24 +910,14 @@ document.addEventListener('click',async e=>{
     case 'del-job': ask('이 일정을 삭제할까요?','이 날 이 차량 일정을 지워요. 지운 일정은 자동으로 다시 생기지 않아요.','삭제',()=>act(()=>q(db.rpc('remove_wash_job',{p_id:id})),'삭제했어요. 이 날은 다시 자동으로 생기지 않아요.')); break;
     case 'sapt': S.slotApt=t.dataset.a; S.slotDay=null; S.slotDays=[]; S.wdDraft=null; S.wdAll=false; await loadTab(); break;
     case 'smonth': S.slotMonth=Math.max(0,Math.min(3,S.slotMonth+Number(t.dataset.d))); S.slotDay=null; S.slotDays=[]; if(S.intView==='day') S.intView='all'; await loadTab(); break;
-    case 'sday': { const k=t.dataset.k; S.slotDays=S.slotDays.includes(k)?S.slotDays.filter(x=>x!==k):[...S.slotDays,k]; S.slotDay=S.slotDays.includes(k)?k:(S.slotDays[S.slotDays.length-1]||null); S.capVal='';
-      if(S.slotDay&&(S.intView==='day'||S.intReqs.some(r=>r.target_date===S.slotDay&&r.status!=='승인'))) S.intView='day'; if(!S.slotDay&&S.intView==='day') S.intView='all'; S.intSel=[]; render(); break; }
-    case 'sdayClear': S.slotDays=[]; S.slotDay=null; S.capVal=''; if(S.intView==='day') S.intView='all'; render(); break;
-    case 'swd': { const w=Number(t.dataset.w), {y,m}=monthRange(), n=new Date(y,m+1,0).getDate(), today=keyOf(new Date()), mp=Object.fromEntries(S.slots.map(x=>[x.slot_date,x]));
-      const ks=[]; for(let d=1;d<=n;d++){ const dt=new Date(y,m,d); if(dt.getDay()!==w) continue; const k=keyOf(dt); if(k<=today) continue; if(!mp[k]&&S.closedWd.includes(w)) continue; ks.push(k); }
-      if(!ks.length){ toast(S.closedWd.includes(w)?`${WD[w]}요일은 휴무로 닫혀 있어요.`:'고를 수 있는 날짜가 없어요.',true); break; }
-      const all=ks.every(k=>S.slotDays.includes(k)); S.slotDays=all?S.slotDays.filter(k=>!ks.includes(k)):[...new Set([...S.slotDays,...ks])]; S.slotDay=S.slotDays[S.slotDays.length-1]||null; S.capVal=''; render(); break; }
-    case 'slotMagam': { const ds=[...S.slotDays].sort(); if(!ds.length) break;
-      ask(`${ds.length===1?kdate(ds[0]):ds.length+'일'}을 마감할까요?`,'새 실내세차 신청을 더 받지 않아요. 이미 들어온 신청은 그대로 남고, 고객 앱에는 \'마감\'으로 보여요.\n열리지 않은 날짜는 건너뛰어요. 대수를 다시 저장하면 마감이 풀려요.','확인',
-        ()=>act(async()=>{ const r=await q(db.rpc('set_interior_capacity_many',{p_complex:S.slotApt,p_dates:ds,p_capacity:0})); toast(`${r.done||0}일 마감했어요.${(r.skipped||[]).length?` (${r.skipped.length}일은 처리하지 못했어요)`:''}`); },null)); break; }
-    case 'close-slot': { const ds=[...S.slotDays].sort(); if(!ds.length) break;
-      ask(`${ds.length===1?kdate(ds[0]):ds.length+'일'} 신청을 닫을까요?`,'신청이 없는 날짜는 아예 닫혀서 고객 앱 달력에서 사라져요.\n신청이 들어온 날짜는 닫지 않고 남겨 둬요. (그런 날은 [마감]을 써 주세요)','확인',
-        ()=>act(async()=>{ const r=await q(db.rpc('close_interior_slots',{p_complex:S.slotApt,p_dates:ds})); toast(`${r.done||0}일 닫았어요.${r.kept?` 신청이 있는 ${r.kept}일은 남겨 뒀어요.`:''}`); },null)); break; }
+    case 'sday': S.slotDay=t.dataset.k; S.capVal=''; if(S.intView==='day'||S.intReqs.some(r=>r.target_date===S.slotDay&&r.status!=='승인')) S.intView='day'; S.intSel=[]; render(); break;
+    case 'slotMagam': { const ds=magamDates(); if(!ds.length){ toast('마감할 날짜를 골라 주세요.',true); break; }
+      ask(`${ds.length===1?kdate(ds[0]):`${kdate(ds[0])} ~ ${kdate(ds[ds.length-1])}`}을 마감할까요?`,'새 실내세차 신청을 더 받지 않아요. 이미 들어온 신청은 그대로 남고, 고객 앱에는 \'마감\'으로 보여요.\n열리지 않은 날짜는 건너뛰어요.','확인',
+        ()=>act(async()=>{ const r=await q(db.rpc('set_interior_capacity_many',{p_complex:S.slotApt,p_dates:ds,p_capacity:0})); S.mgFrom=''; S.mgTo=''; toast(`${r.done||0}일 마감했어요.${(r.skipped||[]).length?` (${r.skipped.length}일은 처리하지 못했어요)`:''}`); },null)); break; }
+    case 'close-slot': await act(async()=>{ const r=await q(db.rpc('close_interior_slots',{p_complex:S.slotApt,p_dates:[S.slotDay]})); toast(r.done?`${kdate(S.slotDay)} 신청을 닫았어요.`:'신청이 있어서 닫지 못했어요.',!r.done); },null); break;
     case 'capStep': { const el=$('#capVal'); const v=Math.max(1,Math.min(50,(Number(el&&el.value)||0)+Number(t.dataset.d))); S.capVal=String(v); if(el) el.value=v; break; }
-    case 'capSave': { const v=Number(($('#capVal')||{}).value||0), ds=[...S.slotDays].sort(); if(!ds.length) break;
-      if(!(v>=1&&v<=50)){ toast('받을 수 있는 대수는 1~50대로 적어 주세요.',true); break; }
-      await act(async()=>{ const r=await q(db.rpc('set_interior_capacity_many',{p_complex:S.slotApt,p_dates:ds,p_capacity:v})); const sk=r.skipped||[];
-        if(sk.length) toast(`${r.done||0}일 저장 · ${sk.length}일은 못 했어요: ${sk.slice(0,2).map(x=>String(x.date).slice(5).replace('-','/')+' '+x.reason).join(' / ')}`,true); else toast(`${r.done||0}일 ${v}대로 저장했어요.`); },null); S.capVal=''; break; }
+    case 'capSave': { const v=Number(($('#capVal')||{}).value||0); if(!(v>=1&&v<=50)){ toast('받을 수 있는 대수는 1~50대로 적어 주세요.',true); break; } const had=S.slots.some(x=>x.slot_date===S.slotDay);
+      await act(()=>q(db.rpc('set_interior_capacity',{p_complex:S.slotApt,p_date:S.slotDay,p_capacity:v})),had?`${kdate(S.slotDay)} ${v}대로 바꿨어요.`:`${kdate(S.slotDay)} 신청을 열었어요 (${v}대).`); S.capVal=''; break; }
     case 'intView': S.intView=t.dataset.f; S.intSel=[]; render(); break;
     case 'wdTog': { const w=Number(t.dataset.w), cur=S.wdDraft||[...S.closedWd]; S.wdDraft=cur.includes(w)?cur.filter(x=>x!==w):[...cur,w]; render(); break; }
     case 'wdCancel': S.wdDraft=null; S.wdAll=false; render(); break;
@@ -964,6 +968,8 @@ document.addEventListener('change',async e=>{
   if(t.id==='payDate'){ S.payDate=t.value; return; }
   if(t.dataset.cf&&S.cform){ S.cform[t.dataset.cf]=t.value; return; }
   if(t.dataset.intsel){ const id=Number(t.dataset.intsel); S.intSel=t.checked?[...new Set([...S.intSel,id])]:S.intSel.filter(x=>x!==id); render(); return; }
+  if(t.id==='mgFrom'){ S.mgFrom=t.value; if(S.mgTo&&S.mgTo<S.mgFrom) S.mgTo=''; render(); return; }
+  if(t.id==='mgTo'){ S.mgTo=t.value; render(); return; }
   if(t.id==='wdAll'){ S.wdAll=t.checked; if(!S.wdDraft) S.wdDraft=[...S.closedWd]; render(); return; }
   if(t.id==='intDate'){ S.intDate=t.value; render(); return; }
   if(t.id==='intStaff'){ S.intStaff=t.value; return; }
