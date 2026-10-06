@@ -75,7 +75,17 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .chip-trash[aria-pressed="true"]{background:#7A2323;border-color:#7A2323;color:#fff}
 .trash-note{margin:0;background:#F1EFE8;color:#6B6A63;border-radius:10px;padding:10px 12px;font-size:13px}
 .p-days{background:#FAEEDA;color:#854F0B}.req.is-trash{background:#FBFAF7}
-.cm-tbl td{white-space:nowrap}.cm-tbl tr.cm-row.open td{background:var(--gold-soft)}.nowrap{white-space:nowrap}
+.cm-tbl td{white-space:nowrap}
+/* 넓은 표: 화면 안에서 위아래 · 좌우로 움직이고, 제목 줄과 앞쪽 칸(차량)은 고정 */
+.tbl.cm-tbl{max-height:calc(100vh - 170px);min-height:220px;overflow:auto;overscroll-behavior:contain}
+.cm-tbl thead th{position:sticky;top:0;z-index:3;box-shadow:0 1px 0 var(--line)}
+.cm-tbl .stk{position:sticky;z-index:2;background:var(--card)}.cm-tbl thead th.stk{z-index:4;background:var(--paper)}
+.cm-tbl .stk-last{box-shadow:2px 0 0 var(--line)}
+.cm-tbl tr.open>td.stk,.cm-tbl tr.picked>td.stk{background:var(--gold-soft)}.cm-tbl tr.grp-sub>td.stk{background:#F6F8FC}
+.hs-bar{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin:0 0 -4px}.hs-bar .sub{font-size:11.5px;margin-right:auto}
+.hs-bar button{all:unset;cursor:pointer;width:34px;height:30px;display:grid;place-items:center;border:1px solid var(--line);border-radius:9px;background:var(--card);font-weight:900;color:var(--text)}
+.hs-bar button:disabled{opacity:.35;cursor:default}
+@media (max-width:700px){.tbl.cm-tbl{max-height:calc(100vh - 210px)}}.cm-tbl tr.cm-row.open td{background:var(--gold-soft)}.nowrap{white-space:nowrap}
 .memo-tog{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 10px;border:1px solid var(--line-2);border-radius:999px;background:#fff;font-weight:700;font-size:13px}
 .memo-tog .chev{width:16px;height:16px;transition:transform .15s}.memo-tog[aria-expanded="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}.memo-tog[aria-expanded="true"] .chev{transform:rotate(180deg)}
 .memo-tog .star{font-size:12px}
@@ -1325,7 +1335,40 @@ function noticeView(){
 }
 
 /* ---------- 그리기 ---------- */
-function render(){
+/* 넓은 표 도우미: 앞쪽 칸 고정 · ◀ ▶ 버튼 · 다시 그려도 보던 위치 유지 */
+const HS={pos:{}};
+function hsKey(el){ return el.classList.contains('coll-tbl')?'coll':'cm:'+(S.tab||''); }
+function hsSave(){ document.querySelectorAll('.tbl.cm-tbl').forEach(el=>{ if(el._hs) HS.pos[hsKey(el)]={l:el.scrollLeft,t:el.scrollTop}; }); }
+function hsEnhance(){
+  document.querySelectorAll('.tbl.cm-tbl').forEach(el=>{
+    const tb=el.querySelector('table'); if(!tb) return;
+    // 앞쪽 칸 고정: 넓은 화면은 체크 · 아파트 · 동호수 · 차량번호, 좁은 화면은 체크 · 차량번호만
+    const heads=[...tb.querySelectorAll('thead th')], names=heads.map(h=>h.textContent.trim());
+    const want=window.innerWidth<700?['','차량번호']:['','아파트','동·호수','차량번호'];
+    const idx=want.map(w=>names.indexOf(w)).filter(i=>i>=0);
+    let left=0; const lefts=[];
+    idx.forEach(i=>{ lefts.push([i,left]); left+=heads[i].getBoundingClientRect().width; });
+    if(left>el.clientWidth*0.6) lefts.length=Math.max(1,lefts.length-2);
+    tb.querySelectorAll('tr').forEach(tr=>{ const cells=tr.children; if(cells.length<heads.length) return;
+      lefts.forEach(([i,l],k)=>{ const c=cells[i]; if(!c) return; c.classList.add('stk'); c.style.left=l+'px'; c.classList.toggle('stk-last',k===lefts.length-1); }); });
+    // ◀ ▶ 버튼 (표 바로 위)
+    if(!(el.previousElementSibling&&el.previousElementSibling.classList.contains('hs-bar'))){
+      const bar=document.createElement('div'); bar.className='hs-bar';
+      bar.innerHTML='<span class="sub">표가 넓어요 · ◀ ▶ 버튼이나 Shift+마우스 휠로 좌우 이동</span><button type="button" data-hs="-1" aria-label="왼쪽으로">◀</button><button type="button" data-hs="1" aria-label="오른쪽으로">▶</button>';
+      el.parentNode.insertBefore(bar,el);
+    }
+    const p=HS.pos[hsKey(el)]; if(p){ el.scrollLeft=p.l; el.scrollTop=p.t; }
+    const upd=()=>{ const bar=el.previousElementSibling; if(!bar||!bar.classList.contains('hs-bar')) return; const max=el.scrollWidth-el.clientWidth;
+      bar.style.display=max>4?'':'none'; const [a,b]=bar.querySelectorAll('button'); a.disabled=el.scrollLeft<=2; b.disabled=el.scrollLeft>=max-2; };
+    if(!el._hs){ el._hs=1; el.addEventListener('scroll',()=>{ HS.pos[hsKey(el)]={l:el.scrollLeft,t:el.scrollTop}; upd(); },{passive:true}); }
+    upd();
+  });
+}
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-hs]'); if(!b) return; const el=b.parentNode.nextElementSibling; if(!el) return;
+  el.scrollBy({left:Number(b.dataset.hs)*Math.max(240,el.clientWidth*0.7),behavior:'smooth'}); });
+window.addEventListener('resize',()=>{ clearTimeout(HS.rt); HS.rt=setTimeout(hsEnhance,150); });
+function render(){ hsSave(); renderMain(); requestAnimationFrame(hsEnhance); }
+function renderMain(){
   const R=$('#root');
   if(!db){ R.innerHTML='<div class="empty">인터넷 연결을 확인한 뒤 새로고침해 주세요.</div>'; return; }
   if(!S.ready) return;
