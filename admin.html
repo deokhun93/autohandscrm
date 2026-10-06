@@ -36,6 +36,9 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .tabs .in{max-width:1180px;margin:0 auto;padding:0 12px;display:flex;gap:2px;overflow-x:auto}
 .tabs button{border:0;background:none;padding:14px 14px 12px;font-weight:700;color:var(--sub);border-bottom:2px solid transparent;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
 .tabs button[aria-selected="true"]{color:var(--text);border-color:var(--gold)}
+.tabs button.tab-set{margin-left:auto;color:var(--sub);font-size:15px;padding:12px 12px 10px;position:sticky;right:0;background:var(--card)}
+.tabset{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto}
+.tabset li{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:6px 8px;background:#fff}.tabset li.off{opacity:.55}
 .tabs .cnt{font-size:11px;background:var(--gold);color:var(--ink);border-radius:999px;padding:0 7px;line-height:18px}
 .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 60px;display:flex;flex-direction:column;gap:16px}
 h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-size:16px;font-weight:700;margin:0}
@@ -332,6 +335,26 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredIns
 window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리자 앱을 설치했어요. 홈 화면의 오토핸즈 관리자 아이콘으로 열어 주세요.');render();});
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
 const TABS=[['today','오늘 (공지·할 일)'],['req','고객 요청'],['live','실시간 세차 현황'],['field','현장전달'],['round','회차 현황'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','고객 공지 보내기']];
+/* 메뉴(탭) 순서 · 숨기기 — 사람마다 저장 (30 SQL의 user_ui_prefs, 없으면 이 기기에만) */
+const TAB_KEYS=TABS.map(([k])=>k);
+function tabPrefNorm(v){ v=v&&typeof v==='object'?v:{}; const order=(Array.isArray(v.order)?v.order:[]).filter(k=>TAB_KEYS.includes(k));
+  TAB_KEYS.forEach(k=>{ if(!order.includes(k)) order.push(k); }); const hidden=(Array.isArray(v.hidden)?v.hidden:[]).filter(k=>TAB_KEYS.includes(k));
+  return {order,hidden:hidden.length>=TAB_KEYS.length?[]:hidden}; }
+function tabsView(){ const P=S.tabPref||tabPrefNorm(null); return P.order.filter(k=>!P.hidden.includes(k)).map(k=>TABS.find(t=>t[0]===k)); }
+function setTab(k){ if(!TAB_KEYS.includes(k)) return; S.tab=k;
+  try{ history.replaceState(null,'','#'+k); }catch(_){} try{ localStorage.setItem('ah-admin-tab',k); }catch(_){} }
+async function loadTabPref(){
+  let v=null; S.tabPrefServer=false;
+  try{ v=await q(db.rpc('get_my_ui_pref',{p_key:'admin_tabs'})); S.tabPrefServer=true; }catch(_){ try{ v=JSON.parse(localStorage.getItem('ah-admin-tabs')||'null'); }catch(__){} }
+  S.tabPref=tabPrefNorm(v);
+  const vis=tabsView().map(t=>t[0]); if(!vis.includes(S.tab)&&!S.fromHash) setTab(vis[0]);
+}
+function tabSetHtml(){ const d=S.tabDraft, L=d.order.length;
+  return `<ul class="tabset">${d.order.map((k,i)=>{const lab=(TABS.find(t=>t[0]===k)||[])[1]||k, hid=d.hidden.includes(k);
+    return `<li class="${hid?'off':''}"><label class="flag"><input type="checkbox" data-tset="${k}" ${hid?'':'checked'}><span>${esc(lab)}</span></label><span class="grow"></span>
+      <button type="button" class="btn2 sm" data-act="tabMove" data-k="${k}" data-d="-1" ${i===0?'disabled':''} aria-label="${esc(lab)} 위로">▲</button><button type="button" class="btn2 sm" data-act="tabMove" data-k="${k}" data-d="1" ${i===L-1?'disabled':''} aria-label="${esc(lab)} 아래로">▼</button></li>`;}).join('')}</ul>
+    <div class="row" style="margin-top:8px"><button class="link" data-act="tabReset">처음 순서로 되돌리기</button></div>
+    ${S.tabPrefServer?'':'<p class="note">⚠ 30번 SQL 전이라 이 기기(브라우저)에만 저장돼요.</p>'}`; }
 const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:null,shown:[],
   tdScope:'today',todos:null,tdForm:null,cntTodo:0,
   ntScope:'now',notices:null,ntForm:null,
@@ -1386,7 +1409,7 @@ function renderMain(){
     const views={today:todayView,req:reqView,live:liveView,field:fieldView,round:roundView,cmgr:cmgrView,coll:collView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
     R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div>
       ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<button class="tl" data-act="push-on" aria-label="휴대폰 알림" style="${pushState==='on'?'color:var(--gold-2)':''}">${ic('bell',14)}<span${pushState==='on'?' class="lbl"':''}>${pushState==='on'?'알림 켜짐':'알림 켜기'}</span></button><a href="/" aria-label="영업 CRM">${ic('arrow',14)}<span class="lbl">영업 CRM</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
-    <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${TABS.map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}${k==='today'&&S.cntTodo?`<span class="cnt">${S.cntTodo}</span>`:''}</button>`).join('')}</div></nav>
+    <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${tabsView().map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}${k==='today'&&S.cntTodo?`<span class="cnt">${S.cntTodo}</span>`:''}</button>`).join('')}<button type="button" class="tab-set" data-act="tabSet" title="메뉴 순서 · 숨기기 (나만 적용)" aria-label="메뉴 순서 바꾸기">⚙</button></div></nav>
     <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${views[S.tab]()}</main>`;
   }
   if(window.AppNav&&!AppNav.getToken) AppNav.getToken=async()=>{ const {data}=await db.auth.getSession(); return data&&data.session?data.session.access_token:null; };
@@ -1416,7 +1439,19 @@ document.addEventListener('click',async e=>{
     case 'install': if(deferredInstall){ deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall=null; render(); } break;
     case 'logout': await db.auth.signOut(); break;
     case 'reload': try{await loadBase();}catch(_){} await refreshCounts(); await loadTab(); toast('새로 불러왔어요.'); break;
-    case 'tab': S.tab=t.dataset.t; S.err=''; render(); await loadTab(); break;
+    case 'tab': setTab(t.dataset.t); S.err=''; render(); await loadTab(); break;
+    case 'tabSet': S.tabDraft=JSON.parse(JSON.stringify(S.tabPref||tabPrefNorm(null)));
+      ask('메뉴 순서 · 숨기기','▲▼로 순서를 바꾸고, 안 쓰는 메뉴는 체크를 풀어 숨겨요. 나에게만 적용돼요(사람마다 따로 저장).','저장',async()=>{
+        const v=tabPrefNorm(S.tabDraft);
+        try{ if(S.tabPrefServer) await q(db.rpc('set_my_ui_pref',{p_key:'admin_tabs',p_value:v})); else localStorage.setItem('ah-admin-tabs',JSON.stringify(v));
+          S.tabPref=v; const vis=tabsView().map(x=>x[0]); toast('메뉴 순서를 저장했어요.');
+          if(!vis.includes(S.tab)){ setTab(vis[0]); S.dialog=null; S.busy=false; render(); await loadTab(); return; } }
+        catch(err){ toast(friendly(err),true); }
+        S.dialog=null; S.busy=false; S.tabDraft=null; render(); },tabSetHtml());
+      S.dialog.rebuild=tabSetHtml; break;
+    case 'tabMove': { const d=S.tabDraft; if(!d) break; const i=d.order.indexOf(t.dataset.k), j=i+Number(t.dataset.d); if(i<0||j<0||j>=d.order.length) break;
+      [d.order[i],d.order[j]]=[d.order[j],d.order[i]]; S.dialog.extra=tabSetHtml(); render(); break; }
+    case 'tabReset': S.tabDraft=tabPrefNorm(null); S.dialog.extra=tabSetHtml(); render(); break;
     case 'eye': {const k=t.dataset.k;S.shown=S.shown.includes(k)?S.shown.filter(x=>x!==k):[...S.shown,k];render();break;}
     case 'close': if(!S.busy){S.dialog=null;render();} break;
     case 'confirm': if(S.dialog&&!S.busy){ S.busy=true; render(); await S.dialog.run(); } break;
@@ -1759,6 +1794,9 @@ document.addEventListener('click',async e=>{
 document.addEventListener('toggle',e=>{ if(e.target&&e.target.id==='mgrBox') S.mgrOpen=e.target.open; },true);
 document.addEventListener('change',async e=>{
   const t=e.target;
+  if(t.dataset&&t.dataset.tset!==undefined&&S.tabDraft){ const k=t.dataset.tset, h=S.tabDraft.hidden;
+    if(t.checked) S.tabDraft.hidden=h.filter(x=>x!==k); else { if(S.tabDraft.order.length-h.length<=1){ t.checked=true; toast('메뉴는 1개 이상 보여야 해요.',true); return; } S.tabDraft.hidden=[...h,k]; }
+    S.dialog.extra=tabSetHtml(); render(); return; }
   if(t.id==='mineOnly'){ S.mineOnly=t.checked; S.collApt=''; S.collSel=[]; render(); return; }
   if(t.dataset.cx!==undefined){ const a=t.dataset.cx; S.cxDraft=S.cxDraft||[]; S.cxDraft=t.checked?[...new Set([...S.cxDraft,a])]:S.cxDraft.filter(x=>x!==a); S.setOpen=true; render(); return; }
   if(t.dataset.rflag){
@@ -1865,7 +1903,7 @@ document.addEventListener('submit',async e=>{
   S.busy=false; if(error){ S.err=friendly(error); render(); $('#em').value=em; }
 });
 async function start(){
-  try{ const ok=await loadBase(); if(ok){ if(window.StaffNotice) StaffNotice.reload(); await refreshCounts(); await loadTab(); return; } }catch(e){ S.err=friendly(e); }
+  try{ const ok=await loadBase(); if(ok){ await loadTabPref(); setTab(S.tab); if(window.StaffNotice) StaffNotice.reload(); await refreshCounts(); await loadTab(); return; } }catch(e){ S.err=friendly(e); }
   render();
 }
 (async function boot(){
@@ -1877,7 +1915,10 @@ async function start(){
   try{ sessionStorage.setItem(STAFF_ALIVE_KEY,'1'); }catch(_){}
   staffStartBeat();
   S.session=data.session; S.ready=true;
-  { const h=(location.hash||'').slice(1); if(TABS.some(([k])=>k===h)) S.tab=h; }
+  { const h=(location.hash||'').slice(1); let saved=''; try{ saved=localStorage.getItem('ah-admin-tab')||''; }catch(_){}
+    if(TAB_KEYS.includes(h)){ S.tab=h; S.fromHash=true; } else if(TAB_KEYS.includes(saved)) S.tab=saved; }
+  // 주소 끝(#cmgr 등)만 바꿔도 그 메뉴로 이동
+  window.addEventListener('hashchange',async()=>{ const h=(location.hash||'').slice(1); if(TAB_KEYS.includes(h)&&h!==S.tab&&S.me){ setTab(h); render(); await loadTab(); } });
   if(S.session) await start(); else render();
   // 실시간 세차 현황 · 현장전달: 30초마다 자동 새로고침 (입력 중이거나 창이 숨겨져 있으면 건너뜀)
   let tick=0;
