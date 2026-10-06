@@ -811,6 +811,48 @@ function cmState(c){
     if(d>=0&&d<30) return {k:'new',label:`신규 · 계약 ${d+1}일째`,cls:''}; }
   return {k:'on',label:'세차중',cls:''};
 }
+/* ---------- 고객관리: 기존 고객 엑셀 넣기 · 직접 추가 · 정보 수정 (33 SQL) ---------- */
+const CUF=[['complex','아파트','예: 범어파크뷰'],['unit','동·호수','예: 103동 1201호'],['car_number','차량번호 *','예: 12가3456'],['name','고객 이름',''],['phone','연락처','010-0000-0000'],['car_model','차종','예: 아반떼'],['car_color','색상','예: 흰색']];
+const CUH=['아파트','동호수','차량번호','고객','연락처','차종','색상','차급','정기권','지정요일','담당직원','계약일','상태','재개일','월요금','메모'];
+const cuMap=()=>({...HMAP,고객입금자명:'name',차급:'car_class',차량등급:'car_class',재개일:'pause_until',재개일자:'pause_until'});
+function custFormHtml(){ const f=S.cuform||{}, fs=fieldStaff(), isNew=!f.id;
+  const inp=([k,l,ph])=>`<label class="field"><span>${l}</span><input class="inp" data-cu="${k}" value="${esc(f[k]??'')}" placeholder="${esc(ph)}" ${k==='phone'?'inputmode="tel"':''}></label>`;
+  return `<div class="cform">${CUF.map(inp).join('')}
+    <label class="field"><span>차급 (실내세차 요금)</span><select class="inp" data-cu="car_class"><option value="">자동 (차종으로)</option>${CLASSES.map(k=>`<option value="${k}" ${f.car_class===k?'selected':''}>${k}${k==='SUV'?'':' (세단)'}</option>`).join('')}</select></label>
+    <label class="field"><span>정기권</span><select class="inp" data-cu="wash_plan"><option value="">없음</option><option value="2" ${String(f.wash_plan)==='2'?'selected':''}>월 2회</option><option value="4" ${String(f.wash_plan)==='4'?'selected':''}>월 4회</option></select></label>
+    <label class="field"><span>지정 요일</span><select class="inp" data-cu="wash_weekday"><option value="">미정</option>${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${String(f.wash_weekday)===String(d)?'selected':''}>${WDF[d]}</option>`).join('')}</select></label>
+    <label class="field"><span>담당 현장직원</span><select class="inp" data-cu="field_staff_id"><option value="">미배정</option>${fs.map(x=>`<option value="${x.id}" ${f.field_staff_id===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>
+    <label class="field"><span>계약일</span><input class="inp" type="date" data-cu="contract_date" value="${esc(f.contract_date||'')}"></label>
+    ${isNew?`<label class="field"><span>세차 상태</span><select class="inp" data-cu="wash_status">${['세차중','일시정지','해지','이관중'].map(x=>`<option ${f.wash_status===x?'selected':''}>${x}</option>`).join('')}</select></label>
+    ${f.wash_status==='일시정지'?`<label class="field"><span>다시 시작할 날</span><input class="inp" type="date" data-cu="pause_until" value="${esc(f.pause_until||'')}"></label>`:''}
+    <label class="field"><span>월 요금 (원 · 수금관리에 들어가요)</span><input class="inp" data-cu="fee" inputmode="numeric" value="${esc(f.fee||'')}" placeholder="예: 55000"></label>`:''}
+    <label class="field" style="grid-column:1/-1"><span>${isNew?'메모 (선택)':'메모 추가 (선택 · 고객 메모에 새로 남아요)'}</span><input class="inp" data-cu="memo" maxlength="2000" value="${esc(f.memo||'')}" placeholder="예: 앞범퍼 기존 스크래치"></label></div>
+    ${isNew?'<p class="note">같은 차량번호가 이미 있으면 새로 만들지 않고 그 고객 정보를 고쳐요. 계약완료 고객으로 들어가 세차 일정 · 수금관리(이번 달부터 청구)에 연결돼요.</p>':'<p class="note">세차 상태(일시정지 · 해지 등)는 목록에서 체크한 뒤 위쪽 버튼으로 바꿔 주세요.</p>'}`; }
+async function reloadCustomers(){ const cust=await q(db.from('customers').select('id,name,phone,complex,unit,car_number,car_model,car_color,wash_plan,wash_weekday,field_staff_id,product,contract_date').eq('status','계약완료').is('deleted_at',null).order('complex').order('unit')); S.customers=cust||[]; await loadCls(); }
+function custParse(rows){ const CUMAP=cuMap(); return rows.map((row,i)=>{ const o={_row:i+2};
+  for(const [h,v] of Object.entries(row)){ const k=CUMAP[String(h).replace(/[\s()·.\-_/]/g,'')]; if(!k||k==='payer_name'||k==='due_day'||k==='overdue_months') continue;
+    let val=v instanceof Date?v:String(v??'').trim(); if(val==='') continue;
+    if(k==='name_payer'){ o.name=String(val).replace(/\s*\(.*\)\s*$/,''); continue; }
+    if(k==='contract_date'||k==='pause_until'){ const d=toISO(val); if(d) o[k]=d; continue; }
+    o[k]=val instanceof Date?toISO(val):String(val); }
+  return o; }).filter(o=>Object.keys(o).length>1); }
+async function custImportFile(file){
+  try{ const X=await loadXLSX(); const wb=X.read(await file.arrayBuffer(),{cellDates:true});
+    const data=custParse(X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:true}));
+    if(!data.length){ toast('엑셀에서 읽을 줄을 찾지 못했어요. 첫 줄에 아파트 · 차량번호 · 고객 같은 제목이 있는지 확인해 주세요.',true); return; }
+    ask(`${data.length}대를 고객관리에 넣을까요?`,`'${file.name}' 첫 번째 시트를 읽었어요.\n같은 차량번호가 이미 있으면 그 고객 정보를 엑셀 내용으로 고치고, 없으면 계약완료 고객으로 새로 추가해요.\n수금관리에도 함께 연결되고, 청구는 이번 달부터 생겨요. '월요금'을 적으면 수금 명단 요금도 들어가요.`,'넣기',
+      ()=>act(async()=>{ let ins=0,upd=0,skip=0,msgs=[]; for(let i=0;i<data.length;i+=200){ const r=await q(db.rpc('import_customers_admin',{p_rows:data.slice(i,i+200)})); ins+=r.inserted||0; upd+=r.updated||0; skip+=r.skipped||0; msgs=msgs.concat(r.messages||[]); }
+        S.custImportMsg={head:`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}${msgs.length?` · 확인할 것 ${msgs.length}건`:''}`,list:msgs};
+        await reloadCustomers(); toast(`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}`); },null));
+  }catch(e){ toast(friendly(e),true); } }
+async function custExport(tpl){
+  try{ const X=await loadXLSX();
+    const rows=tpl?[{아파트:'범어파크뷰',동호수:'103동 1201호',차량번호:'12가3456',고객:'홍길동',연락처:'010-1234-5678',차종:'아반떼',색상:'흰색',차급:'중형',정기권:'월 4회',지정요일:'화요일',담당직원:'김현장',계약일:'2025-03-01',상태:'세차중',재개일:'',월요금:55000,메모:'앞범퍼 기존 스크래치'}]
+      :S.customers.map(c=>{const st=S.cstat[c.id]||{};return {아파트:c.complex||'',동호수:c.unit||'',차량번호:c.car_number||'',고객:c.name||'',연락처:c.phone||'',차종:c.car_model||'',색상:c.car_color||'',차급:(S.cls&&S.cls[c.id]&&S.cls[c.id].car_class)||'',정기권:c.wash_plan?`월 ${c.wash_plan}회`:'',지정요일:c.wash_weekday!=null?WDF[c.wash_weekday]:'',담당직원:c.field_staff_id?staffName(c.field_staff_id):'',계약일:c.contract_date||'',상태:st.wash_status||'세차중',재개일:st.pause_until||'',월요금:'',메모:''};});
+    const ws=X.utils.json_to_sheet(rows,{header:CUH}); ws['!cols']=CUH.map(h=>({wch:h==='메모'?36:Math.max(9,h.length*2+3)}));
+    const wb=X.utils.book_new(); X.utils.book_append_sheet(wb,ws,tpl?'고객 양식':'고객관리');
+    const d=new Date(); X.writeFile(wb,tpl?'오토핸즈_고객관리_양식.xlsx':`오토핸즈_고객관리_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.xlsx`);
+    toast(tpl?'엑셀 양식을 받았어요. 양식에 맞춰 적은 뒤 [📥 엑셀 넣기]로 올려 주세요.':`${rows.length}대를 엑셀로 받았어요.`); }catch(e){ toast(friendly(e),true); } }
 function cmgrView(){
   const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
   const qq=S.cmQ.replace(/\s/g,'').toLowerCase();
@@ -820,6 +862,13 @@ function cmgrView(){
   const ids=list.map(c=>c.id), allSel=ids.length&&ids.every(x=>S.cmSel.includes(x)), n=S.cmSel.length;
   const COLS=14;
   return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.<br>신규 = 계약일로부터 30일 이내 (자동) · 이관중 = 관리자가 직접 표시 (세차 일정은 그대로)</p></div></div>
+  <div class="coll-tools">
+    <label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="custFile" accept=".xlsx,.xls,.csv" hidden></label>
+    <button class="btn2 sm" data-act="custTpl">엑셀 양식 받기</button>
+    <button class="btn2 sm" data-act="custExport">📤 엑셀로 받기</button>
+    <button class="btn sm" data-act="custNew">+ 직접 추가</button>
+  </div>
+  ${S.custImportMsg?`<div class="note" style="background:#FFF8E6;border:1px solid #E9D9A8;border-radius:10px;padding:8px 12px"><b>엑셀 넣기 결과</b> · ${esc(S.custImportMsg.head)}<button class="link" data-act="custMsgClose" style="float:right">닫기</button>${S.custImportMsg.list.length?`<ul style="margin:6px 0 0;padding-left:18px">${S.custImportMsg.list.slice(0,30).map(m=>`<li>${m.row?esc(m.row)+'번째 줄 ':''}${esc(m.car||'')} — ${esc(m.msg)}</li>`).join('')}${S.custImportMsg.list.length>30?`<li>외 ${S.custImportMsg.list.length-30}건</li>`:''}</ul>`:''}</div>`:''}
   <form id="cmsearch" class="req-tools" role="search">
     <select class="inp" id="cmApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.cmApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <input class="inp grow" id="cmQ" type="search" value="${esc(S.cmQin)}" placeholder="차량번호 · 이름 · 동호수 · 연락처 검색" aria-label="검색">
@@ -835,7 +884,7 @@ function cmgrView(){
   ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="cmSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>상태</th><th>고객</th><th>연락처</th><th>차종</th><th>색상</th><th>정기권</th><th>지정 요일</th><th>담당 직원</th><th>계약일</th><th>고객 메모</th></tr></thead><tbody>
     ${list.map(c=>{const nn=S.noteCnt[c.id]||{total:0,starred:0}, open=S.cmOpen.includes(c.id), st=cmState(c), sel=S.cmSel.includes(c.id);
       return `<tr class="cm-row ${st.cls}${open?' open':''}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-cmsel="${c.id}" ${sel?'checked':''} aria-label="${esc(c.car_number||'')} 선택"></td><td>${esc(c.complex||'-')}</td><td>${esc(c.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(c.car_number||'-')}</b></td>
-      <td><span class="pill st-${st.k}">${esc(st.label)}</span></td><td><b>${esc(c.name||'')}</b></td>
+      <td><span class="pill st-${st.k}">${esc(st.label)}</span></td><td><button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button></td>
       <td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td><td>${esc(c.car_model||'-')}${clsTag(c.id)}</td><td>${esc(c.car_color||'-')}</td><td class="nowrap">${c.wash_plan?'월 '+c.wash_plan+'회':'-'}</td><td class="nowrap">${c.wash_weekday!=null?WDF[c.wash_weekday]:'-'}</td><td class="nowrap">${esc(c.field_staff_id?staffName(c.field_staff_id):'미배정')}</td><td class="nowrap">${c.contract_date?esc(String(c.contract_date).slice(2).replace(/-/g,'.')):'-'}</td>
       <td><button class="memo-tog" data-act="cmToggle" data-id="${c.id}" aria-expanded="${open}">${nn.starred?`<span class="star">⭐${nn.starred}</span>`:''}<span>메모 ${nn.total}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td></tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box">${notesPanel(c)}</div></td></tr>`:''}`;}).join('')}
@@ -844,7 +893,7 @@ function cmgrView(){
 function notesPanel(c){
   const list=S.notes[c.id];
   const star=!!S.noteStar[c.id];
-  return `<div class="row"><b>${esc(c.car_number||'')} · ${esc([c.complex,c.unit].filter(Boolean).join(' '))}</b><span class="sub grow">메모·처리이력 · 메모를 누르면 크게 보고 수정할 수 있어요</span><button class="btn2 sm" data-act="custApp" data-id="${c.id}" title="이 고객이 앱에서 보는 화면을 읽기 전용으로 열어요">📱 고객앱 화면 보기</button></div>
+  return `<div class="row"><b>${esc(c.car_number||'')} · ${esc([c.complex,c.unit].filter(Boolean).join(' '))}</b><span class="sub grow">메모·처리이력 · 메모를 누르면 크게 보고 수정할 수 있어요</span><button class="btn2 sm" data-act="custEdit" data-id="${c.id}">✏️ 정보 수정</button><button class="btn2 sm" data-act="custApp" data-id="${c.id}" title="이 고객이 앱에서 보는 화면을 읽기 전용으로 열어요">📱 고객앱 화면 보기</button></div>
   <div class="note-new">
     <textarea class="inp" id="note-${c.id}" maxlength="2000" placeholder="조치 내용, 특이사항 등을 적어 주세요. 예) 앞범퍼 기존 스크래치 있음">${esc(S.noteDraft[c.id]||'')}</textarea>
     <div class="row"><label class="flag f-star"><input type="checkbox" data-nstar="${c.id}" ${star?'checked':''}><span>⭐ 중요</span></label><button class="btn2 sm" type="button" data-act="noteEmoji" data-id="${c.id}" title="글 속에 ⭐ 넣기">⭐ 넣기</button><span class="grow"></span><button class="btn" data-act="noteAdd" data-id="${c.id}">메모 저장</button></div>
@@ -1439,6 +1488,21 @@ document.addEventListener('click',async e=>{
     case 'nmDel': { const m=S.noteModal; if(!m) break;
       const K=NK[m.kind||'cust'];
       ask('이 메모를 삭제할까요?','삭제한 메모는 되돌릴 수 없어요.','확인',async()=>{ try{ await q(db.rpc(K.del,{p_id:m.id})); await K.load(m.cid); K.after(m.cid); S.noteModal=null; toast('메모를 삭제했어요.'); }catch(err){ toast(friendly(err),true); } S.dialog=null; S.busy=false; render(); }); break; }
+    case 'custTpl': await custExport(true); break;
+    case 'custExport': await custExport(false); break;
+    case 'custMsgClose': S.custImportMsg=null; render(); break;
+    case 'custNew': case 'custEdit': {
+      const c=a==='custEdit'?S.customers.find(x=>x.id===id):null; if(a==='custEdit'&&!c) break;
+      S.cuform=c?{id:c.id,complex:c.complex||'',unit:c.unit||'',car_number:c.car_number||'',name:c.name||'',phone:c.phone||'',car_model:c.car_model||'',car_color:c.car_color||'',
+        car_class:(S.cls&&S.cls[c.id]&&S.cls[c.id].class_source==='직접')?S.cls[c.id].car_class:'',wash_plan:c.wash_plan??'',wash_weekday:c.wash_weekday??'',field_staff_id:c.field_staff_id||'',contract_date:c.contract_date||'',memo:''}
+        :{wash_status:'세차중',complex:S.cmApt||''};
+      ask(c?`고객 정보 수정 · ${c.car_number||c.name||''}`:'고객 직접 추가',c?'고친 내용은 수금관리 명단(연결된 고객)에도 함께 반영돼요.':'기존에 관리하던 고객을 한 명씩 넣을 때 써요. 여러 명은 [📥 엑셀 넣기]가 편해요.',c?'저장':'추가',
+        ()=>act(async()=>{ const f={...S.cuform}; if(!String(f.car_number||'').trim()){ toast('차량번호를 적어 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
+          if(f.wash_status==='일시정지'&&!f.pause_until){ toast('다시 시작할 날을 골라 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
+          const pid=f.id||null; delete f.id; if(!f.field_staff_id) f.field_staff_id=''; if(pid){ delete f.wash_status; delete f.fee; delete f.pause_until; }
+          const r=await q(db.rpc('save_customer_admin',{p_id:pid,p_data:f}));
+          await reloadCustomers(); toast(`${pid?'저장했어요':r&&r.new?'추가했어요':'같은 차량번호 고객이 있어 그 정보를 고쳤어요'}${r&&r.warn?' · '+r.warn:''}`); S.cuform=null; },null),custFormHtml());
+      S.dialog.rebuild=custFormHtml; break; }
     case 'cmToggle': {
       if(S.cmOpen.includes(id)){ S.cmOpen=S.cmOpen.filter(x=>x!==id); render(); break; }
       S.cmOpen=[...S.cmOpen,id]; render();
@@ -1648,6 +1712,8 @@ document.addEventListener('change',async e=>{
   if(t.id==='intStaff'){ S.intStaff=t.value; return; }
   if(t.id==='capVal'){ S.capVal=t.value; return; }
   if(t.id==='collApt'){ S.collApt=t.value; render(); return; }
+  if(t.id==='custFile'&&t.files&&t.files[0]){ const f=t.files[0]; t.value=''; await custImportFile(f); return; }
+  if(t.dataset&&t.dataset.cu&&S.cuform){ S.cuform[t.dataset.cu]=t.value; if(t.dataset.cu==='wash_status'&&S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } return; }
   if(t.id==='collFile'&&t.files&&t.files[0]){ const f=t.files[0]; t.value=''; await collImportFile(f); return; }
   if(t.id==='reqType'){ S.reqType=t.value; render(); return; }
   if(t.dataset.tddone){ const id=Number(t.dataset.tddone), on=t.checked; t.disabled=true; try{ await q(db.rpc('set_admin_todo_done',{p_ids:[id],p_done:on})); toast(on?'완료했어요.':'완료를 취소했어요.'); }catch(err){ toast(friendly(err),true); } await refreshCounts(); await loadTab(); return; }
@@ -1679,6 +1745,7 @@ document.addEventListener('input',e=>{
   if(e.target.id==='resQ'){ S.resQ=e.target.value; if(S.dialog){ S.dialog.extra=resAddHtml(); render(); const el=$('#resQ'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } } }
   if(e.target.id==='collQ'){ S.collQin=e.target.value; }
   if(e.target.dataset&&e.target.dataset.cf&&S.cform){ S.cform[e.target.dataset.cf]=e.target.value; }
+  if(e.target.dataset&&e.target.dataset.cu&&S.cuform){ S.cuform[e.target.dataset.cu]=e.target.value; }
   if(e.target.id==='payDate'){ S.payDate=e.target.value; }
   if(e.target.id==='payAmt'){ S.payAmt=e.target.value; S.payAmtTouched=true; const picks=payPicked(S.payMid), need=picks.reduce((a,b)=>a+b.remaining,0), h=$('#payHint'); if(h) h.innerHTML=payHint(need,Number(String(S.payAmt).replace(/[^0-9]/g,''))||0); if(S.dialog) S.dialog.extra=payExtra(S.payMid); return; }
   if(e.target.id==='payNote'){ S.payNote=e.target.value; if(S.dialog) S.dialog.extra=payExtra(S.payMid); return; }
