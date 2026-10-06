@@ -39,6 +39,11 @@
   }
   function when(ts) { var d = new Date(ts); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
   var TG = { all: '전 직원', field: '현장직원', sales: '영업' };
+  // 직원웹에서 English를 고른 휴대폰이면 영어로 보여줘요 (공지 내용은 파파고 번역 링크)
+  function EN() { try { return location.pathname.indexOf('/field') === 0 && localStorage.getItem('ah-field-lang') === 'en'; } catch (_) { return false; } }
+  function T(ko, en) { return EN() ? en : ko; }
+  var TGE = { all: 'All staff', field: 'Field staff', sales: 'Sales' };
+  function papago(text) { return 'https://papago.naver.com/?sk=ko&tk=en&st=' + encodeURIComponent(String(text || '').slice(0, 1500)); }
 
   function build() {
     if (bar) return;
@@ -71,17 +76,18 @@
     if (!list.length) { bar.className = 'snbar'; bar.innerHTML = ''; layer.innerHTML = ''; return; }
     var top = unread[0] || list[0];
     bar.className = 'snbar on' + (unread.length ? ' unread' : '');
-    bar.innerHTML = '<button type="button" aria-haspopup="dialog"><span>📢</span><span class="c">' + (unread.length ? '새 공지 ' + unread.length : '공지 ' + list.length) + '</span>' +
-      '<span class="t">' + (top.important ? '[중요] ' : '') + esc(top.title || top.body) + '</span><span class="m">' + (unread.length ? '확인하기' : '다시 보기') + '</span></button>';
+    bar.innerHTML = '<button type="button" aria-haspopup="dialog"><span>📢</span><span class="c">' + (unread.length ? T('새 공지 ', 'New notice ') + unread.length : T('공지 ', 'Notice ') + list.length) + '</span>' +
+      '<span class="t">' + (top.important ? T('[중요] ', '[Important] ') : '') + esc(top.title || top.body) + '</span><span class="m">' + (unread.length ? T('확인하기', 'Read') : T('다시 보기', 'View')) + '</span></button>';
     if (!open) { layer.innerHTML = ''; return; }
-    layer.innerHTML = '<div class="snlayer"><div class="snbox" role="dialog" aria-modal="true" aria-labelledby="sn-h"><h2 id="sn-h">📢 오늘의 공지</h2><p class="sub">총무 · 관리자가 올린 공지예요.</p>' +
+    layer.innerHTML = '<div class="snlayer"><div class="snbox" role="dialog" aria-modal="true" aria-labelledby="sn-h"><h2 id="sn-h">📢 ' + T('오늘의 공지', "Today's notice") + '</h2><p class="sub">' + T('총무 · 관리자가 올린 공지예요.', 'From the office. Written in Korean — tap Translate.') + '</p>' +
       list.map(function (n) {
         return '<div class="snitem' + (n.important ? ' imp' : '') + (n.is_read ? '' : ' new') + '">' +
-          (n.important ? '<span class="sntag r">중요</span>' : '') + (n.is_read ? '' : '<span class="sntag n">NEW</span>') + '<span class="sntag d">' + (TG[n.target] || '전 직원') + '</span>' +
-          '<b>' + esc(n.title || '공지') + '</b>' + (n.body ? '<p>' + esc(n.body) + '</p>' : '') +
-          '<small>' + esc(n.author || '관리자') + ' · ' + when(n.created_at) + (n.end_date && n.end_date !== n.start_date ? ' · ' + n.end_date.slice(5).replace('-', '/') + '까지' : '') + '</small></div>';
+          (n.important ? '<span class="sntag r">' + T('중요', 'Important') + '</span>' : '') + (n.is_read ? '' : '<span class="sntag n">NEW</span>') + '<span class="sntag d">' + (EN() ? (TGE[n.target] || 'All staff') : (TG[n.target] || '전 직원')) + '</span>' +
+          '<b>' + esc(n.title || T('공지', 'Notice')) + '</b>' + (n.body ? '<p>' + esc(n.body) + '</p>' : '') +
+          (EN() ? '<a href="' + papago((n.title ? n.title + '\n' : '') + (n.body || '')) + '" target="_blank" rel="noopener" style="display:inline-block;margin:2px 0 6px;font-size:12.5px;font-weight:700;color:#1D3A6E">🌐 Translate to English</a><br>' : '') +
+          '<small>' + esc(n.author || T('관리자', 'Office')) + ' · ' + when(n.created_at) + (n.end_date && n.end_date !== n.start_date ? ' · ' + n.end_date.slice(5).replace('-', '/') + T('까지', ' (until)') : '') + '</small></div>';
       }).join('') +
-      '<div class="snacts"><button type="button" class="no" data-sn="close">닫기</button>' + (unread.length ? '<button type="button" class="ok" data-sn="read">확인했어요</button>' : '') + '</div></div></div>';
+      '<div class="snacts"><button type="button" class="no" data-sn="close">' + T('닫기', 'Close') + '</button>' + (unread.length ? '<button type="button" class="ok" data-sn="read">' + T('확인했어요', 'Got it') + '</button>' : '') + '</div></div></div>';
     var ok = layer.querySelector('[data-sn="read"]') || layer.querySelector('[data-sn="close"]'); if (ok) ok.focus();
   }
 
