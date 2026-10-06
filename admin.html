@@ -364,6 +364,7 @@ async function loadTab(){
       S.coll=await q(db.rpc('list_collections'))||[];
       try{ const [ac,cs]=await Promise.all([q(db.rpc('list_collection_accounts')),q(db.rpc('get_coll_settings'))]); S.accs=ac||[]; if(cs&&cs[0]) S.cset=cs[0]; }catch(_){}
       try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){ S.crole=null; }
+      try{ const au=await q(db.rpc('list_collection_auto_added')); S.autoAdd={}; (au||[]).forEach(x=>{ if(x.auto_added_at) S.autoAdd[x.id]=x.auto_added_at; }); }catch(_){ S.autoAdd={}; }
       try{ const pd=await q(db.rpc('list_collection_pay_defaults')); S.pdef={}; (pd||[]).forEach(d=>S.pdef[d.id]=d); S.pdefOk=true; }catch(_){ S.pdef={}; S.pdefOk=false; }   // 29 SQL 전이면 기본 결제 종류 칸을 숨겨요
       if(S.crole&&!S.crole.is_chongmu) S.mineOnly=false;
       await Promise.all([loadCollMonth(),loadPeriod(),loadPv()]);
@@ -1103,13 +1104,15 @@ function collView(){
   const apts=[...new Set(scoped.map(r=>r.complex).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
   const qq=S.collQ.replace(/\s/g,'').toLowerCase();
   const base=scoped.filter(r=>(!S.collApt||r.complex===S.collApt)&&(!qq||[r.car_number,r.name,r.payer_name,r.unit,r.phone,r.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq)));
-  const cnt={전체:base.length}; COLL_TABS.forEach(k=>cnt[k]=base.filter(r=>r.coll_state===k).length); cnt['안내 누락']=base.filter(noticeMiss).length;
-  const list=S.collTab==='전체'?base:S.collTab==='안내 누락'?base.filter(noticeMiss):base.filter(r=>r.coll_state===S.collTab);
+  const feeMiss=r=>r.fee==null&&r.wash_status!=='해지';
+  const cnt={전체:base.length}; COLL_TABS.forEach(k=>cnt[k]=base.filter(r=>r.coll_state===k).length); cnt['안내 누락']=base.filter(noticeMiss).length; cnt['요금 미입력']=base.filter(feeMiss).length;
+  if(S.collTab==='요금 미입력'&&!cnt['요금 미입력']) S.collTab='전체';
+  const list=S.collTab==='전체'?base:S.collTab==='안내 누락'?base.filter(noticeMiss):S.collTab==='요금 미입력'?base.filter(feeMiss):base.filter(r=>r.coll_state===S.collTab);
   const ids=list.filter(r=>canEditCx(r.complex)).map(r=>r.id), allSel=ids.length&&ids.every(x=>S.collSel.includes(x)), n=S.collSel.length;
   const sumUnpaid=list.reduce((a,r)=>a+(r.unpaid_amount||0),0), sumBill=list.reduce((a,r)=>a+(r.cur_total||0),0),
     sumPaid=list.reduce((a,r)=>a+Math.min(r.cur_paid?(r.cur_total||0):(r.cur_paid_amount||0),r.cur_total||0),0), sumRest=list.reduce((a,r)=>a+(r.cur_remaining||0),0);
   const COLS=18;
-  return `<div class="row"><div class="grow"><h1 class="h">수금관리</h1><p class="sub">매달 1일에 청구가 자동으로 생기고, [입금 확인]에서 받은 금액을 적으면 수금완료예요(덜 받으면 차액은 미수로 남아요). 납부일이 지나면 미납, 2개월 이상 밀리면 장기미납으로 자동으로 옮겨져요. 고객관리와 따로 관리하는 명단이에요.<br>예약 확정된 실내세차(세단 10,000원 · SUV 15,000원)는 그 달 청구에 자동으로 더해져요: 외부세차비용 + 실내세차비용 = 매월 요금.</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">수금관리</h1><p class="sub">영업CRM · 고객관리에서 고객이 '계약완료'가 되면 이 명단에 자동으로 들어와요(월 요금은 담당 총무가 입력). 매달 1일에 청구가 자동으로 생기고, [입금 확인]에서 받은 금액을 적으면 수금완료예요(덜 받으면 차액은 미수로 남아요). 납부일이 지나면 미납, 2개월 이상 밀리면 장기미납으로 자동으로 옮겨져요. 고객관리와 따로 관리하는 명단이에요.<br>예약 확정된 실내세차(세단 10,000원 · SUV 15,000원)는 그 달 청구에 자동으로 더해져요: 외부세차비용 + 실내세차비용 = 매월 요금.</p></div></div>
   ${roleBar()}
   <div class="coll-tools">
     ${edAny?`<label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="collFile" accept=".xlsx,.xls,.csv" hidden></label>
@@ -1120,7 +1123,7 @@ function collView(){
   </div>
   ${collMonthPanel()}
   ${periodPanel()}
-  <div class="mini-tabs" role="tablist">${['전체',...COLL_TABS,'안내 누락'].map(k=>`<button role="tab" class="mtab mt-${k}" aria-selected="${S.collTab===k}" data-act="collTab" data-f="${k}">${k} <b>${cnt[k]}</b></button>`).join('')}</div>
+  <div class="mini-tabs" role="tablist">${['전체',...COLL_TABS,'안내 누락',...(cnt['요금 미입력']?['요금 미입력']:[])].map(k=>`<button role="tab" class="mtab mt-${k}" aria-selected="${S.collTab===k}" data-act="collTab" data-f="${k}">${k} <b>${cnt[k]}</b></button>`).join('')}</div>
   <form id="collsearch" class="req-tools" role="search">
     <select class="inp" id="collApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.collApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <input class="inp grow" id="collQ" type="search" value="${esc(S.collQin)}" placeholder="차량번호 · 고객 · 입금자명 · 동호수 · 연락처 검색" aria-label="검색">
@@ -1134,7 +1137,7 @@ function collView(){
     ${list.map(r=>{const open=S.collOpen.includes(r.id), sel=S.collSel.includes(r.id), ed=canEditCx(r.complex), ow=ownersOf(r.complex);
       return `<tr class="cm-row coll-${{'미수금':'due','수금완료':'ok','미납':'late','장기미납':'long'}[r.coll_state]||'none'}${open?' open':''}${sel?' picked':''}"><td class="ck">${ed?`<input type="checkbox" data-collsel="${r.id}" ${sel?'checked':''} aria-label="${esc(r.car_number||r.name||'')} 선택">`:''}</td>
       <td>${esc(r.complex||'-')}${S.crole&&ow.length?`<span class="lock" title="담당 총무">${ed?'':'🔒 '}${esc(ow.join(', '))}</span>`:''}</td><td>${esc(r.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b></td><td>${esc(r.wash_status||'-')}</td>
-      <td>${ed?`<button class="cust-btn" data-act="collEdit" data-id="${r.id}" title="정보 · 결제 종류 · 계좌 수정">${esc(r.name||'-')}</button>`:`<b>${esc(r.name||'-')}</b>`}${r.payer_name&&r.payer_name!==r.name?`<small class="by"> (${esc(r.payer_name)})</small>`:''}${pdefTag(r.id)?`<br>${pdefTag(r.id)}`:''}</td>
+      <td>${ed?`<button class="cust-btn" data-act="collEdit" data-id="${r.id}" title="정보 · 결제 종류 · 계좌 수정">${esc(r.name||'-')}</button>`:`<b>${esc(r.name||'-')}</b>`}${r.payer_name&&r.payer_name!==r.name?`<small class="by"> (${esc(r.payer_name)})</small>`:''}${(S.autoAdd||{})[r.id]&&(Date.now()-new Date(S.autoAdd[r.id]))/864e5<30?`<br><span class="mtag" title="계약완료되면서 자동으로 등록됐어요 · ${when(S.autoAdd[r.id])}">🆕 자동 등록</span>`:''}${r.fee==null&&r.wash_status!=='해지'?`<br><span class="mtag none" title="[정보 · 요금 수정]에서 월 요금을 넣어 주세요">요금 미입력</span>`:''}${pdefTag(r.id)?`<br>${pdefTag(r.id)}`:''}</td>
       <td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td><td>${esc(r.car_model||'-')}${r.car_class!==undefined?`<span class="cls ${r.car_class==='SUV'?'cls-suv':r.car_class?'':'cls-none'}">${esc(r.car_class||'미분류')}</span>`:''}</td><td>${esc(r.car_color||'-')}</td><td class="nowrap">${esc(r.wash_plan||'-')}</td><td class="nowrap">${esc(r.wash_weekday||'-')}</td><td class="nowrap">${esc(r.staff_name||'-')}</td><td class="nowrap">${ymd(r.contract_date)}</td>
       <td class="nowrap">${collPill(r.coll_state)}${r.cur_paid_amount&&!r.cur_paid?` <span class="pill part" title="이번 달 받은 돈">일부 ${won0(r.cur_paid_amount)}</span>`:''}${r.overdue_months>1?` <small class="by">${r.overdue_months}개월</small>`:''}${ed&&r.coll_state!=='수금완료'&&r.coll_state!=='청구없음'?` <button class="link" data-act="collPay" data-id="${r.id}">입금 확인</button>`:''}</td>
       <td class="nowrap">${r.cur_total===undefined?`${won0(r.fee)} · ${r.due_day}일`:`<div class="fee3"><span>외부세차비용 : ${won0(r.cur_external)}</span><span>실내세차비용 : ${won0(r.cur_interior||0)}${r.cur_interior_count?` (${r.cur_interior_count}회)`:''}</span><b>매월 요금 : ${won0(r.cur_total)}</b><span>납부일 매달 ${r.due_day}일</span></div>`}</td><td class="nowrap">${r.unpaid_amount?`<b style="color:var(--red)">${won0(r.unpaid_amount)}</b>`:'-'}</td>
