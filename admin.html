@@ -1008,6 +1008,11 @@ async function prExport(){ try{ const X=await loadXLSX(), r=S.pr.range||prRange(
   X.writeFile(wb,`오토핸즈_입금내역_${r.from}_${r.to}.xlsx`); toast(`${rows.length}건을 엑셀로 받았어요.`); }catch(e){ toast(friendly(e),true); } }
 
 /* ---------- 수금 설정 · 입금 계좌 ---------- */
+/* 계좌번호: 가운데 6자리 가림 · 👁 누르면 15초 동안 보임 (31 SQL) */
+const acc31=()=>S.accs.length?S.accs[0].account_masked!==undefined:S.acc31!==false;
+function accNoCell(a,ed){ const full=(S.accShow||{})[a.id];
+  return `<div class="row" style="gap:6px;flex-wrap:nowrap"><span class="nowrap" style="font-family:ui-monospace,monospace;font-weight:700">${a.account_masked||full?esc(full||a.account_masked):'<span class="sub">미등록</span>'}</span>${a.account_masked?`<button class="link" data-act="accReveal" data-id="${a.id}" title="${full?'다시 가리기':'계좌번호 보기 (기록이 남아요)'}" aria-label="${full?'계좌번호 가리기':'계좌번호 보기'}" style="font-size:16px;text-decoration:none">${full?'🙈':'👁'}</button>`:''}</div>
+    ${ed?`<input class="inp" data-af="acctno" placeholder="${a.account_masked?'바꿀 때만 새 번호':'계좌번호 입력'}" inputmode="numeric" autocomplete="off" style="max-width:170px;margin-top:4px">`:''}`; }
 function collSettingsPanel(){
   const c=S.cset, R=S.crole, edAny=collCanAny(), dis=edAny?'':'disabled';
   // 담당 아파트 (총무 본인이 체크) · 마스터와 일반 관리자는 총무별 담당 현황만
@@ -1026,7 +1031,7 @@ function collSettingsPanel(){
     const none=all.filter(a=>!ownersOf(a).length);
     cx+=`<h3 class="h3" style="margin-top:12px">총무별 담당 현황</h3>${ch.length?`<div class="tbl"><table><tbody>${byC.map(x=>`<tr><td class="nowrap"><b>${esc(x.name)}</b></td><td>${x.list.length?esc(x.list.join(', ')):'<span class="sub">아직 없음</span>'}</td></tr>`).join('')}<tr><td class="nowrap sub">담당 없음</td><td class="sub">${none.length?esc(none.join(', ')):'-'}</td></tr></tbody></table></div>`:'<p class="sub">아직 총무로 지정된 관리자가 없어요. 영업CRM [직원관리]에서 마스터가 \'관리자(총무)\'로 바꿔 주세요.</p>'}`;
   }
-  const accs=S.accs, own=a=>a.owner_name!==undefined;
+  const accs=S.accs, own=a=>a.owner_name!==undefined, A31=acc31();
   return `<details class="cm-box" ${S.setOpen?'open':''} id="setBox"><summary>⚙ ${R?'내 수금 설정 · 담당 아파트 · 입금 계좌':'수금 설정 · 입금 계좌'}</summary>
     <div style="margin-top:10px">${cx}</div>
     <h3 class="h3" style="margin-top:14px">${R?'내 수금 설정 <span class="sub">(총무마다 따로 저장돼요)</span>':'수금 설정'}</h3>
@@ -1034,10 +1039,10 @@ function collSettingsPanel(){
       <label class="field"><span style="font-weight:700;font-size:13px">2차 안내 누락 기준 (1차 후 며칠)</span><input class="inp" type="number" min="1" max="60" id="setN2" value="${c.notice2_days}" ${dis}></label></div>
     <p class="note">월급 기간 = 지난달 ${Number(c.payday)+1}일 ~ 이번 달 ${c.payday}일. 1차 안내 후 ${c.notice2_days}일이 지나도 미입금이면 '안내 누락'에 2차 대상으로 떠요.</p>
     ${edAny?'<button class="btn2 sm" data-act="setSave">설정 저장</button>':'<p class="note">🔒 보기 전용이에요.</p>'}
-    <h3 class="h3" style="margin-top:14px">입금 계좌 <span class="sub">(은행 + 끝 4자리 + 별칭만 적어요 · 계좌번호 전체는 적지 않아요${R?' · 내가 추가한 계좌는 내 계좌로 저장':''})</span></h3>
-    <div class="tbl"><table><thead><tr><th>은행</th><th>끝 4자리</th><th>별칭</th>${R?'<th>주인</th>':''}<th>사용</th><th>입금 건수</th><th></th></tr></thead><tbody>
-      ${accs.map(a=>{const ed=a.can_edit===undefined?true:a.can_edit, d=ed?'':'disabled';return `<tr data-acc="${a.id}"><td><input class="inp" data-af="bank" value="${esc(a.bank)}" style="max-width:120px" ${d}></td><td><input class="inp" data-af="last4" value="${esc(a.last4)}" maxlength="4" style="max-width:80px" ${d}></td><td><input class="inp" data-af="alias" value="${esc((a.label.split(' · ')[1])||'')}" style="max-width:140px" ${d}></td>${R?`<td class="nowrap">${own(a)?(a.mine?'<b>나</b>':esc(a.owner_name)):'-'}</td>`:''}<td><input type="checkbox" data-af="active" ${a.active?'checked':''} ${d}></td><td class="sub">${a.used}건</td><td>${ed?`<button class="btn2 sm" data-act="accSave" data-id="${a.id}">저장</button>`:'<span class="lock">🔒</span>'}</td></tr>`;}).join('')}
-      ${edAny?`<tr data-acc="new"><td><input class="inp" data-af="bank" placeholder="예: 국민" style="max-width:120px"></td><td><input class="inp" data-af="last4" placeholder="1234" maxlength="4" style="max-width:80px"></td><td><input class="inp" data-af="alias" placeholder="예: 대표 계좌" style="max-width:140px"></td>${R?'<td class="sub">나</td>':''}<td><input type="checkbox" data-af="active" checked></td><td></td><td><button class="btn sm" data-act="accSave" data-id="">+ 추가</button></td></tr>`:''}
+    <h3 class="h3" style="margin-top:14px">입금 계좌 <span class="sub">(${A31?'계좌번호는 가운데 6자리가 *로 가려져 보여요 · 👁를 누르면 15초 동안 보여요':'은행 + 끝 4자리 + 별칭만 적어요'}${R?' · 내가 추가한 계좌는 내 계좌로 저장':''})</span></h3>
+    <div class="tbl"><table><thead><tr><th>은행</th><th>${A31?'계좌번호':'끝 4자리'}</th><th>별칭</th>${R?'<th>주인</th>':''}<th>사용</th><th>입금 건수</th><th></th></tr></thead><tbody>
+      ${accs.map(a=>{const ed=a.can_edit===undefined?true:a.can_edit, d=ed?'':'disabled';return `<tr data-acc="${a.id}"><td><input class="inp" data-af="bank" value="${esc(a.bank)}" style="max-width:120px" ${d}></td><td>${A31?accNoCell(a,ed):`<input class="inp" data-af="last4" value="${esc(a.last4)}" maxlength="4" style="max-width:80px" ${d}>`}</td><td><input class="inp" data-af="alias" value="${esc((a.label.split(' · ')[1])||'')}" style="max-width:140px" placeholder="예: 대표 계좌" ${d}></td>${R?`<td class="nowrap">${own(a)?(a.mine?'<b>나</b>':esc(a.owner_name)):'-'}</td>`:''}<td><input type="checkbox" data-af="active" ${a.active?'checked':''} ${d}></td><td class="sub">${a.used}건</td><td>${ed?`<button class="btn2 sm" data-act="accSave" data-id="${a.id}">저장</button>`:'<span class="lock">🔒</span>'}</td></tr>`;}).join('')}
+      ${edAny?`<tr data-acc="new"><td><input class="inp" data-af="bank" placeholder="예: 국민" style="max-width:120px"></td><td>${A31?'<input class="inp" data-af="acctno" placeholder="예: 508-12-94813" inputmode="numeric" autocomplete="off" style="max-width:170px">':'<input class="inp" data-af="last4" placeholder="1234" maxlength="4" style="max-width:80px">'}</td><td><input class="inp" data-af="alias" placeholder="예: 대표 계좌 (계좌번호 X)" style="max-width:140px"></td>${R?'<td class="sub">나</td>':''}<td><input type="checkbox" data-af="active" checked></td><td></td><td><button class="btn sm" data-act="accSave" data-id="">+ 추가</button></td></tr>`:''}
     </tbody></table></div></details>`;
 }
 /* ---------- 총무 권한: 마스터 전체 수정 · 총무 담당 아파트만 수정 · 일반 관리자 보기만 ---------- */
@@ -1354,7 +1359,16 @@ document.addEventListener('click',async e=>{
     case 'setSave': { const pd=Number(($('#setPayday')||{}).value), n2=Number(($('#setN2')||{}).value); S.setOpen=true;
       await act(()=>q(db.rpc('set_coll_settings',{p_payday:pd,p_notice2_days:n2})),'수금 설정을 저장했어요.'); break; }
     case 'accSave': { const tr=t.closest('tr'), g=f=>tr.querySelector(`[data-af="${f}"]`); S.setOpen=true;
-      await act(()=>q(db.rpc('save_collection_account',{p_id:t.dataset.id?Number(t.dataset.id):null,p_bank:g('bank').value,p_last4:g('last4').value,p_alias:g('alias').value,p_active:g('active').checked})),t.dataset.id?'계좌를 저장했어요.':'계좌를 추가했어요.'); break; }
+      const no=g('acctno')?g('acctno').value.trim():'', args={p_id:t.dataset.id?Number(t.dataset.id):null,p_bank:g('bank').value,p_last4:g('last4')?g('last4').value:'',p_alias:g('alias').value,p_active:g('active').checked};
+      if(no&&!/^[0-9\-\s]+$/.test(no)){ toast('계좌번호에는 숫자와 - 만 적어 주세요.',true); break; }
+      if(S.accShow) delete S.accShow[args.p_id];
+      await act(async()=>{ try{ await q(db.rpc('save_collection_account',acc31()?{...args,p_account_no:no||null}:args)); }
+        catch(e){ if(acc31()&&/save_collection_account|function/i.test(String(e&&e.message))){ S.acc31=false; if(no) throw new Error('계좌번호 저장은 31번 SQL을 먼저 실행해야 해요.'); await q(db.rpc('save_collection_account',args)); } else throw e; } },t.dataset.id?'계좌를 저장했어요.':'계좌를 추가했어요.'); break; }
+    case 'accReveal': { S.accShow=S.accShow||{}; S.setOpen=true;
+      if(S.accShow[id]){ delete S.accShow[id]; render(); break; }
+      try{ S.accShow[id]=await q(db.rpc('reveal_collection_account',{p_id:id}))||''; render();
+        clearTimeout((S.accTimer||{})[id]); S.accTimer=S.accTimer||{}; S.accTimer[id]=setTimeout(()=>{ if(S.accShow) delete S.accShow[id]; render(); },15000); }
+      catch(err){ toast(friendly(err),true); } break; }
     case 'payEdit': { const mid=Number(t.dataset.m), bid=Number(t.dataset.b), b=(S.cbills[mid]||[]).find(x=>x.id===bid), p=b&&(b.payments||[]).find(x=>x.id===id); if(!p) break;
       S.payMethod=p.method||'계좌이체'; S.payAcct=p.account_id?String(p.account_id):S.payAcct; S.payDate=p.paid_at; S.payNote=p.note||'';
       ask(`입금 기록 수정 · ${won0(p.amount)}`,'결제 종류 · 계좌 · 입금일 · 메모를 고쳐요. 금액을 바꾸려면 [이 입금 취소] 후 다시 입금해 주세요.','저장',
