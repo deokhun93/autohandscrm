@@ -214,6 +214,7 @@ td select.need{border-color:#E8A9A9!important;background:#FFF5F4!important}
 .rc-sel{display:inline-block;width:auto;min-width:72px;padding:2px 6px;height:28px;font-size:12.5px;margin-left:4px}.wdp-h.sun{color:var(--red)}.wdp-d.rc.io span{background:#EEF3FB;border-color:#B9C8E4}
 .rd i{position:relative}.rd i .ick{position:absolute;top:-7px;right:-6px;width:14px;height:14px;border-radius:50%;background:#fff;color:#1F7A45;border:1.5px solid #2E7D4F;font-size:10px;line-height:11px;font-weight:900;display:flex;align-items:center;justify-content:center;font-style:normal}
 .rd i.iwait{box-shadow:inset 0 -3px 0 #7FA7D9}.ick-t{color:#1F7A45;font-size:12.5px;margin-left:4px}
+.ip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:8px 0}
 .rd-btn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:8px;padding:7px 6px 2px 2px}.rd-btn:hover .rd i{border-color:#2E7D4F}.rd-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .rd i.pl{background:#DDF1E4;border-color:#2E7D4F;color:#1F5C39}
 .wdp-d.rc span{flex-direction:column;gap:0;height:44px;display:flex;align-items:center;justify-content:center}.wdp-d.rc small{font-size:9.5px;font-weight:700;line-height:1.1}
@@ -459,6 +460,7 @@ async function loadTab(){
     if(S.tab==='jobs') S.jobs=await q(db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)').eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[];
     if(S.tab==='slots'&&S.slotApt){ const {from,to}=monthRange();
       const [sl,rq,cw]=await Promise.all([q(db.rpc('list_interior_slots',{p_complex:S.slotApt,p_from:from,p_to:to})),q(db.rpc('list_interior_requests',{p_complex:S.slotApt})),q(db.rpc('get_interior_closed_weekdays',{p_complex:S.slotApt}))]);
+      try{ const [ci,ip]=await Promise.all([q(db.rpc('list_customer_interior')),q(db.rpc('list_interior_prices'))]); S.cint={}; (ci||[]).forEach(r=>S.cint[r.customer_id]=r); S.cintOk=true; S.iprices=ip||[]; }catch(_){ S.iprices=S.iprices||null; }
       S.slots=sl||[]; S.intReqs=rq||[]; S.closedWd=(cw||[]).map(Number); const live=new Set(S.intReqs.map(r=>r.id)); S.intSel=S.intSel.filter(x=>live.has(x)); }
     S.err='';
   }catch(e){ S.err=friendly(e); }
@@ -802,6 +804,20 @@ function jobsView(){
 }
 
 /* ---------- 탭: 실내세차 일정 ---------- */
+/* 실내세차 일정: 실제 청구 금액 (계약 금액 → 없으면 차급 기본 금액) */
+function intPriceCell(cid){ const ci=(S.cint||{})[cid]||{}, plan=ci.interior_plan||'request';
+  const r=S.cls&&S.cls[cid], base=ci.class_price!=null?ci.class_price:(r?Number(r.price||0):null);
+  if(plan==='service') return `0원 <small class="by">서비스 계약</small>`;
+  if(ipInc(plan)) return `${base!=null?won0(base):'-'} <small class="by" title="${esc(ipLabel(plan))} 계약 · 따로 신청한 실내세차는 차급 기본 금액으로 추가돼요">추가 · 기본 금액</small>`;
+  if(ci.interior_fee!=null) return `${won0(ci.interior_fee)} <small class="by">계약 금액</small>`;
+  return `${base!=null?won0(base):'-'} <small class="by">기본 금액</small>`; }
+const IP_CLASSES=['소형','중형','대형','SUV'];
+function ipriceCard(){ const ps=S.iprices; if(!ps||!ps.length) return '';
+  const can=ps[0].can_edit, d=S.ipDraft||{}, last=ps.filter(x=>x.updated_at).sort((a,b)=>a.updated_at<b.updated_at?1:-1)[0];
+  return `<div class="card"><div class="row"><div class="grow"><h2 class="h">실내세차 기본 금액 <span class="sub">(1회 · 차급별)</span></h2><p class="sub">고객마다 계약 실내 요금이 있으면 그 금액을 먼저 쓰고, 없을 때 이 기본 금액으로 청구 · 고객 앱 안내에 써요. ${can?'마스터와 총무가 바꿀 수 있어요.':'마스터와 총무만 바꿀 수 있어요.'}</p></div></div>
+    <div class="ip-grid">${IP_CLASSES.map(k=>{const r=ps.find(x=>x.car_class===k)||{}; return `<label class="field"><span>${k}${k==='SUV'?'':' (세단)'}</span><div class="row" style="gap:6px;flex-wrap:nowrap"><input class="inp" inputmode="numeric" data-ipc="${k}" value="${esc(d[k]??(r.price??''))}" ${can?'':'disabled'} aria-label="${k} 실내세차 기본 금액"><span>원</span></div></label>`;}).join('')}</div>
+    <div class="row">${last?`<span class="sub">마지막 변경: ${esc(last.updated_name||'')} ${when(last.updated_at)}</span>`:'<span class="sub">처음 값: 세단 10,000원 · SUV 15,000원</span>'}<span class="grow"></span>${can?`${Object.keys(d).length?'<button class="link" data-act="ipCancel">취소</button>':''}<button class="btn sm" data-act="ipSave" ${Object.keys(d).length?'':'disabled'}>${ic('check',14)}기본 금액 저장</button>`:''}</div></div>`; }
+
 function slotsView(){
   const apts=complexes(), {y,m}=monthRange(), first=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate(), t=keyOf(new Date());
   const map=Object.fromEntries(S.slots.map(s=>[s.slot_date,s]));
@@ -831,7 +847,7 @@ function slotsView(){
     ${s?(s.booked?'<p class="note">신청한 고객이 있어서 이 날짜는 닫을 수 없어요.</p>':`<button class="btn2 danger" data-act="close-slot">이 날짜 신청 닫기</button>`):''}
   <button class="btn2" data-act="resAdd">+ 예약 차량 직접 추가</button>`}
   <p class="note">달력에서 다른 날짜를 누르면 그 날짜로 바뀌어요. 지난 날짜도 눌러서 기록을 넣을 수 있어요.</p></div></div></div>
-  ${intReqPanel()}`:''}`;
+  ${intReqPanel()}${ipriceCard()}`:''}`;
 }
 function resAddHtml(){
   const qq=S.resQ.replace(/\s/g,'').toLowerCase(), fs=fieldStaff();
@@ -856,7 +872,7 @@ function intReqPanel(){
       ${list.map(r=>`<tr class="${S.intSel.includes(r.id)?'picked':''}"><td class="ck"><input type="checkbox" data-intsel="${r.id}" ${S.intSel.includes(r.id)?'checked':''} aria-label="${esc(r.car_number||'')} 선택"></td>
         <td class="nowrap"><b>${kdate(r.target_date)}</b></td><td>${r.status==='승인'?'<span class="pill p-ok">예약 확정</span>':r.status==='보류'?'<span class="pill p-hold">보류</span>':'<span class="pill p-new">배정 대기</span>'}</td>
         <td>${esc(r.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b></td><td>${esc(r.name||'')}</td><td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td>
-        <td>${esc([r.car_model,r.car_color].filter(Boolean).join(' · ')||'-')}${clsTag(r.customer_id)}</td><td class="nowrap">${clsPrice(r.customer_id)||'-'}</td><td class="nowrap">${r.status==='승인'?esc(r.assigned_staff_name||'미배정'):`<span class="sub">담당: ${esc(r.default_staff_id?staffName(r.default_staff_id):'미배정')}</span>`}</td><td class="nowrap sub">${when(r.created_at)}</td></tr>`).join('')}
+        <td>${esc([r.car_model,r.car_color].filter(Boolean).join(' · ')||'-')}${clsTag(r.customer_id)}</td><td class="nowrap">${intPriceCell(r.customer_id)}</td><td class="nowrap">${r.status==='승인'?esc(r.assigned_staff_name||'미배정'):`<span class="sub">담당: ${esc(r.default_staff_id?staffName(r.default_staff_id):'미배정')}</span>`}</td><td class="nowrap sub">${when(r.created_at)}</td></tr>`).join('')}
     </tbody></table></div>`:`<div class="empty">${S.intView==='done'?'예약 확정된 신청이 없어요.':S.intView==='day'?'이 날짜 신청이 없어요.':'배정을 기다리는 신청이 없어요.'}</div>`}
     <div class="assign-bar">
       <b>${n?`${n}건 선택`:'신청을 체크해 주세요'}</b>
@@ -1898,6 +1914,11 @@ document.addEventListener('click',async e=>{
       const dTxt=S.intDate?kdate(S.intDate):'고객이 신청한 날짜', sTxt=S.intStaff?staffName(S.intStaff):'각 고객의 담당 현장직원';
       ask(`${ids.length}건을 배정할까요?`,`날짜: ${dTxt}\n현장직원: ${sTxt}\n\n확정되면 직원웹 그 날짜 일정에 실내세차로 들어가요.${nNew?`\n새로 확정되는 ${nNew}명에게 '실내세차 예약이 완료되었어요' 알림이 가요.`:''}`,'확인',
         ()=>act(async()=>{ const n=await q(db.rpc('assign_interior_requests',{p_ids:ids,p_date:S.intDate||null,p_staff:S.intStaff||null})); S.intSel=[]; S.intDate=''; toast(`${n||0}건 배정을 완료했어요.`); },null)); break; }
+    case 'ipCancel': S.ipDraft=null; render(); break;
+    case 'ipSave': { const d=S.ipDraft||{}; if(!Object.keys(d).length) break;
+      const bad=Object.entries(d).find(([k,v])=>!/^\d[\d,]*$/.test(String(v).trim())); if(bad){ toast(`${bad[0]} 금액을 숫자로 적어 주세요.`,true); break; }
+      ask('실내세차 기본 금액을 바꿀까요?',Object.entries(d).map(([k,v])=>`${k}: ${Number(String(v).replace(/\D/g,'')).toLocaleString('ko-KR')}원`).join('\n')+'\n\n계약 실내 요금이 없는 고객의 실내세차와 고객 앱 안내 금액이 바뀌어요. 이미 입금 확인한 달은 그대로예요.','저장',
+        ()=>act(async()=>{ const n=await q(db.rpc('set_interior_prices',{p_prices:d})); S.ipDraft=null; toast(`기본 금액을 저장했어요 (${n||0}개 바뀜).`); },null)); break; }
     case 'capt': S.custApt=t.dataset.a; render(); break;
     case 'save-cust': {
       const tr=t.closest('tr'), get=f=>{const el=tr.querySelector(`[data-f="${f}"]`);return el?el.value:'';};
@@ -1997,6 +2018,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.nsel){ const id=Number(t.dataset.nsel); S.noticeSel=t.checked?[...new Set([...S.noticeSel,id])]:S.noticeSel.filter(x=>x!==id); render(); }
 });
 document.addEventListener('input',e=>{
+  if(e.target.dataset&&e.target.dataset.ipc){ const k=e.target.dataset.ipc; S.ipDraft=S.ipDraft||{}; const r=(S.iprices||[]).find(x=>x.car_class===k)||{}; const v=e.target.value.trim(); if(String(r.price)===v.replace(/\D/g,'')&&v!=='') delete S.ipDraft[k]; else S.ipDraft[k]=v; const b=document.querySelector('[data-act=ipSave]'); if(b) b.disabled=!Object.keys(S.ipDraft).length; return; }
   if(/^nt(Title|Body)$/.test(e.target.id)){ ntRead(); return; }
   if(/^td(Title|Memo)$/.test(e.target.id)){ tdRead(); return; }
   if(e.target.id==='rdQ'){ S.rdQ=e.target.value; const pos=e.target.selectionStart; render(); const el=$('#rdQ'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} } return; }
