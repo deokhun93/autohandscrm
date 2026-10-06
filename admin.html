@@ -230,7 +230,7 @@ tr.round-full td{background:#F4FAF6}.rt-done{color:#1F5136;font-weight:800}.mont
 .pr-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0}.pr-grid .tbl table td,.pr-grid .tbl table th{padding:6px 10px;font-size:12.5px}
 .role-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:9px 12px;font-size:13.5px}.role-bar .rp{font-weight:800;border-radius:999px;padding:2px 10px;font-size:12px}.rp.m{background:#FAEEDA;color:#854F0B}.rp.c{background:#1D3A6E;color:#fff}.rp.v{background:#ECEAE4;color:#4A4A45}
 .lock{display:inline-block;font-size:10.5px;font-weight:800;color:#6B6A63;background:#F1EFE8;border-radius:999px;padding:1px 7px;margin-left:4px;white-space:nowrap}.cx-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.cx-grid label{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:#fff;font-size:13px;cursor:pointer}.cx-grid label.on{border-color:#1D3A6E;background:#EEF3FB}.cx-grid small{color:var(--sub)}
-.mtag{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;background:var(--slate);color:var(--blue);margin-right:4px}.mtag.none{background:#FDECEA;color:var(--red)}
+.mtag{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;background:var(--slate);color:var(--blue);margin-right:4px}.mtag.none{background:#FDECEA;color:var(--red)}.mtag.svc{background:#FFF3D6;color:#8A5A00}.cust-btn{all:unset;cursor:pointer;font-weight:800;text-decoration:underline;text-decoration-color:#C9C3B3;text-underline-offset:3px}.cust-btn:hover{color:var(--blue)}
 .set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:10px}
 @media(max-width:900px){.pr-grid{grid-template-columns:1fr}}
 </style>
@@ -363,7 +363,8 @@ async function loadTab(){
     if(S.tab==='coll'){
       S.coll=await q(db.rpc('list_collections'))||[];
       try{ const [ac,cs]=await Promise.all([q(db.rpc('list_collection_accounts')),q(db.rpc('get_coll_settings'))]); S.accs=ac||[]; if(cs&&cs[0]) S.cset=cs[0]; }catch(_){}
-      try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){ S.crole=null; }   // 28 SQL 전이면 null → 예전처럼 모두 수정
+      try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){ S.crole=null; }
+      try{ const pd=await q(db.rpc('list_collection_pay_defaults')); S.pdef={}; (pd||[]).forEach(d=>S.pdef[d.id]=d); S.pdefOk=true; }catch(_){ S.pdef={}; S.pdefOk=false; }   // 29 SQL 전이면 기본 결제 종류 칸을 숨겨요
       if(S.crole&&!S.crole.is_chongmu) S.mineOnly=false;
       await Promise.all([loadCollMonth(),loadPeriod()]);
       const live=new Set(S.coll.map(r=>r.id)); S.collSel=S.collSel.filter(x=>live.has(x)); S.collOpen=S.collOpen.filter(x=>live.has(x));
@@ -911,19 +912,30 @@ async function cmExport(){
     X.utils.book_append_sheet(wb,X.utils.json_to_sheet(d.chg.map(c=>({아파트:c.complex,동호수:c.unit,차량번호:c.car_number,고객:c.name,상태:c.status,바뀐날:c.changed_at?String(c.changed_at).slice(0,10):'',어디서:c.source}))),'당월 해지·정지');
     X.writeFile(wb,`오토핸즈_월별수금현황_${md.getFullYear()}${pad(md.getMonth()+1)}.xlsx`); toast('엑셀로 받았어요.'); }catch(e){ toast(friendly(e),true); } }
 /* ---------- 결제수단 · 증빙 · 계좌 ---------- */
-const PAY_METHODS=['계좌이체','카드결제','현금'], PAY_PROOFS=['없음','현금영수증','세금계산서','간이영수증'];
-(function(){ try{ const j=JSON.parse(localStorage.getItem('ah-pay-pref')||'{}'); if(j.m) S.payMethod=j.m; if(j.p) S.payProof=j.p; if(j.a) S.payAcct=String(j.a); }catch(_){} })();
-function savePayPref(){ try{ localStorage.setItem('ah-pay-pref',JSON.stringify({m:S.payMethod,p:S.payProof,a:S.payAcct})); }catch(_){} }
+const PAY_METHODS=['계좌이체','카드결제','현금영수증','간이영수증','세금계산서','현금','타계좌입금','서비스','기타'], PAY_PROOFS=['없음','현금영수증','세금계산서','간이영수증'];
+const ACC_KINDS=['계좌이체','현금영수증','세금계산서','간이영수증'], NOTE_KINDS=['타계좌입금','서비스','기타'];
+const ML=m=>m==='현금'?'현금(직수)':m;   // 결제 종류 화면 이름
+(function(){ try{ const j=JSON.parse(localStorage.getItem('ah-pay-pref')||'{}'); if(j.m&&PAY_METHODS.includes(j.m)) S.payMethod=j.m; if(j.a) S.payAcct=String(j.a); }catch(_){} })();
+function savePayPref(){ try{ if(!NOTE_KINDS.includes(S.payMethod)) localStorage.setItem('ah-pay-pref',JSON.stringify({m:S.payMethod,a:S.payAcct})); }catch(_){} }
 const activeAccs=()=>S.accs.filter(a=>a.active);
 const accName=a=>a.label+(a.owner_name!==undefined&&!a.mine?` (${a.owner_name})`:'');
-function payMethodHtml(){
-  const accs=activeAccs(); if(S.payMethod==='계좌이체'&&!accs.some(a=>String(a.id)===String(S.payAcct))) S.payAcct=accs[0]?String(accs[0].id):'';
-  return `<div class="set-grid"><label class="field"><span style="font-weight:700;font-size:13px">결제수단</span><select class="inp" id="payMethod">${PAY_METHODS.map(m=>`<option ${S.payMethod===m?'selected':''}>${m}</option>`).join('')}</select></label>
-    <label class="field"><span style="font-weight:700;font-size:13px">증빙</span><select class="inp" id="payProof">${PAY_PROOFS.map(m=>`<option ${S.payProof===m?'selected':''}>${m}</option>`).join('')}</select></label></div>
-    ${S.payMethod==='계좌이체'?`<label class="field"><span style="font-weight:700;font-size:13px">입금 계좌</span>${accs.length?`<select class="inp" id="payAcct">${accs.map(a=>`<option value="${a.id}" ${String(S.payAcct)===String(a.id)?'selected':''}>${esc(accName(a))}</option>`).join('')}</select>`:'<span class="note">등록된 계좌가 없어요. 아래 [⚙ 내 수금 설정]에서 먼저 추가해 주세요.</span>'}</label>`:''}`;
+// opt.bulk: 여러 명 한꺼번에(메모 없음) → 타계좌입금 · 서비스 · 기타는 각 줄에서
+function payMethodHtml(opt){ opt=opt||{};
+  const kinds=opt.bulk?PAY_METHODS.filter(m=>!NOTE_KINDS.includes(m)):PAY_METHODS;
+  if(!kinds.includes(S.payMethod)) S.payMethod='계좌이체';
+  const accs=activeAccs(), useAcc=ACC_KINDS.includes(S.payMethod);
+  if(S.payMethod==='계좌이체'&&!accs.some(a=>String(a.id)===String(S.payAcct))) S.payAcct=accs[0]?String(accs[0].id):'';
+  return `<label class="field"><span style="font-weight:700;font-size:13px">결제 종류</span><select class="inp" id="payMethod">${kinds.map(m=>`<option value="${m}" ${S.payMethod===m?'selected':''}>${ML(m)}</option>`).join('')}</select></label>
+    ${useAcc?`<label class="field"><span style="font-weight:700;font-size:13px">입금 계좌</span>${accs.length?`<select class="inp" id="payAcct">${S.payMethod==='계좌이체'?'':`<option value="">계좌 지정 안 함</option>`}${accs.map(a=>`<option value="${a.id}" ${String(S.payAcct)===String(a.id)?'selected':''}>${esc(accName(a))}</option>`).join('')}</select>`:'<span class="note">등록된 계좌가 없어요. 아래 [⚙ 내 수금 설정]에서 먼저 추가해 주세요.</span>'}</label>`:''}
+    ${NOTE_KINDS.includes(S.payMethod)?`<p class="note" style="margin:0;color:var(--red)">${ML(S.payMethod)}은(는) 아래 메모에 사유를 꼭 적어 주세요.${S.payMethod==='서비스'?' (예: 지인 소개로 1회 서비스)':S.payMethod==='타계좌입금'?' (예: 대표 개인계좌로 입금)':''}</p>`:''}
+    ${opt.bulk?'<p class="note" style="margin:0">타계좌입금 · 서비스 · 기타는 사유 메모가 필요해서 각 줄의 [입금 확인]에서 처리해 주세요.</p>':''}`;
 }
-const payArgs=()=>({p_method:S.payMethod||null,p_proof:S.payProof||null,p_account_id:S.payMethod==='계좌이체'&&S.payAcct?Number(S.payAcct):null});
-const payTag=p=>`${p.method?`<span class="mtag">${esc(p.method)}${p.account?' · '+esc(p.account):''}</span>`:'<span class="mtag none">결제수단 미입력</span>'}${p.proof&&p.proof!=='없음'?`<span class="mtag">${esc(p.proof)}</span>`:''}`;
+const payArgs=()=>({p_method:S.payMethod||null,p_proof:null,p_account_id:ACC_KINDS.includes(S.payMethod)&&S.payAcct?Number(S.payAcct):null});
+const payTag=p=>`${p.method?`<span class="mtag ${p.method==='서비스'?'svc':''}">${esc(ML(p.method))}${p.account?' · '+esc(p.account):''}</span>`:'<span class="mtag none">결제 종류 미입력</span>'}${p.proof&&p.proof!=='없음'&&p.proof!==p.method?`<span class="mtag">${esc(p.proof)}</span>`:''}`;
+// 고객별 기본 결제 종류 (수금 명단 정보 수정에서 저장)
+const pdefOf=id=>(S.pdef||{})[id];
+const pdefTag=id=>{const d=pdefOf(id); return d&&d.pay_method?`<span class="mtag ${d.pay_method==='서비스'?'svc':''}" title="${esc(d.pay_note||'')}">${esc(ML(d.pay_method))}${d.pay_account?' · '+esc(d.pay_account):''}</span>`:'';};
+function usePdef(mid){ const d=pdefOf(mid); if(!d||!d.pay_method) return; S.payMethod=d.pay_method; S.payAcct=d.pay_account_id?String(d.pay_account_id):''; if(NOTE_KINDS.includes(d.pay_method)&&!S.payNote) S.payNote=d.pay_note||''; }
 
 /* ---------- 입금일 기준 기간 조회 (월급 기간 · 달별 · 직접 지정) ---------- */
 function prRange(){
@@ -943,28 +955,29 @@ function periodPanel(){
   const pr=S.pr, r=pr.range||prRange(), rows=prRows(), tot=rows.reduce((a,p)=>a+p.amount,0), P=Number(S.cset.payday)||20;
   const fmt=k=>{const [y,m,d]=k.split('-').map(Number);return `${y}.${m}.${d}`;};
   const days=[...new Set(rows.map(p=>p.paid_at))];
-  return `<details class="cm-box" ${pr.open===false?'':'open'} id="prBox"><summary>🧾 입금 내역 조회 <span class="sub" style="font-weight:600">· 입금한 날 기준 · 결제수단 · 계좌별${scopeTag()}</span></summary>
+  return `<details class="cm-box" ${pr.open===false?'':'open'} id="prBox"><summary>🧾 입금 내역 조회 <span class="sub" style="font-weight:600">· 입금한 날 기준 · 결제 종류 · 계좌별${scopeTag()}</span></summary>
     <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px"><div class="chips">${[['pay',`월급 기간 (${P+1>28?1:P+1}일~${P}일)`],['month','달별'],['custom','직접 지정']].map(([k,l])=>`<button class="chip" aria-pressed="${pr.mode===k}" data-act="prMode" data-f="${k}">${l}</button>`).join('')}</div>
       ${pr.mode==='custom'?`<input class="inp" type="date" id="prFrom" value="${esc(r.from)}" aria-label="시작일"> ~ <input class="inp" type="date" id="prTo" value="${esc(r.to)}" aria-label="끝날"><button class="btn2 sm" data-act="prGo">조회</button>`
         :`<div class="month-nav"><button class="btn2 sm" data-act="prMove" data-d="-1" aria-label="이전">◀</button><b style="min-width:190px">${fmt(r.from)} ~ ${fmt(r.to)}</b><button class="btn2 sm" data-act="prMove" data-d="1" aria-label="다음">▶</button></div>${pr.off?'<button class="link" data-act="prNow">지금 기간으로</button>':''}`}
       <span class="grow"></span><button class="btn2 sm" data-act="prExport">📤 엑셀</button></div>
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">
-      <select class="inp" id="prMethod" aria-label="결제수단"><option value="">결제수단 전체</option>${[...PAY_METHODS,'미입력'].map(m=>`<option ${pr.method===m?'selected':''}>${m}</option>`).join('')}</select>
-      <select class="inp" id="prProof" aria-label="증빙"><option value="">증빙 전체</option>${PAY_PROOFS.map(m=>`<option ${pr.proof===m?'selected':''}>${m}</option>`).join('')}</select>
+      <select class="inp" id="prMethod" aria-label="결제 종류"><option value="">결제 종류 전체</option>${[...PAY_METHODS,'미입력'].map(m=>`<option value="${m}" ${pr.method===m?'selected':''}>${ML(m)}</option>`).join('')}</select>
       <select class="inp" id="prAcct" aria-label="계좌"><option value="">계좌 전체</option>${S.accs.map(a=>`<option value="${a.id}" ${pr.acct===String(a.id)?'selected':''}>${esc(accName(a))}${a.active?'':' (안 씀)'}</option>`).join('')}</select></div>
     ${pr.err?`<p class="note" style="color:var(--red)">${esc(pr.err)}</p>`:''}
     <div class="cm-sum"><div class="a"><span>기간 입금 합계</span><b>${won0(tot)}</b><small>${rows.length}건</small></div>
-      ${PAY_METHODS.map((m,i)=>{const x=rows.filter(p=>p.method===m);return `<div class="${i===0?'b':''}"><span>${m}</span><b>${won0(x.reduce((a,p)=>a+p.amount,0))}</b><small>${x.length}건</small></div>`;}).join('')}</div>
-    <div class="pr-grid">${grpTable('계좌별',rows.filter(p=>p.method==='계좌이체'),p=>p.account||'계좌 미입력')}${grpTable('증빙별',rows,p=>p.proof||'미입력')}${grpTable('결제수단별',rows,p=>p.method||'미입력')}</div>
+      <div class="b"><span>실제 입금 (서비스 제외)</span><b>${won0(rows.filter(p=>p.method!=='서비스').reduce((a,p)=>a+p.amount,0))}</b><small>${rows.filter(p=>p.method!=='서비스').length}건</small></div>
+      ${(()=>{const x=rows.filter(p=>p.method==='서비스');return `<div><span>서비스</span><b>${won0(x.reduce((a,p)=>a+p.amount,0))}</b><small>${x.length}건</small></div>`;})()}
+      ${(()=>{const x=rows.filter(p=>p.method==='타계좌입금');return `<div><span>타계좌입금</span><b>${won0(x.reduce((a,p)=>a+p.amount,0))}</b><small>${x.length}건</small></div>`;})()}</div>
+    <div class="pr-grid">${grpTable('결제 종류별',rows,p=>p.method?ML(p.method):'미입력')}${grpTable('계좌별',rows.filter(p=>p.account_id||ACC_KINDS.includes(p.method)),p=>p.account||'계좌 미지정')}</div>
     ${!pr.rows?'<p class="sub">불러오는 중...</p>':rows.length?days.map(k=>{const ps=rows.filter(p=>p.paid_at===k);return `<div class="pay-day">${kdate(k)} <span>${ps.length}건 · ${won0(ps.reduce((a,p)=>a+p.amount,0))}</span></div>
       <div class="tbl"><table><tbody>${ps.map(p=>`<tr><td>${esc(p.complex||'-')}</td><td>${esc(p.unit||'-')}</td><td><b class="car">${esc(p.car_number||'-')}</b></td><td>${esc(p.name||'')}${p.payer_name&&p.payer_name!==p.name?` <small class="by">(${esc(p.payer_name)})</small>`:''}</td><td class="nowrap"><b>${won0(p.amount)}</b></td><td>${payTag(p)}</td><td class="sub nowrap">${p.bill_month.slice(0,7).replace('-','년 ')}월분${p.bill_done?'':' · 일부'}</td><td class="sub">${esc(p.note||'')}</td><td class="sub nowrap">${esc(p.by_name||'')}</td></tr>`).join('')}</tbody></table></div>`;}).join(''):'<p class="sub">이 기간에 들어온 입금이 없어요.</p>'}
   </details>`;
 }
 async function prExport(){ try{ const X=await loadXLSX(), r=S.pr.range||prRange(), rows=prRows();
   const wb=X.utils.book_new();
-  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(rows.map(p=>({입금일:p.paid_at,아파트:p.complex,동호수:p.unit,차량번호:p.car_number,고객:p.name,입금자명:p.payer_name,금액:p.amount,결제수단:p.method||'미입력',입금계좌:p.account||'',증빙:p.proof||'미입력',청구달:p.bill_month.slice(0,7),상태:p.bill_done?'완료':'일부 입금',메모:p.note,처리:p.by_name}))),'입금 내역');
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(rows.map(p=>({입금일:p.paid_at,아파트:p.complex,동호수:p.unit,차량번호:p.car_number,고객:p.name,입금자명:p.payer_name,금액:p.amount,결제종류:p.method?ML(p.method):'미입력',입금계좌:p.account||'',증빙:p.proof&&p.proof!=='없음'?p.proof:'',청구달:p.bill_month.slice(0,7),상태:p.bill_done?'완료':'일부 입금',메모:p.note,처리:p.by_name}))),'입금 내역');
   const sum=(f)=>{const m=new Map(); rows.forEach(p=>{const k=f(p); m.set(k,(m.get(k)||0)+p.amount);}); return [...m.entries()].map(([k,v])=>({구분:k,금액:v}));};
-  X.utils.book_append_sheet(wb,X.utils.json_to_sheet([...sum(p=>'결제수단 · '+(p.method||'미입력')),...sum(p=>'계좌 · '+(p.account||'-')),...sum(p=>'증빙 · '+(p.proof||'미입력')),{구분:'합계',금액:rows.reduce((a,p)=>a+p.amount,0)}]),'합계');
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet([...sum(p=>'결제 종류 · '+(p.method?ML(p.method):'미입력')),...sum(p=>'계좌 · '+(p.account||'-')),{구분:'실제 입금 (서비스 제외)',금액:rows.filter(p=>p.method!=='서비스').reduce((a,p)=>a+p.amount,0)},{구분:'합계',금액:rows.reduce((a,p)=>a+p.amount,0)}]),'합계');
   X.writeFile(wb,`오토핸즈_입금내역_${r.from}_${r.to}.xlsx`); toast(`${rows.length}건을 엑셀로 받았어요.`); }catch(e){ toast(friendly(e),true); } }
 
 /* ---------- 수금 설정 · 입금 계좌 ---------- */
@@ -1038,6 +1051,7 @@ function payHint(need,amt){ if(!amt) return '받은 금액을 적어 주세요.'
 async function payRun(mid){
   const picks=payPicked(mid), amt=Number(String(S.payAmt).replace(/[^0-9]/g,''))||0;
   if(!picks.length){ toast('입금할 달을 체크해 주세요.',true); return; } if(amt<=0){ toast('받은 금액을 적어 주세요.',true); return; }
+  if(NOTE_KINDS.includes(S.payMethod)&&!String(S.payNote||'').trim()){ toast(`${ML(S.payMethod)}은(는) 메모에 사유를 꼭 적어 주세요.`,true); throw Object.assign(new Error('keep'),{keep:true}); }
   let left=amt, n=0;
   for(let i=0;i<picks.length&&left>0;i++){ const b=picks[i], last=i===picks.length-1, put=last?left:Math.min(left,b.remaining); if(put<=0) continue;
     await q(db.rpc('pay_collection_bill_amount',{p_bill_id:b.id,p_amount:put,p_paid_at:S.payDate||keyOf(new Date()),p_note:S.payNote||'',...payArgs()})); left-=put; n++; }
@@ -1088,7 +1102,7 @@ function collView(){
     ${list.map(r=>{const open=S.collOpen.includes(r.id), sel=S.collSel.includes(r.id), ed=canEditCx(r.complex), ow=ownersOf(r.complex);
       return `<tr class="cm-row coll-${{'미수금':'due','수금완료':'ok','미납':'late','장기미납':'long'}[r.coll_state]||'none'}${open?' open':''}${sel?' picked':''}"><td class="ck">${ed?`<input type="checkbox" data-collsel="${r.id}" ${sel?'checked':''} aria-label="${esc(r.car_number||r.name||'')} 선택">`:''}</td>
       <td>${esc(r.complex||'-')}${S.crole&&ow.length?`<span class="lock" title="담당 총무">${ed?'':'🔒 '}${esc(ow.join(', '))}</span>`:''}</td><td>${esc(r.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b></td><td>${esc(r.wash_status||'-')}</td>
-      <td><b>${esc(r.name||'-')}</b>${r.payer_name&&r.payer_name!==r.name?`<small class="by"> (${esc(r.payer_name)})</small>`:''}</td>
+      <td>${ed?`<button class="cust-btn" data-act="collEdit" data-id="${r.id}" title="정보 · 결제 종류 · 계좌 수정">${esc(r.name||'-')}</button>`:`<b>${esc(r.name||'-')}</b>`}${r.payer_name&&r.payer_name!==r.name?`<small class="by"> (${esc(r.payer_name)})</small>`:''}${pdefTag(r.id)?`<br>${pdefTag(r.id)}`:''}</td>
       <td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td><td>${esc(r.car_model||'-')}${r.car_class!==undefined?`<span class="cls ${r.car_class==='SUV'?'cls-suv':r.car_class?'':'cls-none'}">${esc(r.car_class||'미분류')}</span>`:''}</td><td>${esc(r.car_color||'-')}</td><td class="nowrap">${esc(r.wash_plan||'-')}</td><td class="nowrap">${esc(r.wash_weekday||'-')}</td><td class="nowrap">${esc(r.staff_name||'-')}</td><td class="nowrap">${ymd(r.contract_date)}</td>
       <td class="nowrap">${collPill(r.coll_state)}${r.cur_paid_amount&&!r.cur_paid?` <span class="pill part" title="이번 달 받은 돈">일부 ${won0(r.cur_paid_amount)}</span>`:''}${r.overdue_months>1?` <small class="by">${r.overdue_months}개월</small>`:''}${ed&&r.coll_state!=='수금완료'&&r.coll_state!=='청구없음'?` <button class="link" data-act="collPay" data-id="${r.id}">입금 확인</button>`:''}</td>
       <td class="nowrap">${r.cur_total===undefined?`${won0(r.fee)} · ${r.due_day}일`:`<div class="fee3"><span>외부세차비용 : ${won0(r.cur_external)}</span><span>실내세차비용 : ${won0(r.cur_interior||0)}${r.cur_interior_count?` (${r.cur_interior_count}회)`:''}</span><b>매월 요금 : ${won0(r.cur_total)}</b><span>납부일 매달 ${r.due_day}일</span></div>`}</td><td class="nowrap">${r.unpaid_amount?`<b style="color:var(--red)">${won0(r.unpaid_amount)}</b>`:'-'}</td>
@@ -1113,9 +1127,15 @@ function collPanel(r){
   </div>`;
 }
 const CF=[['complex','아파트'],['unit','동·호수'],['car_number','차량번호'],['wash_status','상태'],['name','고객'],['payer_name','입금자명'],['phone','연락처'],['car_model','차종'],['car_color','색상'],['wash_plan','정기권','예: 월 4회'],['wash_weekday','지정 요일','예: 화요일'],['staff_name','담당 직원'],['contract_date','계약일','date'],['fee','월 요금(원)','number'],['due_day','매달 납부일(1~31)','number']];
+// 고객별 기본 결제 종류 · 입금 계좌 · 결제 메모 ([입금 확인] 창에서 자동 선택)
+function payDefHtml(){ const f=S.cform||{}, m=f.pay_method||'', accs=activeAccs();
+  return `<div class="cm-box" style="margin:6px 0 12px;border-color:#1D3A6E"><b style="font-size:14px">💳 결제 종류 · 입금 계좌</b> <span class="sub">(정해 두면 [입금 확인] 창에서 자동으로 골라져요)</span>
+    <div class="set-grid" style="margin-top:8px"><label class="field"><span>결제 종류</span><select class="inp" data-cf="pay_method" id="cfPayMethod"><option value="">정하지 않음</option>${PAY_METHODS.map(x=>`<option value="${x}" ${m===x?'selected':''}>${ML(x)}</option>`).join('')}</select></label>
+    ${ACC_KINDS.includes(m)?`<label class="field"><span>입금 계좌</span><select class="inp" data-cf="pay_account_id"><option value="">계좌 지정 안 함</option>${accs.map(a=>`<option value="${a.id}" ${String(f.pay_account_id||'')===String(a.id)?'selected':''}>${esc(accName(a))}</option>`).join('')}</select></label>`:''}</div>
+    <label class="field"><span>결제 메모 ${NOTE_KINDS.includes(m)?'<b style="color:var(--red)">(필수 · 사유)</b>':'<span class="sub">(선택)</span>'}</span><input class="inp" data-cf="pay_note" maxlength="300" value="${esc(f.pay_note||'')}" placeholder="${m==='서비스'?'예: 지인 소개로 서비스 차량':m==='타계좌입금'?'예: 대표 개인계좌로 입금':m==='간이영수증'?'예: 세금 절세용 간이영수증 발행':'예: 매달 25일 자동이체'}"></label></div>`; }
 function collFormHtml(){
   const f=S.cform||{};
-  return `<div class="cform">${CF.map(([k,l,h])=>`<label class="field"><span>${l}</span>${k==='wash_status'?`<select class="inp" data-cf="${k}">${['세차중','일시정지','해지'].concat(f[k]&&!['세차중','일시정지','해지'].includes(f[k])?[f[k]]:[]).map(o=>`<option ${f[k]===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`
+  return `${S.pdefOk?payDefHtml():''}<div class="cform">${CF.map(([k,l,h])=>`<label class="field"><span>${l}</span>${k==='wash_status'?`<select class="inp" data-cf="${k}">${['세차중','일시정지','해지'].concat(f[k]&&!['세차중','일시정지','해지'].includes(f[k])?[f[k]]:[]).map(o=>`<option ${f[k]===o?'selected':''}>${esc(o)}</option>`).join('')}</select>`
     :`<input class="inp" data-cf="${k}" type="${h==='date'?'date':h==='number'?'number':'text'}" value="${esc(f[k]??'')}" ${h&&h!=='date'&&h!=='number'?`placeholder="${h}"`:''}>`}</label>`).join('')}</div>`;
 }
 
@@ -1219,7 +1239,7 @@ function render(){
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3400);}
 function ask(title,body,ok,run,extra){ S.dialog={title,body,ok,run,extra}; render(); }
 async function act(fn,okMsg,after){
-  try{ await fn(); kickPush(); if(okMsg) toast(okMsg); }catch(e){ toast(friendly(e),true); }
+  try{ await fn(); kickPush(); if(okMsg) toast(okMsg); }catch(e){ if(e&&e.keep){ S.busy=false; render(); return; } toast(friendly(e),true); }
   S.dialog=null; S.busy=false;
   if(after) await after(); await refreshCounts(); await loadTab();
 }
@@ -1258,18 +1278,26 @@ document.addEventListener('click',async e=>{
     case 'collNew': case 'collEdit': {
       const r=a==='collEdit'?(S.coll||[]).find(x=>x.id===id):null;
       S.cform=r?Object.fromEntries(CF.map(([k])=>[k,r[k]??''])):{wash_status:'세차중',due_day:10};
+      const pd0=r?pdefOf(r.id)||{}:{}; Object.assign(S.cform,{pay_method:pd0.pay_method||'',pay_account_id:pd0.pay_account_id?String(pd0.pay_account_id):'',pay_note:pd0.pay_note||''});
+      const pdKey=f=>[f.pay_method||'',ACC_KINDS.includes(f.pay_method)?f.pay_account_id||'':'',String(f.pay_note||'').trim()].join('|'), pdStart=pdKey(S.cform);
       ask(r?'수금 명단 정보 수정':'수금 명단에 직접 추가',r?'월 요금을 바꾸면 아직 입금 전인 이번 달 이후 청구 금액도 함께 바뀌어요.':'이번 달부터 청구가 생겨요.','저장',
-        ()=>act(async()=>{ const d={...S.cform}; ['fee','due_day'].forEach(k=>d[k]=d[k]===''||d[k]==null?'':String(d[k])); await q(db.rpc('save_collection_member',{p_id:r?r.id:null,p_data:d})); S.cform=null; toast(r?'저장했어요.':'추가했어요.'); },
+        ()=>act(async()=>{ const d={...S.cform}; ['fee','due_day'].forEach(k=>d[k]=d[k]===''||d[k]==null?'':String(d[k]));
+            if(NOTE_KINDS.includes(d.pay_method)&&!String(d.pay_note||'').trim()){ toast(`${ML(d.pay_method)}은(는) 결제 메모에 사유를 꼭 적어 주세요.`,true); throw Object.assign(new Error('keep'),{keep:true}); }
+            const pf={pay_method:d.pay_method,pay_account_id:d.pay_account_id,pay_note:d.pay_note}; delete d.pay_method; delete d.pay_account_id; delete d.pay_note;
+            const mid=await q(db.rpc('save_collection_member',{p_id:r?r.id:null,p_data:d}));
+            if(S.pdefOk&&pdKey(pf)!==pdStart) await q(db.rpc('set_collection_member_pay',{p_id:r?r.id:mid,p_method:pf.pay_method||null,p_account_id:ACC_KINDS.includes(pf.pay_method)&&pf.pay_account_id?Number(pf.pay_account_id):null,p_note:pf.pay_note||''}));
+            S.cform=null; toast(r?'저장했어요.':'추가했어요.'); },
           async()=>{ if(r) await loadCBills(r.id); }),collFormHtml());
+      S.dialog.rebuild=collFormHtml;
       break; }
     case 'collPayOne': { const mid=Number(t.dataset.m);
-      S.payPick={[id]:true}; S.payDate=keyOf(new Date()); S.payAmtTouched=false; S.payNote=''; S.payMid=mid;
+      S.payPick={[id]:true}; S.payDate=keyOf(new Date()); S.payAmtTouched=false; S.payNote=''; S.payMid=mid; usePdef(mid);
       ask('입금 확인','받은 금액이 청구와 다르면 고쳐 적어 주세요. 덜 받으면 차액은 미수로 남아요.','입금 확인',()=>act(()=>payRun(mid),null,async()=>{ await loadCBills(mid); }),payExtra(mid)); S.dialog.rebuild=()=>payExtra(mid); break; }
     case 'collPay': {
       try{ await loadCBills(id); }catch(err){ toast(friendly(err),true); break; }
       const r=(S.coll||[]).find(x=>x.id===id), un=(S.cbills[id]||[]).filter(b=>!b.paid_at).sort((x,y)=>x.bill_month.localeCompare(y.bill_month));
       if(!un.length){ toast('입금 전인 청구가 없어요.'); await loadTab(); break; }
-      S.payPick={}; un.forEach(b=>S.payPick[b.id]=true); S.payDate=keyOf(new Date()); S.payAmtTouched=false; S.payNote=''; S.payMid=id;
+      S.payPick={}; un.forEach(b=>S.payPick[b.id]=true); S.payDate=keyOf(new Date()); S.payAmtTouched=false; S.payNote=''; S.payMid=id; usePdef(id);
       ask(`${r?(r.car_number||r.name):''} 입금 확인`,'입금된 달을 체크하고 받은 금액을 확인해 주세요. 덜 받으면 오래된 달부터 채우고 차액은 미수로 남아요.','입금 확인',()=>act(()=>payRun(id),null,async()=>{ if(S.collOpen.includes(id)) await loadCBills(id); }),payExtra(id)); S.dialog.rebuild=()=>payExtra(id); break; }
     case 'prMode': S.pr.mode=t.dataset.f; S.pr.off=0; S.pr.rows=null; render(); await loadPeriod(); render(); break;
     case 'prMove': S.pr.off+=Number(t.dataset.d); S.pr.rows=null; render(); await loadPeriod(); render(); break;
@@ -1291,9 +1319,9 @@ document.addEventListener('click',async e=>{
     case 'accSave': { const tr=t.closest('tr'), g=f=>tr.querySelector(`[data-af="${f}"]`); S.setOpen=true;
       await act(()=>q(db.rpc('save_collection_account',{p_id:t.dataset.id?Number(t.dataset.id):null,p_bank:g('bank').value,p_last4:g('last4').value,p_alias:g('alias').value,p_active:g('active').checked})),t.dataset.id?'계좌를 저장했어요.':'계좌를 추가했어요.'); break; }
     case 'payEdit': { const mid=Number(t.dataset.m), bid=Number(t.dataset.b), b=(S.cbills[mid]||[]).find(x=>x.id===bid), p=b&&(b.payments||[]).find(x=>x.id===id); if(!p) break;
-      S.payMethod=p.method||'계좌이체'; S.payProof=p.proof||'없음'; S.payAcct=p.account_id?String(p.account_id):S.payAcct; S.payDate=p.paid_at; S.payNote=p.note||'';
-      ask(`입금 기록 수정 · ${won0(p.amount)}`,'결제수단 · 증빙 · 계좌 · 입금일 · 메모를 고쳐요. 금액을 바꾸려면 [이 입금 취소] 후 다시 입금해 주세요.','저장',
-        ()=>act(()=>q(db.rpc('update_collection_payment',{p_id:id,p_method:S.payMethod,p_proof:S.payProof,p_account_id:S.payMethod==='계좌이체'&&S.payAcct?Number(S.payAcct):null,p_paid_at:S.payDate,p_note:S.payNote})),'입금 기록을 고쳤어요.',async()=>{ await loadCBills(mid); }),
+      S.payMethod=p.method||'계좌이체'; S.payAcct=p.account_id?String(p.account_id):S.payAcct; S.payDate=p.paid_at; S.payNote=p.note||'';
+      ask(`입금 기록 수정 · ${won0(p.amount)}`,'결제 종류 · 계좌 · 입금일 · 메모를 고쳐요. 금액을 바꾸려면 [이 입금 취소] 후 다시 입금해 주세요.','저장',
+        ()=>act(()=>{ if(NOTE_KINDS.includes(S.payMethod)&&!String(S.payNote||'').trim()){ toast(`${ML(S.payMethod)}은(는) 메모에 사유를 꼭 적어 주세요.`,true); throw Object.assign(new Error('keep'),{keep:true}); } return q(db.rpc('update_collection_payment',{p_id:id,...payArgs(),p_proof:p.proof&&p.proof!=='없음'&&!ACC_KINDS.includes(S.payMethod)?p.proof:null,p_paid_at:S.payDate,p_note:S.payNote})); },'입금 기록을 고쳤어요.',async()=>{ await loadCBills(mid); }),
         `${payMethodHtml()}<label class="field"><span style="font-weight:700;font-size:13px">입금일</span><input class="inp" type="date" id="payDate" value="${esc(S.payDate)}"></label><label class="field"><span style="font-weight:700;font-size:13px">메모</span><input class="inp" id="payNote2" maxlength="300" value="${esc(S.payNote)}"></label>`); S.dialog.rebuild=()=>`${payMethodHtml()}<label class="field"><span style="font-weight:700;font-size:13px">입금일</span><input class="inp" type="date" id="payDate" value="${esc(S.payDate)}"></label><label class="field"><span style="font-weight:700;font-size:13px">메모</span><input class="inp" id="payNote2" maxlength="300" value="${esc(S.payNote)}"></label>`; break; }
     case 'collAdj': { const mid=Number(t.dataset.m), b=(S.cbills[mid]||[]).find(x=>x.id===id); if(!b) break; S.adjVal=String(b.adjust_amount||''); S.adjNote=b.adjust_note||'';
       ask(`${b.bill_month.slice(0,7).replace('-','년 ')}월 금액 조정`,`이 달만 금액을 바꿔요. 다른 달과 월 요금은 그대로예요.\n외부 ${won0(b.amount)} + 실내 ${won0(b.interior_amount||0)} + 조정 = 이 달 요금`,'저장',
@@ -1307,10 +1335,20 @@ document.addEventListener('click',async e=>{
     case 'cmApt': S.collApt=t.dataset.a; S.collTab='전체'; render(); setTimeout(()=>{ const el=document.querySelector('.coll-tbl'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); },50); break;
     case 'cmExport': await cmExport(); break;
     case 'collUnpay': { const mid=Number(t.dataset.m); ask('입금 확인을 취소할까요?','이 달이 다시 미입금으로 돌아가요.','확인',()=>act(()=>q(db.rpc('unpay_collection_bill',{p_bill_id:id})),'입금 확인을 취소했어요.',async()=>{ await loadCBills(mid); })); break; }
-    case 'collPayMonth': { const ids=[...S.collSel]; if(!ids.length) break; S.payDate=keyOf(new Date());
+    case 'collPayMonth': { const ids=[...S.collSel]; if(!ids.length) break; S.payDate=keyOf(new Date()); S.payUseDef=true;
+      const withDef=ids.filter(x=>pdefOf(x)&&pdefOf(x).pay_method).length;
+      const html=()=>`${withDef?`<label class="flag"><input type="checkbox" id="payUseDef" ${S.payUseDef?'checked':''}><span>기본 결제 종류가 정해진 고객 ${withDef}명은 각자 기본값으로 처리</span></label>`:''}
+        ${withDef&&S.payUseDef?`<p class="note" style="margin:0">나머지 ${ids.length-withDef}명은 아래 결제 종류로 처리해요.</p>`:''}${payMethodHtml({bulk:true})}<label class="field"><span style="font-weight:700;font-size:13px">입금일</span><input class="inp" type="date" id="payDate" value="${S.payDate}"></label>`;
       ask(`선택한 ${ids.length}명의 이번 달 입금을 확인할까요?`,'이번 달 청구를 입금된 것으로 표시해요. 밀린 지난달은 각 줄의 [입금 확인]에서 처리해 주세요.','확인',
-        ()=>act(async()=>{ const n=await q(db.rpc('pay_collection_months',{p_member_ids:ids,p_month:null,p_paid_at:S.payDate||keyOf(new Date()),...payArgs()})); savePayPref(); S.collSel=[]; toast(`${n||0}명 입금 확인했어요.`); },null),
-        `${payMethodHtml()}<label class="field"><span style="font-weight:700;font-size:13px">입금일</span><input class="inp" type="date" id="payDate" value="${S.payDate}"></label>`); S.dialog.rebuild=()=>`${payMethodHtml()}<label class="field"><span style="font-weight:700;font-size:13px">입금일</span><input class="inp" type="date" id="payDate" value="${S.payDate}"></label>`; break; }
+        ()=>act(async()=>{
+          // 결제 종류 · 계좌가 같은 고객끼리 묶어서 처리 (타계좌입금 · 서비스 · 기타 기본값 고객은 건너뜀)
+          const groups=new Map(), skip=[];
+          ids.forEach(x=>{ const d=pdefOf(x); let m=S.payMethod, a=ACC_KINDS.includes(S.payMethod)&&S.payAcct?Number(S.payAcct):null;
+            if(S.payUseDef&&d&&d.pay_method){ if(NOTE_KINDS.includes(d.pay_method)){ skip.push(x); return; } m=d.pay_method; a=ACC_KINDS.includes(m)&&d.pay_account_id?Number(d.pay_account_id):null; }
+            const k=m+'|'+(a||''); if(!groups.has(k)) groups.set(k,{m,a,ids:[]}); groups.get(k).ids.push(x); });
+          let n=0; for(const g of groups.values()) n+=await q(db.rpc('pay_collection_months',{p_member_ids:g.ids,p_month:null,p_paid_at:S.payDate||keyOf(new Date()),p_method:g.m,p_proof:null,p_account_id:g.a}))||0;
+          savePayPref(); S.collSel=skip; toast(`${n}명 입금 확인했어요.${skip.length?` 기본값이 타계좌입금·서비스·기타인 ${skip.length}명은 사유 메모가 필요해서 선택된 채로 남겨 뒀어요.`:''}`); },null),
+        html()); S.dialog.rebuild=html; break; }
     case 'collDel': { const ids=[...S.collSel]; if(!ids.length) break;
       ask(`선택한 ${ids.length}명을 수금 명단에서 삭제할까요?`,'월별 청구·입금 기록과 수금 메모도 함께 지워지고 되돌릴 수 없어요.\n고객관리의 고객 정보는 그대로 남아요.','확인',()=>act(async()=>{ const n=await q(db.rpc('delete_collection_members',{p_ids:ids})); S.collSel=[]; toast(`${n||0}명을 삭제했어요.`); },null)); break; }
     case 'cnoteAdd': {
@@ -1530,6 +1568,7 @@ document.addEventListener('change',async e=>{
   if(t.id==='pauseDate'){ S.pauseDate=t.value; return; }
   if(t.dataset.collsel){ const id=Number(t.dataset.collsel); S.collSel=t.checked?[...new Set([...S.collSel,id])]:S.collSel.filter(x=>x!==id); render(); return; }
   if(t.dataset.cnstar){ S.cnStar[Number(t.dataset.cnstar)]=t.checked; return; }
+  if(t.id==='payUseDef'){ S.payUseDef=t.checked; if(S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } return; }
   if(t.id==='payMethod'||t.id==='payProof'||t.id==='payAcct'){ if(t.id==='payMethod') S.payMethod=t.value; if(t.id==='payProof') S.payProof=t.value; if(t.id==='payAcct') S.payAcct=t.value;
     if(S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); if(t.id==='payMethod') render(); } return; }
   if(t.id==='prMethod'){ S.pr.method=t.value; render(); return; }
@@ -1537,7 +1576,7 @@ document.addEventListener('change',async e=>{
   if(t.id==='prAcct'){ S.pr.acct=t.value; render(); return; }
   if(t.dataset.paypick){ S.payPick[t.dataset.paypick]=t.checked; if(t.dataset.m&&S.dialog){ S.payAmtTouched=false; S.dialog.extra=payExtra(Number(t.dataset.m)); render(); } return; }
   if(t.id==='payDate'){ S.payDate=t.value; return; }
-  if(t.dataset.cf&&S.cform){ S.cform[t.dataset.cf]=t.value; return; }
+  if(t.dataset.cf&&S.cform){ S.cform[t.dataset.cf]=t.value; if(t.dataset.cf==='pay_method'&&S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } return; }
   if(t.dataset.intsel){ const id=Number(t.dataset.intsel); S.intSel=t.checked?[...new Set([...S.intSel,id])]:S.intSel.filter(x=>x!==id); render(); return; }
   if(t.dataset.respick){ const id=Number(t.dataset.respick); S.resPick=t.checked?[...new Set([...S.resPick,id])]:S.resPick.filter(x=>x!==id); if(S.dialog) S.dialog.extra=resAddHtml(); render(); return; }
   if(t.id==='resStaff'){ S.resStaff=t.value; if(S.dialog) S.dialog.extra=resAddHtml(); return; }
