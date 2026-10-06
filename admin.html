@@ -805,16 +805,17 @@ function jobsView(){
 
 /* ---------- 탭: 실내세차 일정 ---------- */
 /* 실내세차 일정: 실제 청구 금액 (계약 금액 → 없으면 차급 기본 금액) */
-function intPriceCell(cid){ const ci=(S.cint||{})[cid]||{}, plan=ci.interior_plan||'request';
-  const r=S.cls&&S.cls[cid], base=ci.class_price!=null?ci.class_price:(r?Number(r.price||0):null);
+function intPriceCell(cid){ const ci=(S.cint||{})[cid]||{}, plan=ci.interior_plan||'request', c=S.customers.find(x=>x.id===cid)||{};
+  const r=S.cls&&S.cls[cid], base=ci.class_price!=null?ci.class_price:(r?Number(r.price||0):null), fee=ci.interior_fee;
   if(plan==='service') return `0원 <small class="by">서비스 계약</small>`;
-  if(ipInc(plan)) return `${base!=null?won0(base):'-'} <small class="by" title="${esc(ipLabel(plan))} 계약 · 따로 신청한 실내세차는 차급 기본 금액으로 추가돼요">추가 · 기본 금액</small>`;
-  if(ci.interior_fee!=null) return `${won0(ci.interior_fee)} <small class="by">계약 금액</small>`;
-  return `${base!=null?won0(base):'-'} <small class="by">기본 금액</small>`; }
+  if(fee==null) return `${base!=null?won0(base):'-'} <small class="by" title="계약 실내 요금이 없어 차급 기본 금액을 써요">기본 금액</small>`;
+  const n=plan==='every'?Math.max(Number(c.wash_plan)||4,1):ipN(plan);
+  if(n>1){ const u=Math.round(fee/n/10)*10; return `${won0(u)} <small class="by" title="계약 실내 요금 ${won0(fee)} ÷ ${n}회">계약 금액 (${won0(fee)}÷${n})</small>`; }
+  return `${won0(fee)} <small class="by">계약 금액</small>`; }
 const IP_CLASSES=['소형','중형','대형','SUV'];
 function ipriceCard(){ const ps=S.iprices; if(!ps||!ps.length) return '';
   const can=ps[0].can_edit, d=S.ipDraft||{}, last=ps.filter(x=>x.updated_at).sort((a,b)=>a.updated_at<b.updated_at?1:-1)[0];
-  return `<div class="card"><div class="row"><div class="grow"><h2 class="h">실내세차 기본 금액 <span class="sub">(1회 · 차급별)</span></h2><p class="sub">고객마다 계약 실내 요금이 있으면 그 금액을 먼저 쓰고, 없을 때 이 기본 금액으로 청구 · 고객 앱 안내에 써요. ${can?'마스터와 총무가 바꿀 수 있어요.':'마스터와 총무만 바꿀 수 있어요.'}</p></div></div>
+  return `<div class="card"><div class="row"><div class="grow"><h2 class="h">실내세차 기본 금액 <span class="sub">(1회 · 차급별)</span></h2><p class="sub">고객 계약 내용에 실내 요금이 있으면 그 금액을 먼저 써요 (월N회 · 매회 포함은 실내 요금 ÷ 횟수 = 1회 금액). 실내 요금이 비어 있는 고객만 이 기본 금액으로 청구 · 고객 앱 안내에 써요. ${can?'마스터와 총무가 바꿀 수 있어요.':'마스터와 총무만 바꿀 수 있어요.'}</p></div></div>
     <div class="ip-grid">${IP_CLASSES.map(k=>{const r=ps.find(x=>x.car_class===k)||{}; return `<label class="field"><span>${k}${k==='SUV'?'':' (세단)'}</span><div class="row" style="gap:6px;flex-wrap:nowrap"><input class="inp" inputmode="numeric" data-ipc="${k}" value="${esc(d[k]??(r.price??''))}" ${can?'':'disabled'} aria-label="${k} 실내세차 기본 금액"><span>원</span></div></label>`;}).join('')}</div>
     <div class="row">${last?`<span class="sub">마지막 변경: ${esc(last.updated_name||'')} ${when(last.updated_at)}</span>`:'<span class="sub">처음 값: 세단 10,000원 · SUV 15,000원</span>'}<span class="grow"></span>${can?`${Object.keys(d).length?'<button class="link" data-act="ipCancel">취소</button>':''}<button class="btn sm" data-act="ipSave" ${Object.keys(d).length?'':'disabled'}>${ic('check',14)}기본 금액 저장</button>`:''}</div></div>`; }
 
