@@ -245,8 +245,9 @@ const STAGES = [
 ];
 
 function currency(n) { return (n || 0).toLocaleString('ko-KR') + '원'; }
-function roleLabel(role) {
+function roleLabel(role, chongmu) {
   if (role === 'master') return '마스터';
+  if (role === 'admin' && chongmu) return '관리자(총무)';
   if (role === 'admin') return '관리자';
   if (role === 'field') return '현장직원';
   return '영업사원';
@@ -1285,17 +1286,18 @@ function StaffPanel({ allStaff, onWithdraw, onDeleteAccount, onMessage, onChange
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="font-semibold text-[15px]" style={{ color: '#1C2620' }}>{u.name}</p>
-              <span style={{ background: displayRole(u.role, isMaster) === 'master' ? '#FAEEDA' : displayRole(u.role, isMaster) === 'admin' ? '#E6F1FB' : displayRole(u.role, isMaster) === 'field' ? '#F1E6FA' : '#E1F5EE', color: displayRole(u.role, isMaster) === 'master' ? '#854F0B' : displayRole(u.role, isMaster) === 'admin' ? '#0C447C' : displayRole(u.role, isMaster) === 'field' ? '#6B3FA0' : '#085041', border: '1px solid ' + (displayRole(u.role, isMaster) === 'master' ? '#EF9F27' : displayRole(u.role, isMaster) === 'admin' ? '#85B7EB' : displayRole(u.role, isMaster) === 'field' ? '#C9A6E8' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{roleLabel(displayRole(u.role, isMaster))}</span>
+              <span style={{ background: displayRole(u.role, isMaster) === 'master' ? '#FAEEDA' : displayRole(u.role, isMaster) === 'admin' ? '#E6F1FB' : displayRole(u.role, isMaster) === 'field' ? '#F1E6FA' : '#E1F5EE', color: displayRole(u.role, isMaster) === 'master' ? '#854F0B' : displayRole(u.role, isMaster) === 'admin' ? '#0C447C' : displayRole(u.role, isMaster) === 'field' ? '#6B3FA0' : '#085041', border: '1px solid ' + (displayRole(u.role, isMaster) === 'master' ? '#EF9F27' : displayRole(u.role, isMaster) === 'admin' ? '#85B7EB' : displayRole(u.role, isMaster) === 'field' ? '#C9A6E8' : '#5DCAA5') }} className="text-[10.5px] px-1.5 py-0.5 rounded-full">{roleLabel(displayRole(u.role, isMaster), u.chongmu)}</span>
               {u.member_code && <span className="text-[10.5px] px-1.5 py-0.5 rounded-full" style={{ background: '#F1EFE8', color: '#6B6A63' }}>{u.member_code}</span>}
             </div>
             <p className="text-[12px] mt-0.5 flex items-center gap-1" style={{ color: '#6B6A63' }}>☎ <MaskedText value={u.phone} type="phone" /></p>
           </div>
           <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
             {u.role !== 'master' && (
-              <select value={u.role} onChange={e => onChangeRole(u.id, e.target.value)} className="text-[12px] rounded-lg px-2 py-1.5" style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }}>
+              <select value={u.role === 'admin' && u.chongmu ? 'chongmu' : u.role} onChange={e => onChangeRole(u.id, e.target.value)} className="text-[12px] rounded-lg px-2 py-1.5" style={{ border: '1px solid #E4E2D9', color: '#4A4A45' }}>
                 <option value="sales">영업사원</option>
                 <option value="field">현장직원</option>
-                {isMaster && <option value="admin">관리자</option>}
+                {(isMaster || u.role === 'admin') && <option value="admin" disabled={!isMaster}>관리자</option>}
+                {(isMaster || u.role === 'admin') && <option value="chongmu" disabled={!isMaster}>관리자(총무)</option>}
               </select>
             )}
             <button onClick={() => onMessage(u)} style={{ border: '1px solid #85B7EB', color: '#0C447C' }} className="text-[12px] px-2.5 py-1.5 rounded-lg whitespace-nowrap">메시지</button>
@@ -1870,7 +1872,10 @@ function Dashboard({ currentUser, onLogout }) {
     const { data: annData } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
     setAnnouncements(annData || []);
     const { data: staffData } = await supabase.from('profiles').select('*').eq('status', '승인');
-    setAllStaff(staffData || []);
+    // 관리자(총무) 표시 — 28 SQL 실행 전이면 조용히 건너뜀
+    let chongmuIds = [];
+    try { const { data: cm, error: cmErr } = await supabase.rpc('list_chongmu'); if (!cmErr && Array.isArray(cm)) chongmuIds = cm.map(x => typeof x === 'string' ? x : (x.list_chongmu || x.user_id)); } catch (_) {}
+    setAllStaff((staffData || []).map(u => ({ ...u, chongmu: chongmuIds.includes(u.id) })));
     const { data: recvData } = await supabase.from('messages').select('*').eq('to_user', myId).order('created_at', { ascending: false });
     setInboxMessages(recvData || []);
     const { data: sentData } = await supabase.from('messages').select('*').eq('from_user', myId).order('created_at', { ascending: false });
@@ -2051,8 +2056,12 @@ function Dashboard({ currentUser, onLogout }) {
     await supabase.from('profiles').update({ status: '거절' }).eq('id', id);
     setPendingUsers(prev => prev.filter(u => u.id !== id));
   }
-  async function changeStaffRole(id, role) {
+  async function changeStaffRole(id, value) {
+    // '관리자(총무)' = 관리자 권한 + 총무 지정 (수금관리 수정 · 담당 아파트)
+    const role = value === 'chongmu' ? 'admin' : value;
     await supabase.from('profiles').update({ role }).eq('id', id);
+    const { error: cmErr } = await supabase.rpc('set_staff_chongmu', { p_user: id, p_on: value === 'chongmu' });
+    if (cmErr && value === 'chongmu') alert('총무 지정이 저장되지 않았어요. Supabase에서 28_chongmu_roles.sql을 먼저 실행해 주세요.\n(' + cmErr.message + ')');
     setAllStaff(prev => prev.map(u => u.id === id ? { ...u, role } : u));
     setSalesUsers(prev => role === 'sales' ? prev : prev.filter(u => u.id !== id));
     await loadAll();
