@@ -230,6 +230,8 @@ tr.round-full td{background:#F4FAF6}.rt-done{color:#1F5136;font-weight:800}.mont
 .pr-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0}.pr-grid .tbl table td,.pr-grid .tbl table th{padding:6px 10px;font-size:12.5px}
 .role-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:9px 12px;font-size:13.5px}.role-bar .rp{font-weight:800;border-radius:999px;padding:2px 10px;font-size:12px}.rp.m{background:#FAEEDA;color:#854F0B}.rp.c{background:#1D3A6E;color:#fff}.rp.v{background:#ECEAE4;color:#4A4A45}
 .lock{display:inline-block;font-size:10.5px;font-weight:800;color:#6B6A63;background:#F1EFE8;border-radius:999px;padding:1px 7px;margin-left:4px;white-space:nowrap}.cx-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.cx-grid label{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:6px 10px;background:#fff;font-size:13px;cursor:pointer}.cx-grid label.on{border-color:#1D3A6E;background:#EEF3FB}.cx-grid small{color:var(--sub)}
+.grp-tog{all:unset;cursor:pointer;margin-top:4px;display:inline-block;font-size:11.5px;font-weight:800;color:#1D3A6E;background:#EEF3FB;border:1px solid #C9D6EE;border-radius:999px;padding:2px 9px}.grp-tog[aria-expanded="true"]{background:#1D3A6E;color:#fff;border-color:#1D3A6E}
+tr.grp-sub>td{background:#F6F8FC}tr.grp-sub>td:nth-child(2){padding-left:22px}.grp-mark{color:#8FA0BF;margin-right:4px;font-weight:800}tr.grp-head>td{border-bottom-color:#E1E7F3}
 .mtag{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;background:var(--slate);color:var(--blue);margin-right:4px}.mtag.none{background:#FDECEA;color:var(--red)}.mtag.svc{background:#FFF3D6;color:#8A5A00}.cust-btn{all:unset;cursor:pointer;font-weight:800;text-decoration:underline;text-decoration-color:#C9C3B3;text-underline-offset:3px}.cust-btn:hover{color:var(--blue)}
 .set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:10px}
 @media(max-width:900px){.pr-grid{grid-template-columns:1fr}}
@@ -862,6 +864,13 @@ function cmgrView(){
   const list=base.filter(c=>{const k=cmState(c).k;return S.cmSt==='all'||k===S.cmSt||(S.cmSt==='pause'&&k==='soon');});
   const ids=list.map(c=>c.id), allSel=ids.length&&ids.every(x=>S.cmSel.includes(x)), n=S.cmSel.length;
   const COLS=14;
+  // 한 고객 앱 계정(같은 휴대폰 번호)에 차량이 여러 대면 한 줄로 묶고 [🚗 N대 ▾]로 펼쳐요
+  const LG=S.logins||{}, grpOf=c=>{const x=LG[c.id]; return x&&x.car_count>1?x.user_id:null;}, gOpen=S.cmGrpOpen||[];
+  const rowsG=[], seenG=new Set();
+  for(const c of list){ const g=grpOf(c); if(!g){ rowsG.push({c,kind:'one'}); continue; } if(seenG.has(g)) continue; seenG.add(g);
+    const mem=list.filter(x=>grpOf(x)===g), head=mem.find(x=>LG[x.id].is_primary)||mem[0];
+    rowsG.push({c:head,kind:'head',g,n:LG[head.id].car_count,shown:mem.length});
+    if(gOpen.includes(g)) mem.filter(x=>x!==head).forEach(x=>rowsG.push({c:x,kind:'sub',g})); }
   return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.<br>신규 = 계약일로부터 30일 이내 (자동) · 이관중 = 관리자가 직접 표시 (세차 일정은 그대로)</p></div></div>
   <div class="coll-tools">
     <label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="custFile" accept=".xlsx,.xls,.csv" hidden></label>
@@ -870,7 +879,7 @@ function cmgrView(){
     <button class="btn sm" data-act="custNew">+ 직접 추가</button>
     ${S.loginsOk?`<button class="btn2 sm" data-act="loginMakeAll" title="앱 계정이 없는 계약완료 고객 모두">📱 고객 앱 계정 만들기${(()=>{const n=S.customers.filter(c=>!(S.logins||{})[c.id]).length;return n?` <b>${n}</b>`:'';})()}</button>`:''}
   </div>
-  ${S.loginsOk?'<p class="note" style="margin:0">📱 고객 앱 아이디 = 차량번호 숫자 (예: 05수0536 → 050536) · 처음 비밀번호 1234 · 계약완료 고객이 들어오면 자동으로 만들어져요.</p>':''}
+  ${S.loginsOk?'<p class="note" style="margin:0">📱 고객 앱 아이디 = 휴대폰 번호 (예: 010-1234-5678 → 01012345678) · 처음 비밀번호 1234 · 같은 번호의 차량은 한 계정으로 묶여요 · 계약완료 고객이 들어오면 자동으로 만들어져요.</p>':''}
   ${S.custImportMsg?`<div class="note" style="background:#FFF8E6;border:1px solid #E9D9A8;border-radius:10px;padding:8px 12px"><b>결과</b> · ${esc(S.custImportMsg.head)}<button class="link" data-act="custMsgClose" style="float:right">닫기</button>${S.custImportMsg.list.length?`<ul style="margin:6px 0 0;padding-left:18px">${S.custImportMsg.list.slice(0,30).map(m=>`<li>${m.row?esc(m.row)+'번째 줄 ':''}${esc(m.car||'')} — ${esc(m.msg)}</li>`).join('')}${S.custImportMsg.list.length>30?`<li>외 ${S.custImportMsg.list.length-30}건</li>`:''}</ul>`:''}</div>`:''}
   <form id="cmsearch" class="req-tools" role="search">
     <select class="inp" id="cmApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.cmApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
@@ -885,9 +894,9 @@ function cmgrView(){
     <button class="btn2 sm st-cancel" data-act="cmSet" data-s="해지" ${n?'':'disabled'}>해지</button>
     <button class="btn sm danger" data-act="cmTrash" ${n?'':'disabled'}>🗑 삭제</button></div>
   ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="cmSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>상태</th><th>고객</th><th>연락처</th><th>차종</th><th>색상</th><th>정기권</th><th>지정 요일</th><th>담당 직원</th><th>계약일</th><th>고객 메모</th></tr></thead><tbody>
-    ${list.map(c=>{const nn=S.noteCnt[c.id]||{total:0,starred:0}, open=S.cmOpen.includes(c.id), st=cmState(c), sel=S.cmSel.includes(c.id);
-      return `<tr class="cm-row ${st.cls}${open?' open':''}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-cmsel="${c.id}" ${sel?'checked':''} aria-label="${esc(c.car_number||'')} 선택"></td><td>${esc(c.complex||'-')}</td><td>${esc(c.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(c.car_number||'-')}</b>${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>
-      <td><span class="pill st-${st.k}">${esc(st.label)}</span></td><td><button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button></td>
+    ${rowsG.map(({c,kind,g,n,shown})=>{const nn=S.noteCnt[c.id]||{total:0,starred:0}, open=S.cmOpen.includes(c.id), st=cmState(c), sel=S.cmSel.includes(c.id), gx=kind==='head'&&gOpen.includes(g);
+      return `<tr class="cm-row ${st.cls}${open?' open':''}${sel?' picked':''}${kind==='sub'?' grp-sub':''}${kind==='head'?' grp-head':''}"><td class="ck"><input type="checkbox" data-cmsel="${c.id}" ${sel?'checked':''} aria-label="${esc(c.car_number||'')} 선택"></td><td>${esc(c.complex||'-')}</td><td>${esc(c.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(c.car_number||'-')}</b>${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>
+      <td><span class="pill st-${st.k}">${esc(st.label)}</span></td><td>${kind==='sub'?'<span class="grp-mark" aria-hidden="true">└</span>':''}<button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button>${kind==='head'?`<br><button class="grp-tog" data-act="cmGrp" data-g="${g}" aria-expanded="${gx}" title="같은 고객 앱 계정(휴대폰 번호)의 차량">🚗 ${n}대 ${gx?'접기 ▴':'펼치기 ▾'}</button>${shown<n&&gx?`<small class="by"> (검색 조건에 맞는 ${shown}대만)</small>`:''}`:''}</td>
       <td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td><td>${esc(c.car_model||'-')}${clsTag(c.id)}</td><td>${esc(c.car_color||'-')}</td><td class="nowrap">${c.wash_plan?'월 '+c.wash_plan+'회':'-'}</td><td class="nowrap">${c.wash_weekday!=null?WDF[c.wash_weekday]:'-'}</td><td class="nowrap">${esc(c.field_staff_id?staffName(c.field_staff_id):'미배정')}</td><td class="nowrap">${c.contract_date?esc(String(c.contract_date).slice(2).replace(/-/g,'.')):'-'}</td>
       <td><button class="memo-tog" data-act="cmToggle" data-id="${c.id}" aria-expanded="${open}">${nn.starred?`<span class="star">⭐${nn.starred}</span>`:''}<span>메모 ${nn.total}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td></tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box">${notesPanel(c)}</div></td></tr>`:''}`;}).join('')}
@@ -896,7 +905,7 @@ function cmgrView(){
 function notesPanel(c){
   const list=S.notes[c.id];
   const star=!!S.noteStar[c.id];
-  return `<div class="row"><b>${esc(c.car_number||'')} · ${esc([c.complex,c.unit].filter(Boolean).join(' '))}</b><span class="sub grow">메모·처리이력 · 메모를 누르면 크게 보고 수정할 수 있어요</span><button class="btn2 sm" data-act="custEdit" data-id="${c.id}">✏️ 정보 수정</button>${!S.loginsOk?'':(S.logins||{})[c.id]?`<span class="mtag" style="align-self:center">📱 앱 아이디 ${esc(S.logins[c.id].login_id)} · ${S.logins[c.id].pw_initial?'처음 비밀번호 1234 사용 중':'비밀번호 바꿈'}</span><button class="btn2 sm" data-act="loginReset" data-id="${c.id}">🔑 비밀번호 1234로 초기화</button>`:`<button class="btn2 sm" data-act="loginMakeOne" data-id="${c.id}">📱 앱 계정 만들기</button>`}<button class="btn2 sm" data-act="custApp" data-id="${c.id}" title="이 고객이 앱에서 보는 화면을 읽기 전용으로 열어요">📱 고객앱 화면 보기</button></div>
+  return `<div class="row"><b>${esc(c.car_number||'')} · ${esc([c.complex,c.unit].filter(Boolean).join(' '))}</b><span class="sub grow">메모·처리이력 · 메모를 누르면 크게 보고 수정할 수 있어요</span><button class="btn2 sm" data-act="custEdit" data-id="${c.id}">✏️ 정보 수정</button>${!S.loginsOk?'':(S.logins||{})[c.id]?`<span class="mtag" style="align-self:center">📱 앱 아이디 ${esc(S.logins[c.id].login_id)} · ${S.logins[c.id].pw_initial?'처음 비밀번호 1234 사용 중':'비밀번호 바꿈'}</span>${(()=>{const L=S.logins[c.id]; if(!L||L.car_count<2) return ''; const o=S.customers.filter(x=>x.id!==c.id&&(S.logins[x.id]||{}).user_id===L.user_id).map(x=>x.car_number); return `<span class="mtag" style="align-self:center">🚗 같은 계정 차량 ${L.car_count}대${o.length?': '+esc(o.join(', ')):''}</span>`;})()}<button class="btn2 sm" data-act="loginReset" data-id="${c.id}">🔑 비밀번호 1234로 초기화</button>`:`<button class="btn2 sm" data-act="loginMakeOne" data-id="${c.id}">📱 앱 계정 만들기</button>`}<button class="btn2 sm" data-act="custApp" data-id="${c.id}" title="이 고객이 앱에서 보는 화면을 읽기 전용으로 열어요">📱 고객앱 화면 보기</button></div>
   <div class="note-new">
     <textarea class="inp" id="note-${c.id}" maxlength="2000" placeholder="조치 내용, 특이사항 등을 적어 주세요. 예) 앞범퍼 기존 스크래치 있음">${esc(S.noteDraft[c.id]||'')}</textarea>
     <div class="row"><label class="flag f-star"><input type="checkbox" data-nstar="${c.id}" ${star?'checked':''}><span>⭐ 중요</span></label><button class="btn2 sm" type="button" data-act="noteEmoji" data-id="${c.id}" title="글 속에 ⭐ 넣기">⭐ 넣기</button><span class="grow"></span><button class="btn" data-act="noteAdd" data-id="${c.id}">메모 저장</button></div>
@@ -1494,10 +1503,11 @@ document.addEventListener('click',async e=>{
     case 'custTpl': await custExport(true); break;
     case 'custExport': await custExport(false); break;
     case 'custMsgClose': S.custImportMsg=null; render(); break;
+    case 'cmGrp': { const g=t.dataset.g; S.cmGrpOpen=S.cmGrpOpen||[]; S.cmGrpOpen=S.cmGrpOpen.includes(g)?S.cmGrpOpen.filter(x=>x!==g):[...S.cmGrpOpen,g]; render(); break; }
     case 'loginMakeAll': case 'loginMakeOne': { const one=a==='loginMakeOne', c=one?S.customers.find(x=>x.id===id):null;
-      ask(one?`${c?c.car_number:''} 고객 앱 계정을 만들까요?`:'고객 앱 계정을 한꺼번에 만들까요?',`아이디는 차량번호의 숫자, 처음 비밀번호는 1234예요.${one?'':'\n앱 계정이 없는 계약완료 고객 모두 만들어요. 이미 있는 고객은 그대로 둬요.'}\n같은 숫자 아이디가 이미 있으면 뒤에 _2 를 붙여 만들고 결과에 알려 드려요.`,'만들기',
+      ask(one?`${c?c.car_number:''} 고객 앱 계정을 만들까요?`:'고객 앱 계정을 한꺼번에 만들까요?',`아이디는 휴대폰 번호(숫자만), 처음 비밀번호는 1234예요. 같은 휴대폰 번호의 차량은 한 계정에 묶여요.${one?'':'\n앱 계정이 없는 계약완료 차량 모두 처리해요. 이미 있는 계정은 그대로 둬요.'}\n연락처가 없는 고객은 만들 수 없어서 결과에 알려 드려요.`,'만들기',
         ()=>act(async()=>{ const r=await q(db.rpc('create_customer_logins',{p_ids:one?[id]:null})); const notes=(r&&r.notes)||[];
-          S.custImportMsg={head:`📱 고객 앱 계정 · 새로 ${r.created||0}명${r.existed?` · 이미 있음 ${r.existed}명`:''}${r.skipped?` · 못 만듦 ${r.skipped}명`:''}`,list:notes.map(n=>({row:'',car:`${n.car||''} ${n.name||''}`,msg:n.login_id?`아이디 ${n.login_id}${n.msg?' · '+n.msg:''}`:n.msg}))};
+          S.custImportMsg={head:`📱 고객 앱 계정 · 새로 ${r.created||0}명${r.added?` · 기존 계정에 차량 추가 ${r.added}대`:''}${r.existed?` · 이미 있음 ${r.existed}대`:''}${r.skipped?` · 못 만듦 ${r.skipped}대`:''}`,list:notes.map(n=>({row:'',car:`${n.car||''} ${n.name||''}`,msg:n.login_id?`아이디 ${n.login_id}${n.msg?' · '+n.msg:''}`:n.msg}))};
           toast(`고객 앱 계정 ${r.created||0}명을 만들었어요.`); },null)); break; }
     case 'loginReset': { const c=S.customers.find(x=>x.id===id), L=(S.logins||{})[id];
       ask('비밀번호를 1234로 초기화할까요?',`${c?c.car_number+' ':''}고객(아이디 ${L?L.login_id:''})의 비밀번호가 1234로 바뀌어요.\n고객에게 알려 주시고, 로그인 후 [내 정보]에서 바꾸도록 안내해 주세요.`,'초기화',
