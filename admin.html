@@ -215,6 +215,7 @@ td select.need{border-color:#E8A9A9!important;background:#FFF5F4!important}
 .rd i{position:relative}.rd i .ick{position:absolute;top:-7px;right:-6px;width:14px;height:14px;border-radius:50%;background:#fff;color:#1F7A45;border:1.5px solid #2E7D4F;font-size:10px;line-height:11px;font-weight:900;display:flex;align-items:center;justify-content:center;font-style:normal}
 .rd i.iwait{box-shadow:inset 0 -3px 0 #7FA7D9}.ick-t{color:#1F7A45;font-size:12.5px;margin-left:4px}
 .ip-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:8px 0}
+.pill.p-fin{background:#2E7D4F;color:#fff}
 .rd-btn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:8px;padding:7px 6px 2px 2px}.rd-btn:hover .rd i{border-color:#2E7D4F}.rd-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .rd i.pl{background:#DDF1E4;border-color:#2E7D4F;color:#1F5C39}
 .wdp-d.rc span{flex-direction:column;gap:0;height:44px;display:flex;align-items:center;justify-content:center}.wdp-d.rc small{font-size:9.5px;font-weight:700;line-height:1.1}
@@ -863,18 +864,19 @@ function resAddHtml(){
 }
 function intReqPanel(){
   const all=S.intReqs, fs=fieldStaff();
-  const list=S.intView==='day'&&S.slotDay?all.filter(r=>r.target_date===S.slotDay):S.intView==='done'?all.filter(r=>r.status==='승인'):all.filter(r=>r.status!=='승인');
+  const isDone=r=>r.status==='승인'&&r.interior_done;
+  const list=S.intView==='day'&&S.slotDay?all.filter(r=>r.target_date===S.slotDay):S.intView==='done'?all.filter(r=>r.status==='승인'&&!isDone(r)):S.intView==='fin'?all.filter(isDone).sort((a,b)=>a.target_date<b.target_date?1:-1):all.filter(r=>r.status!=='승인');
   const ids=list.map(r=>r.id), n=S.intSel.length, allSel=ids.length&&ids.every(x=>S.intSel.includes(x));
   const selRows=all.filter(r=>S.intSel.includes(r.id)), anyNew=selRows.some(r=>r.status!=='승인');
   const tgt=S.intDate&&S.slots.find(x=>x.slot_date===S.intDate);
   return `<div class="card"><div class="row"><div class="grow"><h2 class="h">실내세차 신청 고객 · ${esc(S.slotApt)}</h2><p class="sub">체크 → 날짜·현장직원 지정 → [배정 완료]를 누르면 예약이 확정되고, 직원웹 그 날짜 일정에 실내세차로 들어가고, 고객에게 '실내세차 예약이 완료되었어요' 알림이 가요.</p></div></div>
-    <div class="mini-tabs">${[['all',`배정 대기 ${all.filter(r=>r.status!=='승인').length}`],['done',`예약 확정 ${all.filter(r=>r.status==='승인').length}`],['day',S.slotDay?`${kdate(S.slotDay)} 신청`:'선택한 날짜']].map(([k,l])=>`<button class="mtab" aria-selected="${S.intView===k}" data-act="intView" data-f="${k}" ${k==='day'&&!S.slotDay?'disabled':''}>${l}</button>`).join('')}</div>
+    <div class="mini-tabs">${[['all',`배정 대기 ${all.filter(r=>r.status!=='승인').length}`],['done',`예약 확정 ${all.filter(r=>r.status==='승인'&&!isDone(r)).length}`],['fin',`완료 ${all.filter(isDone).length}`],['day',S.slotDay?`${kdate(S.slotDay)} 신청`:'선택한 날짜']].map(([k,l])=>`<button class="mtab" aria-selected="${S.intView===k}" data-act="intView" data-f="${k}" ${k==='day'&&!S.slotDay?'disabled':''}>${l}</button>`).join('')}</div>
     ${list.length?`<div class="tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="intSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="전체 선택"></th><th>희망일</th><th>상태</th><th>동·호수</th><th>차량번호</th><th>고객</th><th>연락처</th><th>차종·색상</th><th>실내세차 금액</th><th>현장직원</th><th>신청 시각</th></tr></thead><tbody>
       ${list.map(r=>`<tr class="${S.intSel.includes(r.id)?'picked':''}"><td class="ck"><input type="checkbox" data-intsel="${r.id}" ${S.intSel.includes(r.id)?'checked':''} aria-label="${esc(r.car_number||'')} 선택"></td>
-        <td class="nowrap"><b>${kdate(r.target_date)}</b></td><td>${r.status==='승인'?'<span class="pill p-ok">예약 확정</span>':r.status==='보류'?'<span class="pill p-hold">보류</span>':'<span class="pill p-new">배정 대기</span>'}</td>
+        <td class="nowrap"><b>${kdate(r.target_date)}</b></td><td>${isDone(r)?`<span class="pill p-fin">✓ 완료</span><br><small class="by">${r.done_at&&r.job_status==='완료'?when(r.done_at)+' · ':''}${r.admin_set?'관리자 처리':'직원 완료'}</small>`:r.status==='승인'&&r.target_date<keyOf(new Date())?'<span class="pill p-ok">예약 확정</span><br><small class="by" style="color:var(--red)">완료 체크 안 됨</small>':r.status==='승인'?'<span class="pill p-ok">예약 확정</span>':r.status==='보류'?'<span class="pill p-hold">보류</span>':'<span class="pill p-new">배정 대기</span>'}</td>
         <td>${esc(r.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b></td><td>${S.customers.some(c=>c.id===r.customer_id)?`<button class="cust-btn" data-act="custEdit" data-id="${r.customer_id}" title="고객 정보 수정">${esc(r.name||'-')}</button>`:esc(r.name||'')}</td><td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td>
         <td>${esc([r.car_model,r.car_color].filter(Boolean).join(' · ')||'-')}${clsTag(r.customer_id)}</td><td class="nowrap">${intPriceCell(r.customer_id)}</td><td class="nowrap">${r.status==='승인'?esc(r.assigned_staff_name||'미배정'):`<span class="sub">담당: ${esc(r.default_staff_id?staffName(r.default_staff_id):'미배정')}</span>`}</td><td class="nowrap sub">${when(r.created_at)}</td></tr>`).join('')}
-    </tbody></table></div>`:`<div class="empty">${S.intView==='done'?'예약 확정된 신청이 없어요.':S.intView==='day'?'이 날짜 신청이 없어요.':'배정을 기다리는 신청이 없어요.'}</div>`}
+    </tbody></table></div>`:`<div class="empty">${S.intView==='fin'?'실내세차를 완료한 건이 없어요. (최근 100일)':S.intView==='done'?'예약 확정된 신청이 없어요.':S.intView==='day'?'이 날짜 신청이 없어요.':'배정을 기다리는 신청이 없어요.'}</div>`}
     <div class="assign-bar">
       <b>${n?`${n}건 선택`:'신청을 체크해 주세요'}</b>
       <label class="field"><span>날짜 (비우면 신청한 날짜)</span><input class="inp" type="date" id="intDate" value="${esc(S.intDate)}"></label>
