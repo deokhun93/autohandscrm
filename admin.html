@@ -366,7 +366,7 @@ async function loadTab(){
       try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){ S.crole=null; }
       try{ const pd=await q(db.rpc('list_collection_pay_defaults')); S.pdef={}; (pd||[]).forEach(d=>S.pdef[d.id]=d); S.pdefOk=true; }catch(_){ S.pdef={}; S.pdefOk=false; }   // 29 SQL 전이면 기본 결제 종류 칸을 숨겨요
       if(S.crole&&!S.crole.is_chongmu) S.mineOnly=false;
-      await Promise.all([loadCollMonth(),loadPeriod()]);
+      await Promise.all([loadCollMonth(),loadPeriod(),loadPv()]);
       const live=new Set(S.coll.map(r=>r.id)); S.collSel=S.collSel.filter(x=>live.has(x)); S.collOpen=S.collOpen.filter(x=>live.has(x));
       await Promise.all(S.collOpen.map(id=>Promise.all([loadCBills(id),loadCNotes(id)])));
     }
@@ -921,8 +921,8 @@ const activeAccs=()=>S.accs.filter(a=>a.active);
 const accName=a=>a.label+(a.owner_name!==undefined&&!a.mine?` (${a.owner_name})`:'');
 // opt.bulk: 여러 명 한꺼번에(메모 없음) → 타계좌입금 · 서비스 · 기타는 각 줄에서
 function payMethodHtml(opt){ opt=opt||{};
-  const kinds=opt.bulk?PAY_METHODS.filter(m=>!NOTE_KINDS.includes(m)):PAY_METHODS;
-  if(!kinds.includes(S.payMethod)) S.payMethod='계좌이체';
+  let kinds=myKinds(S.payMethod); if(opt.bulk) kinds=kinds.filter(m=>!NOTE_KINDS.includes(m)); if(!kinds.length) kinds=['계좌이체'];
+  if(!kinds.includes(S.payMethod)) S.payMethod=kinds[0];
   const accs=activeAccs(), useAcc=ACC_KINDS.includes(S.payMethod);
   if(S.payMethod==='계좌이체'&&!accs.some(a=>String(a.id)===String(S.payAcct))) S.payAcct=accs[0]?String(accs[0].id):'';
   return `<label class="field"><span style="font-weight:700;font-size:13px">결제 종류</span><select class="inp" id="payMethod">${kinds.map(m=>`<option value="${m}" ${S.payMethod===m?'selected':''}>${ML(m)}</option>`).join('')}</select></label>
@@ -948,29 +948,56 @@ function prRange(){
   return {from:keyOf(start),to:keyOf(end)};
 }
 async function loadPeriod(){ const r=prRange(); S.pr.range=r; try{ S.pr.rows=await q(db.rpc('list_payments_range',{p_from:r.from,p_to:r.to}))||[]; S.pr.err=''; }catch(e){ S.pr.rows=[]; S.pr.err=friendly(e); } }
-function prRows(){ const pr=S.pr; return (pr.rows||[]).filter(p=>inScope(p.complex)&&(!pr.method||(pr.method==='미입력'?!p.method:p.method===pr.method))&&(!pr.proof||(p.proof||'없음')===pr.proof)&&(!pr.acct||String(p.account_id)===pr.acct)); }
+function prRows(){ const pr=S.pr, sec=PV().sec; return (pr.rows||[]).filter(p=>inScope(p.complex)&&(!sec.fWho||!pr.who||(p.by_name||'-')===pr.who)&&(!pr.method||(pr.method==='미입력'?!p.method:p.method===pr.method))&&(!pr.proof||(p.proof||'없음')===pr.proof)&&(!pr.acct||String(p.account_id)===pr.acct)); }
 function grpTable(title,rows,keyFn){ const m=new Map(); rows.forEach(p=>{const k=keyFn(p); const o=m.get(k)||{n:0,sum:0}; o.n++; o.sum+=p.amount; m.set(k,o);});
   return `<div><b style="font-size:13px">${title}</b><div class="tbl"><table><tbody>${[...m.entries()].sort((a,b)=>b[1].sum-a[1].sum).map(([k,o])=>`<tr><td>${esc(k)}</td><td class="nowrap">${o.n}건</td><td class="nowrap"><b>${won0(o.sum)}</b></td></tr>`).join('')||'<tr><td class="sub">없음</td></tr>'}</tbody></table></div></div>`; }
+/* ---------- 담당자별 '입금 내역 조회' 보기 설정 (각자 저장) ---------- */
+const PV_SEC=[['fMethod','결제 종류 고르기 (필터)'],['fAcct','계좌 고르기 (필터)'],['fWho','처리한 사람 고르기 (필터)'],['cards','요약 칸 (합계)'],['kindTbl','결제 종류별 합계 표'],['acctTbl','계좌별 합계 표'],['whoTbl','처리한 사람별 합계 표'],['list','날짜별 입금 목록']];
+const PV_CARDS=[['real','실제 입금 (서비스 제외)'],...PAY_METHODS.map(m=>[m,ML(m)])];
+const PV_COLS=[['complex','아파트'],['unit','동·호수'],['car','차량번호'],['name','고객(입금자명)'],['amount','금액'],['method','결제 종류 · 계좌'],['month','청구 달'],['note','메모'],['by','처리한 사람']];
+const PV_DEF=()=>({kinds:[...PAY_METHODS],sec:{fMethod:1,fAcct:1,fWho:0,cards:1,kindTbl:1,acctTbl:1,whoTbl:0,list:1},cards:['real','서비스','타계좌입금'],cols:Object.fromEntries(PV_COLS.map(([k])=>[k,1]))});
+function pvNorm(v){ const d=PV_DEF(); if(!v||typeof v!=='object') return d;
+  const kinds=Array.isArray(v.kinds)?PAY_METHODS.filter(m=>v.kinds.includes(m)):d.kinds;
+  return {kinds:kinds.length?kinds:d.kinds,sec:{...d.sec,...(v.sec||{})},cards:Array.isArray(v.cards)?v.cards.filter(c=>PV_CARDS.some(([k])=>k===c)):d.cards,cols:{...d.cols,...(v.cols||{})}}; }
+const PV=()=>S.pv||(S.pv=PV_DEF());
+// 결제 종류 목록: 내가 고른 것 + 지금 골라져 있는 것(고객 기본값 등)은 항상 보여요
+const myKinds=(keep)=>PAY_METHODS.filter(m=>PV().kinds.includes(m)||m===keep);
+async function loadPv(){ if(S.pvLoaded) return; S.pvLoaded=true;
+  try{ const v=await q(db.rpc('get_my_ui_pref',{p_key:'pay_view'})); S.pv=pvNorm(v); S.pvServer=true; }
+  catch(_){ S.pvServer=false; let v=null; try{ v=JSON.parse(localStorage.getItem('ah-pay-view')||'null'); }catch(__){} S.pv=pvNorm(v); } }
+function pvDialogHtml(){ const d=S.pvDraft, ck=(attr,k,on,label)=>`<label class="${on?'on':''}"><input type="checkbox" ${attr}="${esc(k)}" ${on?'checked':''}><span>${esc(label)}</span></label>`;
+  return `<h3 class="h3">쓰는 결제 종류 <span class="sub">(체크 해제한 종류는 목록에서 숨겨요 · [입금 확인] 창에도 적용)</span></h3>
+    <div class="cx-grid">${PAY_METHODS.map(m=>ck('data-pvk',m,d.kinds.includes(m),ML(m))).join('')}</div>
+    <h3 class="h3" style="margin-top:12px">보일 칸 · 표</h3><div class="cx-grid">${PV_SEC.map(([k,l])=>ck('data-pvs',k,!!d.sec[k],l)).join('')}</div>
+    ${d.sec.cards?`<h3 class="h3" style="margin-top:12px">요약 칸 <span class="sub">('기간 입금 합계'는 항상 보여요)</span></h3><div class="cx-grid">${PV_CARDS.map(([k,l])=>ck('data-pvc',k,d.cards.includes(k),l)).join('')}</div>`:''}
+    ${d.sec.list?`<h3 class="h3" style="margin-top:12px">입금 목록에 보일 칸</h3><div class="cx-grid">${PV_COLS.map(([k,l])=>ck('data-pvl',k,!!d.cols[k],l)).join('')}</div>`:''}
+    <div class="row" style="margin-top:10px"><button class="link" data-act="pvReset">처음 설정으로 되돌리기</button></div>
+    ${S.pvServer?'':'<p class="note">⚠ 30번 SQL을 실행하기 전이라 이 기기(브라우저)에만 저장돼요.</p>'}`; }
 function periodPanel(){
-  const pr=S.pr, r=pr.range||prRange(), rows=prRows(), tot=rows.reduce((a,p)=>a+p.amount,0), P=Number(S.cset.payday)||20;
+  const pr=S.pr, r=pr.range||prRange(), rows=prRows(), tot=rows.reduce((a,p)=>a+p.amount,0), P=Number(S.cset.payday)||20, v=PV(), sec=v.sec, C=v.cols;
   const fmt=k=>{const [y,m,d]=k.split('-').map(Number);return `${y}.${m}.${d}`;};
-  const days=[...new Set(rows.map(p=>p.paid_at))];
-  return `<details class="cm-box" ${pr.open===false?'':'open'} id="prBox"><summary>🧾 입금 내역 조회 <span class="sub" style="font-weight:600">· 입금한 날 기준 · 결제 종류 · 계좌별${scopeTag()}</span></summary>
+  const days=[...new Set(rows.map(p=>p.paid_at))], sum=x=>x.reduce((a,p)=>a+p.amount,0);
+  const who=[...new Set((pr.rows||[]).filter(p=>inScope(p.complex)).map(p=>p.by_name||'-'))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const card=k=>{ const x=k==='real'?rows.filter(p=>p.method!=='서비스'):rows.filter(p=>p.method===k);
+    return `<div class="${k==='real'?'b':''}"><span>${esc(k==='real'?'실제 입금 (서비스 제외)':ML(k))}</span><b>${won0(sum(x))}</b><small>${x.length}건</small></div>`; };
+  const filters=[sec.fMethod?`<select class="inp" id="prMethod" aria-label="결제 종류"><option value="">결제 종류 전체</option>${[...myKinds(pr.method),'미입력'].map(m=>`<option value="${m}" ${pr.method===m?'selected':''}>${ML(m)}</option>`).join('')}</select>`:'',
+    sec.fAcct?`<select class="inp" id="prAcct" aria-label="계좌"><option value="">계좌 전체</option>${S.accs.map(a=>`<option value="${a.id}" ${pr.acct===String(a.id)?'selected':''}>${esc(accName(a))}${a.active?'':' (안 씀)'}</option>`).join('')}</select>`:'',
+    sec.fWho?`<select class="inp" id="prWho" aria-label="처리한 사람"><option value="">처리한 사람 전체</option>${who.map(w=>`<option ${pr.who===w?'selected':''}>${esc(w)}</option>`).join('')}</select>`:''].filter(Boolean).join('');
+  const tbls=[sec.kindTbl?grpTable('결제 종류별',rows,p=>p.method?ML(p.method):'미입력'):'',sec.acctTbl?grpTable('계좌별',rows.filter(p=>p.account_id||ACC_KINDS.includes(p.method)),p=>p.account||'계좌 미지정'):'',sec.whoTbl?grpTable('처리한 사람별',rows,p=>p.by_name||'-'):''].filter(Boolean).join('');
+  const cells=p=>[C.complex?`<td>${esc(p.complex||'-')}</td>`:'',C.unit?`<td>${esc(p.unit||'-')}</td>`:'',C.car?`<td><b class="car">${esc(p.car_number||'-')}</b></td>`:'',
+    C.name?`<td>${esc(p.name||'')}${p.payer_name&&p.payer_name!==p.name?` <small class="by">(${esc(p.payer_name)})</small>`:''}</td>`:'',C.amount?`<td class="nowrap"><b>${won0(p.amount)}</b></td>`:'',C.method?`<td>${payTag(p)}</td>`:'',
+    C.month?`<td class="sub nowrap">${p.bill_month.slice(0,7).replace('-','년 ')}월분${p.bill_done?'':' · 일부'}</td>`:'',C.note?`<td class="sub">${esc(p.note||'')}</td>`:'',C.by?`<td class="sub nowrap">${esc(p.by_name||'')}</td>`:''].join('');
+  return `<details class="cm-box" ${pr.open===false?'':'open'} id="prBox"><summary>🧾 입금 내역 조회 <span class="sub" style="font-weight:600">· 입금한 날 기준${scopeTag()}</span></summary>
     <div class="row" style="margin-top:8px;flex-wrap:wrap;gap:8px"><div class="chips">${[['pay',`월급 기간 (${P+1>28?1:P+1}일~${P}일)`],['month','달별'],['custom','직접 지정']].map(([k,l])=>`<button class="chip" aria-pressed="${pr.mode===k}" data-act="prMode" data-f="${k}">${l}</button>`).join('')}</div>
       ${pr.mode==='custom'?`<input class="inp" type="date" id="prFrom" value="${esc(r.from)}" aria-label="시작일"> ~ <input class="inp" type="date" id="prTo" value="${esc(r.to)}" aria-label="끝날"><button class="btn2 sm" data-act="prGo">조회</button>`
         :`<div class="month-nav"><button class="btn2 sm" data-act="prMove" data-d="-1" aria-label="이전">◀</button><b style="min-width:190px">${fmt(r.from)} ~ ${fmt(r.to)}</b><button class="btn2 sm" data-act="prMove" data-d="1" aria-label="다음">▶</button></div>${pr.off?'<button class="link" data-act="prNow">지금 기간으로</button>':''}`}
-      <span class="grow"></span><button class="btn2 sm" data-act="prExport">📤 엑셀</button></div>
-    <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">
-      <select class="inp" id="prMethod" aria-label="결제 종류"><option value="">결제 종류 전체</option>${[...PAY_METHODS,'미입력'].map(m=>`<option value="${m}" ${pr.method===m?'selected':''}>${ML(m)}</option>`).join('')}</select>
-      <select class="inp" id="prAcct" aria-label="계좌"><option value="">계좌 전체</option>${S.accs.map(a=>`<option value="${a.id}" ${pr.acct===String(a.id)?'selected':''}>${esc(accName(a))}${a.active?'':' (안 씀)'}</option>`).join('')}</select></div>
+      <span class="grow"></span><button class="btn2 sm" data-act="pvOpen" title="내게 필요한 칸만 보이게 설정">⚙ 보기 설정</button><button class="btn2 sm" data-act="prExport">📤 엑셀</button></div>
+    ${filters?`<div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px">${filters}</div>`:''}
     ${pr.err?`<p class="note" style="color:var(--red)">${esc(pr.err)}</p>`:''}
-    <div class="cm-sum"><div class="a"><span>기간 입금 합계</span><b>${won0(tot)}</b><small>${rows.length}건</small></div>
-      <div class="b"><span>실제 입금 (서비스 제외)</span><b>${won0(rows.filter(p=>p.method!=='서비스').reduce((a,p)=>a+p.amount,0))}</b><small>${rows.filter(p=>p.method!=='서비스').length}건</small></div>
-      ${(()=>{const x=rows.filter(p=>p.method==='서비스');return `<div><span>서비스</span><b>${won0(x.reduce((a,p)=>a+p.amount,0))}</b><small>${x.length}건</small></div>`;})()}
-      ${(()=>{const x=rows.filter(p=>p.method==='타계좌입금');return `<div><span>타계좌입금</span><b>${won0(x.reduce((a,p)=>a+p.amount,0))}</b><small>${x.length}건</small></div>`;})()}</div>
-    <div class="pr-grid">${grpTable('결제 종류별',rows,p=>p.method?ML(p.method):'미입력')}${grpTable('계좌별',rows.filter(p=>p.account_id||ACC_KINDS.includes(p.method)),p=>p.account||'계좌 미지정')}</div>
-    ${!pr.rows?'<p class="sub">불러오는 중...</p>':rows.length?days.map(k=>{const ps=rows.filter(p=>p.paid_at===k);return `<div class="pay-day">${kdate(k)} <span>${ps.length}건 · ${won0(ps.reduce((a,p)=>a+p.amount,0))}</span></div>
-      <div class="tbl"><table><tbody>${ps.map(p=>`<tr><td>${esc(p.complex||'-')}</td><td>${esc(p.unit||'-')}</td><td><b class="car">${esc(p.car_number||'-')}</b></td><td>${esc(p.name||'')}${p.payer_name&&p.payer_name!==p.name?` <small class="by">(${esc(p.payer_name)})</small>`:''}</td><td class="nowrap"><b>${won0(p.amount)}</b></td><td>${payTag(p)}</td><td class="sub nowrap">${p.bill_month.slice(0,7).replace('-','년 ')}월분${p.bill_done?'':' · 일부'}</td><td class="sub">${esc(p.note||'')}</td><td class="sub nowrap">${esc(p.by_name||'')}</td></tr>`).join('')}</tbody></table></div>`;}).join(''):'<p class="sub">이 기간에 들어온 입금이 없어요.</p>'}
+    ${sec.cards?`<div class="cm-sum"><div class="a"><span>기간 입금 합계</span><b>${won0(tot)}</b><small>${rows.length}건</small></div>${v.cards.map(card).join('')}</div>`:`<p style="margin:8px 0 0"><b>기간 입금 합계 ${won0(tot)}</b> <span class="sub">${rows.length}건</span></p>`}
+    ${tbls?`<div class="pr-grid">${tbls}</div>`:''}
+    ${!sec.list?'':!pr.rows?'<p class="sub">불러오는 중...</p>':rows.length?days.map(k=>{const ps=rows.filter(p=>p.paid_at===k);return `<div class="pay-day">${kdate(k)} <span>${ps.length}건 · ${won0(sum(ps))}</span></div>
+      <div class="tbl"><table><tbody>${ps.map(p=>`<tr>${cells(p)}</tr>`).join('')}</tbody></table></div>`;}).join(''):'<p class="sub">이 기간에 들어온 입금이 없어요.</p>'}
   </details>`;
 }
 async function prExport(){ try{ const X=await loadXLSX(), r=S.pr.range||prRange(), rows=prRows();
@@ -1130,7 +1157,7 @@ const CF=[['complex','아파트'],['unit','동·호수'],['car_number','차량�
 // 고객별 기본 결제 종류 · 입금 계좌 · 결제 메모 ([입금 확인] 창에서 자동 선택)
 function payDefHtml(){ const f=S.cform||{}, m=f.pay_method||'', accs=activeAccs();
   return `<div class="cm-box" style="margin:6px 0 12px;border-color:#1D3A6E"><b style="font-size:14px">💳 결제 종류 · 입금 계좌</b> <span class="sub">(정해 두면 [입금 확인] 창에서 자동으로 골라져요)</span>
-    <div class="set-grid" style="margin-top:8px"><label class="field"><span>결제 종류</span><select class="inp" data-cf="pay_method" id="cfPayMethod"><option value="">정하지 않음</option>${PAY_METHODS.map(x=>`<option value="${x}" ${m===x?'selected':''}>${ML(x)}</option>`).join('')}</select></label>
+    <div class="set-grid" style="margin-top:8px"><label class="field"><span>결제 종류</span><select class="inp" data-cf="pay_method" id="cfPayMethod"><option value="">정하지 않음</option>${myKinds(m).map(x=>`<option value="${x}" ${m===x?'selected':''}>${ML(x)}</option>`).join('')}</select></label>
     ${ACC_KINDS.includes(m)?`<label class="field"><span>입금 계좌</span><select class="inp" data-cf="pay_account_id"><option value="">계좌 지정 안 함</option>${accs.map(a=>`<option value="${a.id}" ${String(f.pay_account_id||'')===String(a.id)?'selected':''}>${esc(accName(a))}</option>`).join('')}</select></label>`:''}</div>
     <label class="field"><span>결제 메모 ${NOTE_KINDS.includes(m)?'<b style="color:var(--red)">(필수 · 사유)</b>':'<span class="sub">(선택)</span>'}</span><input class="inp" data-cf="pay_note" maxlength="300" value="${esc(f.pay_note||'')}" placeholder="${m==='서비스'?'예: 지인 소개로 서비스 차량':m==='타계좌입금'?'예: 대표 개인계좌로 입금':m==='간이영수증'?'예: 세금 절세용 간이영수증 발행':'예: 매달 25일 자동이체'}"></label></div>`; }
 function collFormHtml(){
@@ -1304,6 +1331,16 @@ document.addEventListener('click',async e=>{
     case 'prNow': S.pr.off=0; S.pr.rows=null; render(); await loadPeriod(); render(); break;
     case 'prGo': S.pr.from=($('#prFrom')||{}).value||''; S.pr.to=($('#prTo')||{}).value||''; S.pr.rows=null; render(); await loadPeriod(); render(); break;
     case 'prExport': await prExport(); break;
+    case 'pvOpen': S.pvDraft=JSON.parse(JSON.stringify(PV()));
+      ask('입금 내역 조회 · 보기 설정','나에게 필요한 칸만 체크하고 [저장]을 누르세요. 다른 담당자 화면에는 영향이 없어요(사람마다 따로 저장).','저장',async()=>{
+        const d=pvNorm(S.pvDraft);
+        if(!S.pvDraft.kinds.length){ toast('결제 종류를 1개 이상 체크해 주세요.',true); S.busy=false; render(); return; }
+        try{ if(S.pvServer) await q(db.rpc('set_my_ui_pref',{p_key:'pay_view',p_value:d})); else localStorage.setItem('ah-pay-view',JSON.stringify(d));
+          S.pv=d; S.pr.method=d.sec.fMethod?S.pr.method:''; S.pr.acct=d.sec.fAcct?S.pr.acct:''; S.pr.who=d.sec.fWho?S.pr.who:''; toast('내 보기 설정을 저장했어요.'); }
+        catch(err){ toast(friendly(err),true); }
+        S.dialog=null; S.busy=false; S.pvDraft=null; render(); },pvDialogHtml());
+      S.dialog.rebuild=pvDialogHtml; break;
+    case 'pvReset': S.pvDraft=PV_DEF(); if(S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } break;
     case 'nMark': { const st=Number(t.dataset.s), on=t.dataset.on!=='1', r=(S.coll||[]).find(x=>x.id===id);
       const run=()=>act(()=>q(db.rpc('set_collection_notice_mark',{p_member_ids:[id],p_month:null,p_stage:st,p_on:on})),on?`${st}차 입금 안내를 보냄으로 체크했어요.`:`${st}차 안내 체크를 풀었어요.`);
       if(on) await run(); else ask(`${st}차 안내 체크를 풀까요?`,`${r?r.car_number||'':''} 이번 달 ${st}차 안내 기록을 지워요.`,'풀기',run); break; }
@@ -1574,6 +1611,13 @@ document.addEventListener('change',async e=>{
   if(t.id==='prMethod'){ S.pr.method=t.value; render(); return; }
   if(t.id==='prProof'){ S.pr.proof=t.value; render(); return; }
   if(t.id==='prAcct'){ S.pr.acct=t.value; render(); return; }
+  if(t.id==='prWho'){ S.pr.who=t.value; render(); return; }
+  if(t.dataset.pvk!==undefined||t.dataset.pvs!==undefined||t.dataset.pvc!==undefined||t.dataset.pvl!==undefined){ const d=S.pvDraft; if(!d) return;
+    if(t.dataset.pvk!==undefined){ const k=t.dataset.pvk; d.kinds=t.checked?PAY_METHODS.filter(m=>d.kinds.includes(m)||m===k):d.kinds.filter(m=>m!==k); }
+    if(t.dataset.pvs!==undefined) d.sec[t.dataset.pvs]=t.checked?1:0;
+    if(t.dataset.pvc!==undefined){ const k=t.dataset.pvc; d.cards=t.checked?PV_CARDS.map(([x])=>x).filter(x=>d.cards.includes(x)||x===k):d.cards.filter(x=>x!==k); }
+    if(t.dataset.pvl!==undefined) d.cols[t.dataset.pvl]=t.checked?1:0;
+    if(S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } return; }
   if(t.dataset.paypick){ S.payPick[t.dataset.paypick]=t.checked; if(t.dataset.m&&S.dialog){ S.payAmtTouched=false; S.dialog.extra=payExtra(Number(t.dataset.m)); render(); } return; }
   if(t.id==='payDate'){ S.payDate=t.value; return; }
   if(t.dataset.cf&&S.cform){ S.cform[t.dataset.cf]=t.value; if(t.dataset.cf==='pay_method'&&S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } return; }
