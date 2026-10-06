@@ -215,6 +215,15 @@ tr.round-full td{background:#F4FAF6}.rt-done{color:#1F5136;font-weight:800}.mont
 .pill.st-new{background:#DCE8FB;color:#1D3A6E}.pill.st-move{background:#EADCF7;color:#5B2E8C}
 .cm-row.is-move td{background:#F6EFFC}.chip.cst-new[aria-pressed="true"]{background:#1D3A6E;border-color:#1D3A6E;color:#fff}.chip.cst-move[aria-pressed="true"]{background:#6B3FA0;border-color:#6B3FA0;color:#fff}
 .btn2.st-move{color:#5B2E8C;border-color:#CDB4EA}
+.cm-box{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:12px 14px}.cm-box>summary{cursor:pointer;font-weight:800;font-size:15px}
+.cm-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:10px 0}.cm-sum>div{border-radius:12px;padding:10px 12px;background:var(--muted)}
+.cm-sum b{display:block;font-size:19px;font-weight:900}.cm-sum span{font-size:12px;font-weight:700;color:var(--sub)}.cm-sum small{display:block;font-size:11.5px;color:var(--sub)}
+.cm-sum .a{background:var(--ink);color:#fff}.cm-sum .a span,.cm-sum .a small{color:#C4CBD7}.cm-sum .b{background:var(--ok)}.cm-sum .c{background:#FDECEA}.cm-sum .c b{color:var(--red)}
+.pay-day{margin:8px 0 2px;font-weight:800;font-size:13.5px;display:flex;gap:8px;align-items:center}.pay-day span{font-weight:700;color:var(--sub);font-size:12.5px}
+.coll-stats{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.coll-stats .st{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:5px 10px;font-size:12.5px;font-weight:700;color:var(--sub)}.coll-stats .st b{color:var(--text);font-size:14px;margin-left:4px}.coll-stats .st.r b{color:var(--red)}.coll-stats .st.g b{color:#1F5136}
+.pays{list-style:none;margin:4px 0 0;padding:0;font-size:12.5px;color:var(--sub);display:flex;flex-direction:column;gap:2px;width:100%}.pays li{display:flex;gap:8px;align-items:center;border:0;background:none;padding:0}
+.adj{color:#9A4A0E;font-weight:700}.part{background:#FFF1D6;color:#8A5A00}
+@media(max-width:700px){.cm-sum{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
 <body>
@@ -306,7 +315,7 @@ const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:nul
   ntScope:'now',notices:null,ntForm:null,
   rdMonth:0,rounds:null,rdTab:'전체',rdApt:'',rdQ:'',rdSel:[],rdCancel:false,
   liveDay:keyOf(new Date()),live:null,liveAt:null,frows:null,frState:'open',frMine:false,frSel:[],frReply:{},fmgr:[],purl:{},pview:null,cntField:0,cntFieldAll:0,
-  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',cancelNotify:true,resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
+  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,cmMonth:0,cmData:null,cmView:'apt',payAmt:'',payAmtTouched:false,payNote:'',adjVal:'',adjNote:'',collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',cancelNotify:true,resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
   custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
 
@@ -344,6 +353,7 @@ async function loadTab(){
     }
     if(S.tab==='coll'){
       S.coll=await q(db.rpc('list_collections'))||[];
+      await loadCollMonth();
       const live=new Set(S.coll.map(r=>r.id)); S.collSel=S.collSel.filter(x=>live.has(x)); S.collOpen=S.collOpen.filter(x=>live.has(x));
       await Promise.all(S.collOpen.map(id=>Promise.all([loadCBills(id),loadCNotes(id)])));
     }
@@ -850,6 +860,62 @@ const NK={
   coll:{list:id=>S.cnotes[id],load:id=>loadCNotes(id),upd:'update_collection_note',del:'delete_collection_note',who:id=>(S.coll||[]).find(x=>x.id===id),
     after:id=>{const r=(S.coll||[]).find(x=>x.id===id); if(r){ r.note_count=S.cnotes[id].length; r.star_count=S.cnotes[id].filter(x=>x.important).length; r.notes_text=S.cnotes[id].map(n=>(n.important?'⭐':'')+n.body).join(' / '); }}}
 };
+/* ---------- 수금관리: 월별 수금 현황 (청구 달 기준) ---------- */
+function cmMonthDate(){ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()+S.cmMonth); return d; }
+async function loadCollMonth(){ const m=keyOf(cmMonthDate());
+  try{ const [sm,py,ch]=await Promise.all([q(db.rpc('collection_month_summary',{p_month:m})),q(db.rpc('list_collection_payments',{p_month:m})),q(db.rpc('list_collection_changes',{p_month:m}))]);
+    S.cmData={month:m,sum:sm||[],pays:py||[],chg:ch||[]}; }catch(e){ S.cmData={month:m,err:friendly(e),sum:[],pays:[],chg:[]}; } }
+function collMonthPanel(){
+  const d=S.cmData, md=cmMonthDate(), title=`${md.getFullYear()}년 ${md.getMonth()+1}월`;
+  if(!d) return '';
+  const T=d.sum.reduce((a,r)=>({members:a.members+r.members,billed:a.billed+r.billed,paid:a.paid+r.paid,unpaid:a.unpaid+r.unpaid,done:a.done+r.done_count,part:a.part+r.partial_count,open:a.open+r.open_count,adj:a.adj+r.adjusted_count,adjs:a.adjs+r.adjust_sum}),{members:0,billed:0,paid:0,unpaid:0,done:0,part:0,open:0,adj:0,adjs:0});
+  const cancel=d.chg.filter(c=>/해지/.test(c.status||'')).length, pause=d.chg.length-cancel;
+  const days=[...new Set(d.pays.map(p=>p.paid_at))];
+  const view=S.cmView==='pay'?(d.pays.length?days.map(k=>{const ps=d.pays.filter(p=>p.paid_at===k);return `<div class="pay-day">${kdate(k)} <span>${ps.length}건 · ${won0(ps.reduce((a,p)=>a+p.amount,0))}</span></div>
+      <div class="tbl"><table><tbody>${ps.map(p=>`<tr><td>${esc(p.complex||'-')}</td><td>${esc(p.unit||'-')}</td><td><b class="car">${esc(p.car_number||'-')}</b></td><td>${esc(p.name||'')}${p.payer_name&&p.payer_name!==p.name?` <small class="by">(${esc(p.payer_name)})</small>`:''}</td><td class="nowrap"><b>${won0(p.amount)}</b></td><td>${p.bill_done?'<span class="pill cs-ok">완료</span>':'<span class="pill part">일부 입금</span>'}</td><td class="sub">${esc(p.note||'')}</td><td class="sub nowrap">${esc(p.by_name||'')}</td></tr>`).join('')}</tbody></table></div>`;}).join(''):'<p class="sub">이 달 청구분으로 들어온 입금이 없어요.</p>')
+    :S.cmView==='chg'?(d.chg.length?`<div class="tbl"><table><thead><tr><th>아파트</th><th>동·호수</th><th>차량번호</th><th>고객</th><th>상태</th><th>바뀐 날</th><th>어디서</th></tr></thead><tbody>${d.chg.map(c=>`<tr><td>${esc(c.complex||'-')}</td><td>${esc(c.unit||'-')}</td><td><b class="car">${esc(c.car_number||'-')}</b></td><td>${esc(c.name||'')}</td><td><span class="pill ${/해지/.test(c.status)?'st-cancel':'st-pause'}">${esc(c.status||'')}</span></td><td class="nowrap">${when(c.changed_at)}</td><td class="sub">${esc(c.source)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="sub">이 달에 해지 · 정지된 고객이 없어요.</p>')
+    :(d.sum.length?`<div class="tbl"><table><thead><tr><th>아파트</th><th>인원</th><th>받을 돈</th><th>입금받은 돈</th><th>미입금</th><th>수금완료 / 일부 / 미입금</th><th>금액 조정</th></tr></thead><tbody>
+      ${d.sum.map(r=>`<tr><td><button class="link" data-act="cmApt" data-a="${esc(r.complex)}" title="이 아파트 명단 보기">${esc(r.complex)}</button></td><td>${r.members}명</td><td class="nowrap"><b>${won0(r.billed)}</b></td><td class="nowrap" style="color:#1F5136;font-weight:800">${won0(r.paid)}</td><td class="nowrap" style="color:var(--red);font-weight:800">${won0(r.unpaid)}</td><td class="nowrap">${r.done_count} / ${r.partial_count} / ${r.open_count}</td><td class="nowrap sub">${r.adjusted_count?`${r.adjusted_count}건 (${r.adjust_sum>0?'+':''}${Number(r.adjust_sum).toLocaleString('ko-KR')}원)`:'-'}</td></tr>`).join('')}
+      <tr style="font-weight:800"><td>전체</td><td>${T.members}명</td><td>${won0(T.billed)}</td><td style="color:#1F5136">${won0(T.paid)}</td><td style="color:var(--red)">${won0(T.unpaid)}</td><td>${T.done} / ${T.part} / ${T.open}</td><td class="sub">${T.adj?`${T.adj}건`:'-'}</td></tr></tbody></table></div>`:'<p class="sub">이 달 청구가 없어요.</p>');
+  return `<details class="cm-box" open><summary>📊 월별 수금 현황 <span class="sub" style="font-weight:600">· 청구 달 기준</span></summary>
+    <div class="row" style="margin-top:8px"><div class="month-nav"><button class="btn2 sm" data-act="cmMonth" data-d="-1" aria-label="이전 달">◀</button><b>${title}</b><button class="btn2 sm" data-act="cmMonth" data-d="1" ${S.cmMonth>=0?'disabled':''} aria-label="다음 달">▶</button></div>${S.cmMonth?`<button class="link" data-act="cmThis">이번 달로</button>`:''}<span class="grow"></span><button class="btn2 sm" data-act="cmExport">📤 이 달 수금 현황 엑셀</button></div>
+    ${d.err?`<p class="note" style="color:var(--red)">${esc(d.err)}</p>`:''}
+    <div class="cm-sum"><div class="a"><span>${md.getMonth()+1}월 받을 돈</span><b>${won0(T.billed)}</b><small>${T.members}명${T.adj?` · 금액 조정 ${T.adj}건`:''}</small></div>
+      <div class="b"><span>입금받은 돈</span><b>${won0(T.paid)}</b><small>수금완료 ${T.done}명${T.part?` · 일부 입금 ${T.part}명`:''}</small></div>
+      <div class="c"><span>미입금</span><b>${won0(T.unpaid)}</b><small>${T.open+T.part}명 남음</small></div>
+      <div><span>당월 해지 · 정지</span><b>${d.chg.length}명</b><small>해지 ${cancel} · 정지 ${pause}</small></div></div>
+    <div class="mini-tabs">${[['apt','아파트별'],['pay','입금 날짜별'],['chg','당월 해지 · 정지']].map(([k,l])=>`<button class="mtab" aria-selected="${S.cmView===k}" data-act="cmView" data-f="${k}">${l}</button>`).join('')}</div>
+    <div style="margin-top:8px">${view}</div></details>`;
+}
+async function cmExport(){
+  try{ const X=await loadXLSX(), d=S.cmData, md=cmMonthDate(); if(!d) return;
+    const wb=X.utils.book_new();
+    X.utils.book_append_sheet(wb,X.utils.json_to_sheet(d.sum.map(r=>({아파트:r.complex,인원:r.members,받을돈:r.billed,입금받은돈:r.paid,미입금:r.unpaid,수금완료:r.done_count,일부입금:r.partial_count,미입금인원:r.open_count,조정건수:r.adjusted_count,조정합계:r.adjust_sum}))),'아파트별');
+    X.utils.book_append_sheet(wb,X.utils.json_to_sheet(d.pays.map(p=>({입금일:p.paid_at,아파트:p.complex,동호수:p.unit,차량번호:p.car_number,고객:p.name,입금자명:p.payer_name,금액:p.amount,상태:p.bill_done?'완료':'일부 입금',메모:p.note,처리:p.by_name}))),'입금 날짜별');
+    X.utils.book_append_sheet(wb,X.utils.json_to_sheet(d.chg.map(c=>({아파트:c.complex,동호수:c.unit,차량번호:c.car_number,고객:c.name,상태:c.status,바뀐날:c.changed_at?String(c.changed_at).slice(0,10):'',어디서:c.source}))),'당월 해지·정지');
+    X.writeFile(wb,`오토핸즈_월별수금현황_${md.getFullYear()}${pad(md.getMonth()+1)}.xlsx`); toast('엑셀로 받았어요.'); }catch(e){ toast(friendly(e),true); } }
+/* 입금 받기 창: 고른 달(오래된 달부터)에 받은 금액을 채워 넣어요. 덜 받으면 차액은 미수로 남아요 */
+function payPicked(mid){ return (S.cbills[mid]||[]).filter(b=>!b.paid_at&&S.payPick[b.id]).sort((x,y)=>x.bill_month.localeCompare(y.bill_month)); }
+function payExtra(mid){
+  const un=(S.cbills[mid]||[]).filter(b=>!b.paid_at).sort((x,y)=>x.bill_month.localeCompare(y.bill_month)), need=payPicked(mid).reduce((a,b)=>a+b.remaining,0);
+  if(!S.payAmtTouched) S.payAmt=String(need);
+  const amt=Number(String(S.payAmt).replace(/[^0-9]/g,''))||0;
+  return `<div class="pay-list">${un.map(b=>`<label class="flag"><input type="checkbox" data-paypick="${b.id}" data-m="${mid}" ${S.payPick[b.id]?'checked':''}><span>${b.bill_month.slice(0,7).replace('-','년 ')}월 · 남은 ${won0(b.remaining)}${b.paid_amount?` (청구 ${won0(b.total_amount)} 중 ${won0(b.paid_amount)} 받음)`:''}${b.overdue?' · 미납':''}</span></label>`).join('')}</div>
+    <label class="field"><span style="font-weight:700;font-size:13px">받은 금액 (원)</span><input class="inp" id="payAmt" inputmode="numeric" value="${esc(S.payAmt)}"></label>
+    <p class="note" id="payHint" style="margin:0">${payHint(need,amt)}</p>
+    <label class="field"><span style="font-weight:700;font-size:13px">입금일</span><input class="inp" type="date" id="payDate" value="${esc(S.payDate)}"></label>
+    <label class="field"><span style="font-weight:700;font-size:13px">메모 <span class="sub">(선택 · 금액이 다른 이유 등)</span></span><input class="inp" id="payNote" maxlength="300" value="${esc(S.payNote)}"></label>`;
+}
+function payHint(need,amt){ if(!amt) return '받은 금액을 적어 주세요.'; if(amt<need) return `<b style="color:var(--red)">${won0(need-amt)}</b>이 미수로 남아요. (수금완료가 아니라 '일부 입금'으로 표시)`; if(amt>need) return `청구보다 ${won0(amt-need)} 더 받았어요. 마지막 달에 초과 입금으로 기록돼요.`; return '청구 금액과 같아요. 수금완료로 처리돼요.'; }
+async function payRun(mid){
+  const picks=payPicked(mid), amt=Number(String(S.payAmt).replace(/[^0-9]/g,''))||0;
+  if(!picks.length){ toast('입금할 달을 체크해 주세요.',true); return; } if(amt<=0){ toast('받은 금액을 적어 주세요.',true); return; }
+  let left=amt, n=0;
+  for(let i=0;i<picks.length&&left>0;i++){ const b=picks[i], last=i===picks.length-1, put=last?left:Math.min(left,b.remaining); if(put<=0) continue;
+    await q(db.rpc('pay_collection_bill_amount',{p_bill_id:b.id,p_amount:put,p_paid_at:S.payDate||keyOf(new Date()),p_note:S.payNote||''})); left-=put; n++; }
+  const need=picks.reduce((a,b)=>a+b.remaining,0);
+  toast(amt<need?`${won0(amt)} 입금했어요. ${won0(need-amt)}은 미수로 남아요.`:`${n}개월 입금 확인했어요.`);
+}
 async function loadCBills(id){ S.cbills[id]=await q(db.rpc('list_collection_bills',{p_member_id:id}))||[]; }
 async function loadCNotes(id){ S.cnotes[id]=await q(db.rpc('list_collection_notes',{p_member_id:id}))||[]; }
 const won0=n=>n==null||n===''?'-':Number(n).toLocaleString('ko-KR')+'원';
@@ -864,9 +930,10 @@ function collView(){
   const cnt={전체:base.length}; COLL_TABS.forEach(k=>cnt[k]=base.filter(r=>r.coll_state===k).length);
   const list=S.collTab==='전체'?base:base.filter(r=>r.coll_state===S.collTab);
   const ids=list.map(r=>r.id), allSel=ids.length&&ids.every(x=>S.collSel.includes(x)), n=S.collSel.length;
-  const sumUnpaid=list.reduce((a,r)=>a+(r.unpaid_amount||0),0);
+  const sumUnpaid=list.reduce((a,r)=>a+(r.unpaid_amount||0),0), sumBill=list.reduce((a,r)=>a+(r.cur_total||0),0),
+    sumPaid=list.reduce((a,r)=>a+Math.min(r.cur_paid?(r.cur_total||0):(r.cur_paid_amount||0),r.cur_total||0),0), sumRest=list.reduce((a,r)=>a+(r.cur_remaining||0),0);
   const COLS=17;
-  return `<div class="row"><div class="grow"><h1 class="h">수금관리</h1><p class="sub">매달 1일에 청구가 자동으로 생기고, [입금 확인]을 누르면 수금완료예요. 납부일이 지나면 미납, 2개월 이상 밀리면 장기미납으로 자동으로 옮겨져요. 고객관리와 따로 관리하는 명단이에요.<br>예약 확정된 실내세차(세단 10,000원 · SUV 15,000원)는 그 달 청구에 자동으로 더해져요: 외부세차비용 + 실내세차비용 = 매월 요금.</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">수금관리</h1><p class="sub">매달 1일에 청구가 자동으로 생기고, [입금 확인]에서 받은 금액을 적으면 수금완료예요(덜 받으면 차액은 미수로 남아요). 납부일이 지나면 미납, 2개월 이상 밀리면 장기미납으로 자동으로 옮겨져요. 고객관리와 따로 관리하는 명단이에요.<br>예약 확정된 실내세차(세단 10,000원 · SUV 15,000원)는 그 달 청구에 자동으로 더해져요: 외부세차비용 + 실내세차비용 = 매월 요금.</p></div></div>
   <div class="coll-tools">
     <label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="collFile" accept=".xlsx,.xls,.csv" hidden></label>
     <button class="btn2 sm" data-act="collTpl">엑셀 양식 받기</button>
@@ -874,13 +941,14 @@ function collView(){
     <button class="btn2 sm" data-act="collFromCust">고객관리에서 불러오기</button>
     <button class="btn sm" data-act="collNew">+ 직접 추가</button>
   </div>
+  ${collMonthPanel()}
   <div class="mini-tabs" role="tablist">${['전체',...COLL_TABS].map(k=>`<button role="tab" class="mtab mt-${k}" aria-selected="${S.collTab===k}" data-act="collTab" data-f="${k}">${k} <b>${cnt[k]}</b></button>`).join('')}</div>
   <form id="collsearch" class="req-tools" role="search">
     <select class="inp" id="collApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.collApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <input class="inp grow" id="collQ" type="search" value="${esc(S.collQin)}" placeholder="차량번호 · 고객 · 입금자명 · 동호수 · 연락처 검색" aria-label="검색">
     <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.collQ||S.collApt?`<button class="link" type="button" data-act="collClear">초기화</button>`:''}
   </form>
-  <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}명 선택됨`:`${list.length}명${sumUnpaid?` · 미입금 합계 ${won0(sumUnpaid)}`:''}`}</b>${n?`<button class="link" data-act="collSelNone">선택 해제</button>`:''}<span class="grow"></span>
+  <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}명 선택됨`:`${list.length}명`}</b>${n?'':`<span class="coll-stats"><span class="st">이번 달 요금<b>${won0(sumBill)}</b></span><span class="st g">입금완료<b>${won0(sumPaid)}</b></span><span class="st r">미입금<b>${won0(sumRest)}</b></span>${sumUnpaid>sumRest?`<span class="st r" title="지난 달 밀린 금액 포함">밀린 달 포함<b>${won0(sumUnpaid)}</b></span>`:''}</span>`}${n?`<button class="link" data-act="collSelNone">선택 해제</button>`:''}<span class="grow"></span>
     <button class="btn2 sm" data-act="collPayMonth" ${n?'':'disabled'}>이번 달 입금 확인</button>
     <button class="btn sm danger" data-act="collDel" ${n?'':'disabled'}>🗑 명단에서 삭제</button></div>
   ${list.length?`<div class="tbl cm-tbl coll-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="collSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>상태</th><th>고객(입금자명)</th><th>연락처</th><th>차종</th><th>색상</th><th>정기권</th><th>지정 요일</th><th>담당 직원</th><th>계약일</th><th>수금</th><th>이번 달 요금 · 납부일</th><th>미입금</th><th>수금 메모</th></tr></thead><tbody>
@@ -889,7 +957,7 @@ function collView(){
       <td>${esc(r.complex||'-')}</td><td>${esc(r.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b></td><td>${esc(r.wash_status||'-')}</td>
       <td><b>${esc(r.name||'-')}</b>${r.payer_name&&r.payer_name!==r.name?`<small class="by"> (${esc(r.payer_name)})</small>`:''}</td>
       <td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td><td>${esc(r.car_model||'-')}${r.car_class!==undefined?`<span class="cls ${r.car_class==='SUV'?'cls-suv':r.car_class?'':'cls-none'}">${esc(r.car_class||'미분류')}</span>`:''}</td><td>${esc(r.car_color||'-')}</td><td class="nowrap">${esc(r.wash_plan||'-')}</td><td class="nowrap">${esc(r.wash_weekday||'-')}</td><td class="nowrap">${esc(r.staff_name||'-')}</td><td class="nowrap">${ymd(r.contract_date)}</td>
-      <td class="nowrap">${collPill(r.coll_state)}${r.overdue_months>1?` <small class="by">${r.overdue_months}개월</small>`:''}${r.coll_state!=='수금완료'&&r.coll_state!=='청구없음'?` <button class="link" data-act="collPay" data-id="${r.id}">입금 확인</button>`:''}</td>
+      <td class="nowrap">${collPill(r.coll_state)}${r.cur_paid_amount&&!r.cur_paid?` <span class="pill part" title="이번 달 받은 돈">일부 ${won0(r.cur_paid_amount)}</span>`:''}${r.overdue_months>1?` <small class="by">${r.overdue_months}개월</small>`:''}${r.coll_state!=='수금완료'&&r.coll_state!=='청구없음'?` <button class="link" data-act="collPay" data-id="${r.id}">입금 확인</button>`:''}</td>
       <td class="nowrap">${r.cur_total===undefined?`${won0(r.fee)} · ${r.due_day}일`:`<div class="fee3"><span>외부세차비용 : ${won0(r.cur_external)}</span><span>실내세차비용 : ${won0(r.cur_interior||0)}${r.cur_interior_count?` (${r.cur_interior_count}회)`:''}</span><b>매월 요금 : ${won0(r.cur_total)}</b><span>납부일 매달 ${r.due_day}일</span></div>`}</td><td class="nowrap">${r.unpaid_amount?`<b style="color:var(--red)">${won0(r.unpaid_amount)}</b>`:'-'}</td>
       <td><button class="memo-tog" data-act="collToggle" data-id="${r.id}" aria-expanded="${open}">${r.star_count?`<span class="star">⭐${r.star_count}</span>`:''}<span>메모 ${r.note_count}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td></tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box coll-box">${collPanel(r)}</div></td></tr>`:''}`;}).join('')}
@@ -899,7 +967,8 @@ function collPanel(r){
   const bills=S.cbills[r.id], notes=S.cnotes[r.id], star=!!S.cnStar[r.id];
   return `<div class="row"><b>${esc(r.car_number||'')} · ${esc([r.complex,r.unit].filter(Boolean).join(' '))} · ${esc(r.name||'')}</b><span class="grow"></span><button class="btn2 sm" data-act="collEdit" data-id="${r.id}">정보 · 요금 수정</button></div>
   <div class="coll-grid">
-    <div><h3 class="h3">월별 청구 · 입금</h3>${!bills?'<p class="sub">불러오는 중...</p>':bills.length?`<ul class="bills">${bills.map(b=>`<li class="${b.paid_at?'paid':b.overdue?'late':''}"><b>${b.bill_month.slice(0,7).replace('-','년 ')}월</b>${b.total_amount===undefined?`<span>${won0(b.amount)}</span>`:`<span class="bill-amt"><span>외부세차비용 : ${won0(b.amount)}</span><span>실내세차비용 : ${won0(b.interior_amount||0)}${b.interior_count?` (${b.interior_count}회 · ${esc(b.interior_dates||'')})`:''}</span><b>매월 요금 : ${won0(b.total_amount)}</b></span>`}<span class="sub">납부일 ${ymd(b.due_date)}</span><span class="grow"></span>${b.paid_at?`<span class="pill cs-ok">입금 ${ymd(b.paid_at)}${b.paid_name?' · '+esc(b.paid_name):''}</span><button class="link" data-act="collUnpay" data-id="${b.id}" data-m="${r.id}">취소</button>`:`<span class="pill ${b.overdue?'cs-late':'cs-due'}">${b.overdue?'미납':'입금 전'}</span><button class="btn2 sm" data-act="collPayOne" data-id="${b.id}" data-m="${r.id}">입금 확인</button>`}</li>`).join('')}</ul>`:'<p class="sub">청구 내역이 없어요.</p>'}</div>
+    <div><h3 class="h3">월별 청구 · 입금</h3>${!bills?'<p class="sub">불러오는 중...</p>':bills.length?`<ul class="bills">${bills.map(b=>`<li class="${b.paid_at?'paid':b.overdue?'late':''}"><b>${b.bill_month.slice(0,7).replace('-','년 ')}월</b>${b.total_amount===undefined?`<span>${won0(b.amount)}</span>`:`<span class="bill-amt"><span>외부세차비용 : ${won0(b.amount)}</span><span>실내세차비용 : ${won0(b.interior_amount||0)}${b.interior_count?` (${b.interior_count}회 · ${esc(b.interior_dates||'')})`:''}</span>${b.adjust_amount?`<span class="adj">금액 조정 : ${b.adjust_amount>0?'+':''}${Number(b.adjust_amount).toLocaleString('ko-KR')}원${b.adjust_note?' ('+esc(b.adjust_note)+')':''}</span>`:''}<b>매월 요금 : ${won0(b.total_amount)}</b>${!b.paid_at&&b.paid_amount?`<span class="adj">받은 돈 ${won0(b.paid_amount)} · 남은 돈 ${won0(b.remaining)}</span>`:''}</span>`}<span class="sub">납부일 ${ymd(b.due_date)}</span><span class="grow"></span>${b.paid_at?`<span class="pill cs-ok">입금 ${ymd(b.paid_at)}${b.paid_name?' · '+esc(b.paid_name):''}</span><button class="link" data-act="collUnpay" data-id="${b.id}" data-m="${r.id}">전체 취소</button>`:`<span class="pill ${b.paid_amount?'part':b.overdue?'cs-late':'cs-due'}">${b.paid_amount?'일부 입금':b.overdue?'미납':'입금 전'}</span><button class="link" data-act="collAdj" data-id="${b.id}" data-m="${r.id}">금액 조정</button><button class="btn2 sm" data-act="collPayOne" data-id="${b.id}" data-m="${r.id}">입금 확인</button>`}
+        ${b.payments&&b.payments.length?`<ul class="pays">${b.payments.map(p=>`<li>· ${ymd(p.paid_at)} <b style="color:var(--text)">${won0(p.amount)}</b>${p.note?' · '+esc(p.note):''}${p.by?' · '+esc(p.by):''}${b.payments.length>1||!b.paid_at?` <button class="link" data-act="collPayDel" data-id="${p.id}" data-m="${r.id}">이 입금 취소</button>`:''}</li>`).join('')}</ul>`:''}</li>`).join('')}</ul>`:'<p class="sub">청구 내역이 없어요.</p>'}</div>
     <div><h3 class="h3">수금 메모 <span class="sub">(고객관리 메모와 별도)</span></h3>
       <div class="note-new"><textarea class="inp" id="cnote-${r.id}" maxlength="2000" placeholder="입금 약속일, 통화 내용 등">${esc(S.cnDraft[r.id]||'')}</textarea>
       <div class="row"><label class="flag f-star"><input type="checkbox" data-cnstar="${r.id}" ${star?'checked':''}><span>⭐ 중요</span></label><span class="grow"></span><button class="btn" data-act="cnoteAdd" data-id="${r.id}">메모 저장</button></div></div>
@@ -954,7 +1023,7 @@ async function collExport(tpl){
   try{
     const X=await loadXLSX();
     const rows=tpl?[{아파트:'범어파크뷰',동호수:'103동 1201호',차량번호:'12가3456',상태:'세차중','고객(입금자명)':'홍길동(홍엄마)',연락처:'010-1234-5678',차종:'아반떼',색상:'흰색',정기권:'월 4회',지정요일:'화요일',담당직원:'김덕훈',계약일:'2026-09-01',월요금:55000,납부일:10,미납개월:0,고객메모:'자동이체 예정'}]
-      :(S.collTab==='전체'?S.coll:S.coll.filter(r=>r.coll_state===S.collTab)).filter(r=>!S.collApt||r.complex===S.collApt).map(r=>({아파트:r.complex,동호수:r.unit,차량번호:r.car_number,상태:r.wash_status,'고객(입금자명)':r.payer_name&&r.payer_name!==r.name?`${r.name}(${r.payer_name})`:r.name,연락처:r.phone,차종:r.car_model,색상:r.car_color,정기권:r.wash_plan,지정요일:r.wash_weekday,담당직원:r.staff_name,계약일:r.contract_date||'',월요금:r.fee??'',외부세차비용:r.cur_external??'',실내세차비용:r.cur_interior??'',실내세차횟수:r.cur_interior_count??'',매월요금:r.cur_total??'',차급:r.car_class||'',납부일:r.due_day,수금상태:r.coll_state,미납개월:r.overdue_months,미입금액:r.unpaid_amount,최근입금일:r.last_paid||'',고객메모:r.notes_text||''}));
+      :(S.collTab==='전체'?S.coll:S.coll.filter(r=>r.coll_state===S.collTab)).filter(r=>!S.collApt||r.complex===S.collApt).map(r=>({아파트:r.complex,동호수:r.unit,차량번호:r.car_number,상태:r.wash_status,'고객(입금자명)':r.payer_name&&r.payer_name!==r.name?`${r.name}(${r.payer_name})`:r.name,연락처:r.phone,차종:r.car_model,색상:r.car_color,정기권:r.wash_plan,지정요일:r.wash_weekday,담당직원:r.staff_name,계약일:r.contract_date||'',월요금:r.fee??'',외부세차비용:r.cur_external??'',실내세차비용:r.cur_interior??'',실내세차횟수:r.cur_interior_count??'',매월요금:r.cur_total??'',금액조정:r.cur_adjust||'',이번달받은돈:r.cur_paid_amount??'',이번달남은돈:r.cur_remaining??'',차급:r.car_class||'',납부일:r.due_day,수금상태:r.coll_state,미납개월:r.overdue_months,미입금액:r.unpaid_amount,최근입금일:r.last_paid||'',고객메모:r.notes_text||''}));
     const ws=X.utils.json_to_sheet(rows,{header:tpl?XH:[...XH.slice(0,14),'수금상태','미납개월','미입금액','최근입금일','고객메모']});
     ws['!cols']=(tpl?XH:[...XH.slice(0,14),'수금상태','미납개월','미입금액','최근입금일','고객메모']).map(h=>({wch:h==='고객메모'?40:Math.max(8,h.length*2+2)}));
     const wb=X.utils.book_new(); X.utils.book_append_sheet(wb,ws,tpl?'수금명단 양식':'수금관리');
@@ -1056,17 +1125,25 @@ document.addEventListener('click',async e=>{
           async()=>{ if(r) await loadCBills(r.id); }),collFormHtml());
       break; }
     case 'collPayOne': { const mid=Number(t.dataset.m);
-      ask('입금 확인할까요?','이 달을 입금된 것으로 표시해요. 잘못 눌렀으면 [취소]로 되돌릴 수 있어요.','확인',()=>act(async()=>{ await q(db.rpc('pay_collection_bills',{p_bill_ids:[id],p_paid_at:S.payDate||keyOf(new Date())})); toast('입금 확인했어요.'); },async()=>{ await loadCBills(mid); }),
-        `<label class="field"><span style="font-weight:700;font-size:13px">입금일</span><input class="inp" type="date" id="payDate" value="${S.payDate=keyOf(new Date())}"></label>`); break; }
+      S.payPick={[id]:true}; S.payDate=keyOf(new Date()); S.payAmtTouched=false; S.payNote=''; S.payMid=mid;
+      ask('입금 확인','받은 금액이 청구와 다르면 고쳐 적어 주세요. 덜 받으면 차액은 미수로 남아요.','입금 확인',()=>act(()=>payRun(mid),null,async()=>{ await loadCBills(mid); }),payExtra(mid)); break; }
     case 'collPay': {
       try{ await loadCBills(id); }catch(err){ toast(friendly(err),true); break; }
       const r=(S.coll||[]).find(x=>x.id===id), un=(S.cbills[id]||[]).filter(b=>!b.paid_at).sort((x,y)=>x.bill_month.localeCompare(y.bill_month));
       if(!un.length){ toast('입금 전인 청구가 없어요.'); await loadTab(); break; }
-      S.payPick={}; un.forEach(b=>S.payPick[b.id]=true); S.payDate=keyOf(new Date());
-      ask(`${r?(r.car_number||r.name):''} 입금 확인`,'입금된 달을 체크해 주세요. 밀린 달이 여러 개면 한꺼번에 처리할 수 있어요.','확인',
-        ()=>act(async()=>{ const ids=Object.keys(S.payPick).filter(k=>S.payPick[k]).map(Number); if(!ids.length){ toast('체크한 달이 없어요.',true); return; } const n=await q(db.rpc('pay_collection_bills',{p_bill_ids:ids,p_paid_at:S.payDate||keyOf(new Date())})); toast(`${n||0}개월 입금 확인했어요.`); },async()=>{ if(S.collOpen.includes(id)) await loadCBills(id); }),
-        `<div class="pay-list">${un.map(b=>`<label class="flag"><input type="checkbox" data-paypick="${b.id}" ${S.payPick[b.id]?'checked':''}><span>${b.bill_month.slice(0,7).replace('-','년 ')}월 · ${won0(b.amount)}${b.overdue?' · 미납':''}</span></label>`).join('')}</div><label class="field"><span style="font-weight:700;font-size:13px">입금일</span><input class="inp" type="date" id="payDate" value="${S.payDate}"></label>`);
-      break; }
+      S.payPick={}; un.forEach(b=>S.payPick[b.id]=true); S.payDate=keyOf(new Date()); S.payAmtTouched=false; S.payNote=''; S.payMid=id;
+      ask(`${r?(r.car_number||r.name):''} 입금 확인`,'입금된 달을 체크하고 받은 금액을 확인해 주세요. 덜 받으면 오래된 달부터 채우고 차액은 미수로 남아요.','입금 확인',()=>act(()=>payRun(id),null,async()=>{ if(S.collOpen.includes(id)) await loadCBills(id); }),payExtra(id)); break; }
+    case 'collAdj': { const mid=Number(t.dataset.m), b=(S.cbills[mid]||[]).find(x=>x.id===id); if(!b) break; S.adjVal=String(b.adjust_amount||''); S.adjNote=b.adjust_note||'';
+      ask(`${b.bill_month.slice(0,7).replace('-','년 ')}월 금액 조정`,`이 달만 금액을 바꿔요. 다른 달과 월 요금은 그대로예요.\n외부 ${won0(b.amount)} + 실내 ${won0(b.interior_amount||0)} + 조정 = 이 달 요금`,'저장',
+        ()=>act(async()=>{ const v=Number(String(S.adjVal).replace(/[^0-9-]/g,''))||0; const t2=await q(db.rpc('set_collection_bill_adjust',{p_bill_id:id,p_adjust:v,p_note:S.adjNote})); toast(v?`이 달 요금을 ${won0(t2)}으로 조정했어요.`:'조정을 없앴어요.'); },null,async()=>{ await loadCBills(mid); }),
+        `<label class="field"><span style="font-weight:700;font-size:13px">조정 금액 (원, 빼려면 앞에 -)</span><input class="inp" id="adjVal" inputmode="numeric" placeholder="예: -15000" value="${esc(S.adjVal)}"></label>
+         <label class="field"><span style="font-weight:700;font-size:13px">사유</span><input class="inp" id="adjNote" maxlength="200" placeholder="예: 회차 1번 빠짐" value="${esc(S.adjNote)}"></label>`); break; }
+    case 'collPayDel': { const mid=Number(t.dataset.m); ask('이 입금 기록을 취소할까요?','이 금액만 빠지고, 그만큼 다시 미수로 돌아가요.','취소하기',()=>act(()=>q(db.rpc('delete_collection_payment',{p_id:id})),'입금 기록을 취소했어요.',async()=>{ await loadCBills(mid); })); break; }
+    case 'cmMonth': S.cmMonth=Math.min(0,S.cmMonth+Number(t.dataset.d)); S.cmData=null; render(); await loadCollMonth(); render(); break;
+    case 'cmThis': S.cmMonth=0; S.cmData=null; render(); await loadCollMonth(); render(); break;
+    case 'cmView': S.cmView=t.dataset.f; render(); break;
+    case 'cmApt': S.collApt=t.dataset.a; S.collTab='전체'; render(); setTimeout(()=>{ const el=document.querySelector('.coll-tbl'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); },50); break;
+    case 'cmExport': await cmExport(); break;
     case 'collUnpay': { const mid=Number(t.dataset.m); ask('입금 확인을 취소할까요?','이 달이 다시 미입금으로 돌아가요.','확인',()=>act(()=>q(db.rpc('unpay_collection_bill',{p_bill_id:id})),'입금 확인을 취소했어요.',async()=>{ await loadCBills(mid); })); break; }
     case 'collPayMonth': { const ids=[...S.collSel]; if(!ids.length) break; S.payDate=keyOf(new Date());
       ask(`선택한 ${ids.length}명의 이번 달 입금을 확인할까요?`,'이번 달 청구를 입금된 것으로 표시해요. 밀린 지난달은 각 줄의 [입금 확인]에서 처리해 주세요.','확인',
@@ -1289,7 +1366,7 @@ document.addEventListener('change',async e=>{
   if(t.id==='pauseDate'){ S.pauseDate=t.value; return; }
   if(t.dataset.collsel){ const id=Number(t.dataset.collsel); S.collSel=t.checked?[...new Set([...S.collSel,id])]:S.collSel.filter(x=>x!==id); render(); return; }
   if(t.dataset.cnstar){ S.cnStar[Number(t.dataset.cnstar)]=t.checked; return; }
-  if(t.dataset.paypick){ S.payPick[t.dataset.paypick]=t.checked; return; }
+  if(t.dataset.paypick){ S.payPick[t.dataset.paypick]=t.checked; if(t.dataset.m&&S.dialog){ S.payAmtTouched=false; S.dialog.extra=payExtra(Number(t.dataset.m)); render(); } return; }
   if(t.id==='payDate'){ S.payDate=t.value; return; }
   if(t.dataset.cf&&S.cform){ S.cform[t.dataset.cf]=t.value; return; }
   if(t.dataset.intsel){ const id=Number(t.dataset.intsel); S.intSel=t.checked?[...new Set([...S.intSel,id])]:S.intSel.filter(x=>x!==id); render(); return; }
@@ -1334,6 +1411,10 @@ document.addEventListener('input',e=>{
   if(e.target.id==='collQ'){ S.collQin=e.target.value; }
   if(e.target.dataset&&e.target.dataset.cf&&S.cform){ S.cform[e.target.dataset.cf]=e.target.value; }
   if(e.target.id==='payDate'){ S.payDate=e.target.value; }
+  if(e.target.id==='payAmt'){ S.payAmt=e.target.value; S.payAmtTouched=true; const picks=payPicked(S.payMid), need=picks.reduce((a,b)=>a+b.remaining,0), h=$('#payHint'); if(h) h.innerHTML=payHint(need,Number(String(S.payAmt).replace(/[^0-9]/g,''))||0); if(S.dialog) S.dialog.extra=payExtra(S.payMid); return; }
+  if(e.target.id==='payNote'){ S.payNote=e.target.value; if(S.dialog) S.dialog.extra=payExtra(S.payMid); return; }
+  if(e.target.id==='adjVal'){ S.adjVal=e.target.value; return; }
+  if(e.target.id==='adjNote'){ S.adjNote=e.target.value; return; }
   if(e.target.id&&e.target.id.startsWith('cnote-')){ S.cnDraft[Number(e.target.id.slice(6))]=e.target.value; }
   if(e.target.id==='pauseDate'){ S.pauseDate=e.target.value; }
   if(e.target.id&&e.target.id.startsWith('note-')){ S.noteDraft[Number(e.target.id.slice(5))]=e.target.value; }
