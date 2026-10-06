@@ -211,7 +211,9 @@ td select.need{border-color:#E8A9A9!important;background:#FFF5F4!important}
 @media(max-width:700px){.live-sum{grid-template-columns:repeat(2,minmax(0,1fr))}.fr-ph button{width:70px;height:70px}}
 .rc-int{display:inline-flex;align-items:center;gap:3px;margin-left:6px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap}.rc-int input{width:16px;height:16px}
 .rc-sel{display:inline-block;width:auto;min-width:72px;padding:2px 6px;height:28px;font-size:12.5px;margin-left:4px}.wdp-h.sun{color:var(--red)}.wdp-d.rc.io span{background:#EEF3FB;border-color:#B9C8E4}
-.rd-btn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:8px;padding:2px}.rd-btn:hover .rd i{border-color:#2E7D4F}.rd-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.rd i{position:relative}.rd i .ick{position:absolute;top:-7px;right:-6px;width:14px;height:14px;border-radius:50%;background:#fff;color:#1F7A45;border:1.5px solid #2E7D4F;font-size:10px;line-height:11px;font-weight:900;display:flex;align-items:center;justify-content:center;font-style:normal}
+.rd i.iwait{box-shadow:inset 0 -3px 0 #7FA7D9}.ick-t{color:#1F7A45;font-size:12.5px;margin-left:4px}
+.rd-btn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:8px;padding:7px 6px 2px 2px}.rd-btn:hover .rd i{border-color:#2E7D4F}.rd-btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .rd i.pl{background:#DDF1E4;border-color:#2E7D4F;color:#1F5C39}
 .wdp-d.rc span{flex-direction:column;gap:0;height:44px;display:flex;align-items:center;justify-content:center}.wdp-d.rc small{font-size:9.5px;font-weight:700;line-height:1.1}
 .wdp-d.rc.on span{background:#DDF1E4;border-color:#2E7D4F;color:#1F5C39}.wdp-d.rc.done span{background:#2E7D4F;border-color:#2E7D4F;color:#fff}.wdp-d.rc.skip span{background:#FDECEA;border-color:#F0B4B4;color:var(--red)}
@@ -567,12 +569,12 @@ function rdCalHtml(){ const w=S.rdc; if(!w) return ''; const y=Number(w.month.sl
   const jm={}; (w.jobs||[]).forEach(j=>jm[j.wash_date]=j);
   const lead=new Date(y,m,1).getDay(), cells=[]; for(let i=0;i<lead;i++) cells.push('<span></span>');   // 일요일 시작
   for(let d=1;d<=days;d++){ const k=`${y}-${pad(m+1)}-${pad(d)}`, j=jm[k], wd=new Date(y,m,d).getDay(), st=w.st[k];
-    const sub=(st==='완료'?(j&&j.status==='완료'&&j.done_at&&!j.admin_set?'✔'+hm(j.done_at).slice(6):'✔완료'):st==='미작업'?'미작업':st==='대기'?'예정':j&&j.interior_only?'실내':k===tk?'오늘':'')+(st&&rcIntOf(w,k)?' 🧽':'');
+    const sub=(st==='완료'?(j&&j.status==='완료'&&j.done_at&&!j.admin_set?'✔'+hm(j.done_at).slice(6):'✔완료'):st==='미작업'?'미작업':st==='대기'?'예정':j&&j.interior_only?'실내':k===tk?'오늘':'')+(st&&rcIntOf(w,k)?(j&&j.status==='완료'&&j.interior&&j.interior_done&&st==='완료'?' 🧽✓':' 🧽'):'');
     cells.push(`<label class="wdp-d rc ${st?RC_ST[st]:''}${k<tk&&!st?' was':''}${wd===0?' sun':''}${j&&j.interior_only&&!st?' io':''}"><input type="checkbox" data-rcday="${k}" ${st?'checked':''} ${w.loading?'disabled':''}><span>${d}${sub?`<small>${sub}</small>`:''}</span></label>`); }
   const all=Object.keys(w.st).sort();
   const rows=all.map((k,i)=>{ const j=jm[k], st=w.st[k];
     const when=st==='완료'&&j&&j.status==='완료'&&j.done_at?(j.admin_set?' · <span class="sub">관리자 처리</span>':` · <b style="color:#2E7D4F">${hm(j.done_at)}</b> <span class="sub">직원 완료</span>`):'';
-    return `<li><b>${i+1}회차</b> · ${kdate(k)} <select class="inp rc-sel" data-rcst="${k}" aria-label="${kdate(k)} 상태">${['완료','미작업','대기'].map(x=>`<option value="${x}" ${st===x?'selected':''}>${x==='대기'?'예정':x}</option>`).join('')}</select><label class="rc-int"><input type="checkbox" data-rcint="${k}" ${rcIntOf(w,k)?'checked':''}><span>🧽 실내</span></label>${when}${j&&j.moved_from?` · <span class="sub">원래 ${kdate(j.moved_from)}</span>`:''}${j&&j.staff_name?` · <span class="sub">${esc(j.staff_name)}</span>`:''}</li>`; }).join('');
+    return `<li><b>${i+1}회차</b> · ${kdate(k)} <select class="inp rc-sel" data-rcst="${k}" aria-label="${kdate(k)} 상태">${['완료','미작업','대기'].map(x=>`<option value="${x}" ${st===x?'selected':''}>${x==='대기'?'예정':x}</option>`).join('')}</select><label class="rc-int"><input type="checkbox" data-rcint="${k}" ${rcIntOf(w,k)?'checked':''}><span>🧽 실내</span></label>${j&&j.status==='완료'&&j.interior&&j.interior_done&&st==='완료'?' <b class="ick-t">✓ 실내 완료</b>':''}${when}${j&&j.moved_from?` · <span class="sub">원래 ${kdate(j.moved_from)}</span>`:''}${j&&j.staff_name?` · <span class="sub">${esc(j.staff_name)}</span>`:''}</li>`; }).join('');
   const inter=(w.jobs||[]).filter(j=>j.interior_only);
   return `<div class="wdp"><div class="row" style="gap:8px;align-items:center"><button type="button" class="btn2 sm" data-act="rcMonth" data-d="-1" aria-label="이전 달" ${w.loading?'disabled':''}>◀</button><b>${y}년 ${m+1}월</b><button type="button" class="btn2 sm" data-act="rcMonth" data-d="1" aria-label="다음 달" ${w.loading?'disabled':''}>▶</button>
     <span class="${w.max&&all.length!==w.max?'warn-t':''}">${all.length}${w.plan?'/'+w.plan:''}회</span>${inter.length?`<span class="mtag">실내 ${inter.length}회</span>`:''}<span class="grow"></span><span class="lgd"><i class="rc-lg done"></i>완료 <i class="rc-lg on"></i>예정 <i class="rc-lg skip"></i>미작업</span></div>
@@ -587,7 +589,7 @@ async function rcLoad(month){ const w=S.rdc; w.month=month; w.loading=true; if(S
   w.loading=false; if(S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } }
 function roundView(){
   const md=rdMonthDate(), title=`${md.getFullYear()}년 ${md.getMonth()+1}월`;
-  const head=`<div class="row"><div class="grow"><h1 class="h">회차 현황</h1><p class="sub">고객 앱과 같은 기준이에요: 그 달 '세차완료' 횟수 / 정기권 횟수. 회차를 다 채운 고객을 골라 고객 앱으로 입금 안내를 보낼 수 있어요. 회차 칸(📅)을 누르면 그 달 달력에서 완료한 날 · 잡힌 날을 보고 날짜를 고를 수 있어요 (연한 초록 = 날짜 잡힘, 진한 초록 = 완료).</p></div></div>
+  const head=`<div class="row"><div class="grow"><h1 class="h">회차 현황</h1><p class="sub">고객 앱과 같은 기준이에요: 그 달 '세차완료' 횟수 / 정기권 횟수. 회차를 다 채운 고객을 골라 고객 앱으로 입금 안내를 보낼 수 있어요. 회차 칸(📅)을 누르면 그 달 달력에서 완료한 날 · 잡힌 날을 보고 날짜를 고를 수 있어요 (연한 초록 = 날짜 잡힘, 진한 초록 = 완료, 칸 위 ✓ = 실내세차까지 완료, 칸 아래 파란 줄 = 실내 포함 예정).</p></div></div>
   <div class="row"><div class="month-nav"><button class="btn2" data-act="rdMonth" data-d="-1" aria-label="이전 달">◀</button><b>${title}</b><button class="btn2" data-act="rdMonth" data-d="1" ${S.rdMonth>=0?'disabled':''} aria-label="다음 달">▶</button></div>${S.rdMonth?`<button class="link" data-act="rdThis">이번 달로</button>`:''}</div>`;
   if(!S.rounds) return head+'<div class="empty">불러오는 중...</div>';
   const apts=[...new Set(S.rounds.map(r=>r.complex).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
@@ -601,8 +603,14 @@ function roundView(){
     <button class="btn2 sm" data-act="rdExport">📤 엑셀로 받기</button><button class="btn sm" data-act="rdNotice" ${n?'':'disabled'}>📩 입금 안내 보내기 (고객 앱)</button></div>
   ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="rdSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>고객</th><th>정기권</th><th>담당 직원</th><th>${md.getMonth()+1}월 회차</th><th>완료한 날</th><th>다음 회차</th><th>${md.getMonth()+1}월 수금</th><th>입금 안내</th></tr></thead><tbody>
     ${list.map(r=>{const sel=S.rdSel.includes(r.customer_id), full=rdFull(r), plan=r.wash_plan||0;
-      const wj=rdWashJobs(r.customer_id), sched=wj.length, tot=Math.max(plan,r.done_count,sched);
-      const boxes=tot?`${S.mjOk?`<button class="rd-btn" data-act="rdCal" data-id="${r.customer_id}" title="달력 보기 · 세차 날짜 고르기 (초록 = 날짜 잡힘, 진한 초록 = 완료)">`:''}<span class="rd">${Array.from({length:tot},(_,i)=>`<i class="${i<r.done_count?'on':i<sched?'pl':''}">${i+1}</i>`).join('')}</span>${S.mjOk?' 📅</button>':''}`:(S.mjOk?`<button class="link" data-act="rdCal" data-id="${r.customer_id}">📅 달력</button>`:'');
+      const wj=rdWashJobs(r.customer_id).slice().sort((a,b)=>a.wash_date<b.wash_date?-1:1);
+      const ord=S.mjOk?[...wj.filter(j=>j.status==='완료'),...wj.filter(j=>j.status==='대기'),...wj.filter(j=>j.status==='미작업')]:[];
+      const tot=Math.max(plan,r.done_count,ord.length);
+      const box=i=>{ const j=ord[i]; if(!j) return `<i class="${!S.mjOk&&i<r.done_count?'on':''}">${i+1}</i>`;
+        const intDone=j.interior&&j.interior_done&&j.status==='완료', intWait=j.interior&&!intDone&&j.status!=='미작업';
+        const tip=`${kdate(j.wash_date)} · ${j.status==='대기'?'예정':j.status}${intDone?' · 실내까지 완료':intWait?' · 실내 포함 예정':''}`;
+        return `<i class="${j.status==='완료'?'on':j.status==='미작업'?'sk':'pl'}${intDone?' idone':intWait?' iwait':''}" title="${tip}">${i+1}${intDone?'<b class="ick" aria-label="실내 완료">✓</b>':''}</i>`; };
+      const boxes=tot?`${S.mjOk?`<button class="rd-btn" data-act="rdCal" data-id="${r.customer_id}" title="달력 보기 · 세차 날짜 고르기 (연한 초록 = 날짜 잡힘, 진한 초록 = 완료, ✓ = 실내까지 완료)">`:''}<span class="rd">${Array.from({length:tot},(_,i)=>box(i)).join('')}</span>${S.mjOk?' 📅</button>':''}`:(S.mjOk?`<button class="link" data-act="rdCal" data-id="${r.customer_id}">📅 달력</button>`:'');
       return `<tr class="${full?'round-full':''}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-rdsel="${r.customer_id}" ${sel?'checked':''} aria-label="${esc(r.car_number||'')} 선택"></td>
       <td>${esc(r.complex||'-')}</td><td>${esc(r.unit||'-')}</td><td><b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b>${r.wash_status!=='세차중'?` <span class="pill st-${r.wash_status==='해지'?'cancel':'pause'}">${esc(r.wash_status)}</span>`:''}</td><td><b>${esc(r.name||'')}</b></td>
       <td class="nowrap">${plan?`월 ${plan}회`:'-'}${r.wash_weekday!=null?` · ${WDF[r.wash_weekday]}`:''}</td><td class="nowrap">${esc(r.staff_name||'미배정')}</td>
