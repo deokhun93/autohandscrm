@@ -102,6 +102,8 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .ph-add{width:72px;height:72px;border-radius:10px;border:1.5px dashed var(--line-2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--sub);cursor:pointer;background:#fff}
 .ph-add span{font-size:22px;line-height:1}
 .lang-sw{display:inline-flex;border:1px solid var(--line-2);border-radius:999px;overflow:hidden;background:var(--card)}.lang-sw button{border:0;background:none;padding:7px 11px;font-size:12px;font-weight:800;color:var(--sub);cursor:pointer}.lang-sw button[aria-pressed="true"]{background:var(--ink);color:#E2C77F}
+.part{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:var(--paper)}.part.ok{background:var(--ok);border-color:#7DBE98}.part.no{background:#F8E3DD;border-color:#E3B4A6}
+.part .by{font-weight:500;color:var(--sub);font-size:12.5px}.rsn{display:flex;flex-wrap:wrap;gap:8px}
 .tr-link{font-size:12px;font-weight:700;color:#1D3A6E;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
 </style>
 </head>
@@ -208,8 +210,9 @@ async function loadAll(){
     if(!S.me||S.me.status!=='승인'){ render(); return; }
     await db.rpc('ensure_wash_jobs',{p_from:S.day,p_to:S.day});  // 지정 요일 고객 일정을 자동으로 채움
     const [jobs,sum,reqs]=await Promise.all([
-      db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)')
-        .eq('wash_date',S.day).eq('staff_id',S.me.id).order('sort_order').order('id'),
+      db.rpc('list_my_jobs',{p_day:S.day}).then(r=>{ if(!r.error){ S.v53=true; return {data:(r.data||[]).map(x=>({...x,customers:{name:x.name,complex:x.complex,unit:x.unit,car_number:x.car_number,car_model:x.car_model,car_color:x.car_color}}))}; }
+        S.v53=false; return db.from('wash_jobs').select('id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,complex,unit,car_number,car_model,car_color)')
+          .eq('wash_date',S.day).eq('staff_id',S.me.id).order('sort_order').order('id'); }),
       db.rpc('get_my_staff_summary',{p_day:S.day}),
       db.rpc('list_customer_requests',{p_type:'msg',p_only_open:false})
     ]);
@@ -238,7 +241,58 @@ function blockedView(){
 }
 function langSw(){ return `<span class="lang-sw" role="group" aria-label="Language"><button type="button" data-act="lang" data-l="ko" aria-pressed="${LANG==='ko'}">한국어</button><button type="button" data-act="lang" data-l="en" aria-pressed="${LANG==='en'}">English</button></span>`; }
 function logo(){return `<div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>STAFF</small></span></div>`;}
-function jobCard(j){
+function jobCard(j){ return S.v53?jobCard2(j):jobCardOld(j); }
+/* ---------- 외부 · 실내 따로 (SQL 53) ---------- */
+const RSN=[['차량 없음','Car not there'],['차량 잠김','Car locked'],['고객 요청 취소','Customer cancelled'],['우천','Rain'],['시간 부족','Not enough time'],['기타','Other']];
+const rsnTr=v=>{ const r=RSN.find(x=>x[0]===v); return r?tr(r[0],r[1]):v; };
+function partRow(j,part){
+  const io=j.interior_only, mine=part==='ext'?j.my_ext:j.my_int;
+  const st=part==='ext'?(j.status==='미작업'?'미완료':j.status):(j.interior_done?'완료':j.interior_skip?'미완료':'대기');
+  const why=part==='ext'?j.skip_reason:(j.interior_reason||(io?j.skip_reason:''));
+  const who=part==='ext'?j.staff_name:j.interior_staff_name, at=part==='ext'?j.done_at:j.interior_done_at;
+  const lab=part==='ext'?tr('외부세차','Exterior'):tr('실내세차','Interior');
+  const pill=`<span class="pill ${st==='완료'?'완료':st==='미완료'?'미작업':'대기'}">${st==='완료'?tr('완료','Done'):st==='미완료'?tr('미완료','Not done'):tr('대기','Waiting')}</span>`;
+  let act='';
+  if(mine){
+    if(st==='대기') act=`<button class="link" data-act="part" data-id="${j.id}" data-part="${part}" data-st="미완료">${tr('미완료','Not done')}</button><button class="btn" data-act="part" data-id="${j.id}" data-part="${part}" data-st="완료">${part==='ext'?tr('외부 완료 · 알림','Exterior done'):tr('실내 완료 · 알림','Interior done')}<span class="arr">${ic('send')}</span></button>`;
+    else act=`<button class="link" data-act="part" data-id="${j.id}" data-part="${part}" data-st="대기">${ic('undo',14)}${tr('되돌리기','Undo')}</button>`;
+  }
+  return `<div class="part ${st==='완료'?'ok':st==='미완료'?'no':''}">
+    <div class="row"><b class="grow">${lab} <small class="by">· ${mine?tr('내 담당','Mine'):esc(who||tr('미배정','Unassigned'))+tr(' 담당','')}</small></b>${pill}</div>
+    ${st==='완료'&&at?`<p class="note">${hm(at)} ${tr('완료','done')}${mine?'':` · ${esc(who||'')}`}</p>`:''}${st==='미완료'?`<p class="note" style="color:var(--err)">${tr('사유','Reason')}: ${esc(rsnTr(why||'-'))}</p>`:''}
+    ${act?`<div class="act">${act}</div>`:''}</div>`;
+}
+function jobCard2(j){
+  const c=j.customers||{}, picked=S.sel.includes(j.customer_id), io=j.interior_only;
+  const msg=S.reqs.find(r=>r.customer_id===j.customer_id&&(r.status==='접수'||Date.now()-new Date(r.created_at)<7*864e5));
+  const kind=io?tr('실내만','Interior only'):j.interior?tr('외부 + 실내','Exterior + Interior'):tr('외부만','Exterior only');
+  return `<article class="job ${picked?'picked':''}">
+    <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)}"><span class="box">${ic('check')}</span></label>
+      <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span><span class="tag">${kind}</span>${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')}</span>`:''}</div></div>
+    <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
+    ${io?'':partRow(j,'ext')}${j.interior?partRow(j,'int'):''}
+    ${msg?`<p class="req-line">${ic('msg',16)}<span><b>${tr('고객 요청','Customer request')}</b> ${esc(msg.message)} ${LANG==='en'?trLink(msg.message,'en'):''}</span></p>`:''}
+    ${S.reps.filter(r=>r.job_id===j.id).map(r=>`<p class="memo-line"><span>📝 ${esc(r.body||tr('(사진만 보냄)','(photos only)'))}${r.photos&&r.photos.length?` · 📷 ${r.photos.length}`:''}</span><span class="st">${hm(r.created_at)} → ${esc(r.manager_name||tr('관리자','Manager'))} · ${r.done_at?`<b>${tr('처리완료','Resolved')}</b>`:r.read_at?`<b>${tr('관리자 확인함','Seen by manager')}</b>`:tr('전달됨','Sent')}</span>${r.reply?`<span class="rp">${tr('관리자','Manager')}: ${esc(r.reply)} ${LANG==='en'?trLink(r.reply,'en'):''}</span>`:''}</p>`).join('')}
+    <button class="btn2" data-act="memo" data-id="${j.id}" style="width:100%">📝 ${tr('특이사항 메모 · 사진 → 담당 관리자','Report an issue · photo → manager')}</button></article>`;
+}
+function rsnSheet(){
+  const r=S.rsn; if(!r) return '';
+  const j=S.jobs.find(x=>x.id===r.jobId)||{}, c=j.customers||{};
+  return `<div class="scrim" data-act="rsn-close"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="rs-h" data-stop>
+    <div><h2 class="h" id="rs-h">${r.part==='ext'?tr('외부세차 미완료','Exterior not done'):tr('실내세차 미완료','Interior not done')}</h2><p class="sub">${esc(c.car_number||'')} · ${tr('사유를 골라 주세요','Pick a reason')}</p></div>
+    <div class="rsn">${RSN.map(([v])=>`<button type="button" class="chip" data-act="rsn-pick" data-v="${esc(v)}" aria-pressed="${r.v===v}">${esc(rsnTr(v))}</button>`).join('')}</div>
+    ${r.v==='기타'?`<div class="field"><label for="rsn-etc">${tr('사유 직접 적기','Write the reason')}</label><input id="rsn-etc" maxlength="200" value="${esc(r.etc||'')}" placeholder="${tr('예: 지하주차장 공사로 진입 불가','e.g. Parking garage closed')}"></div>`:''}
+    <div class="acts"><button class="btn2" data-act="rsn-close" ${S.busy?'disabled':''}>${tr('취소','Cancel')}</button><button class="btn plain" data-act="rsn-send" ${S.busy||!r.v?'disabled':''}>${S.busy?tr('처리 중...','Working...'):tr('미완료로 보고','Report')}</button></div>
+  </div></div>`;
+}
+async function setPart(id,part,st,reason,okMsg){
+  S.busy=true; render();
+  const {error}=await db.rpc('field_set_part',{p_job_id:id,p_part:part,p_state:st,p_reason:reason||null});
+  S.busy=false; S.dialog=null; S.rsn=null;
+  if(error){ toast(friendly(error),true); render(); return; }
+  kickPush(); if(okMsg) toast(okMsg); await loadAll();
+}
+function jobCardOld(j){
   const c=j.customers||{}, open=j.status==='대기', needInt=j.interior&&!j.interior_done, picked=S.sel.includes(j.customer_id);
   const msg=S.reqs.find(r=>r.customer_id===j.customer_id&&(r.status==='접수'||Date.now()-new Date(r.created_at)<7*864e5));
   let act='';
@@ -346,7 +400,7 @@ function render(){
   if(window.AppNav) AppNav.set('field', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
   if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
   const L=$('#layer'),d=S.dialog;
-  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">${tr('취소','Cancel')}</button><button class="btn plain" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?tr('처리 중...','Working...'):esc(d.ok||tr('확인','OK'))}</button></div></div></div>`:memoSheet();
+  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">${tr('취소','Cancel')}</button><button class="btn plain" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?tr('처리 중...','Working...'):esc(d.ok||tr('확인','OK'))}</button></div></div></div>`:S.rsn?rsnSheet():memoSheet();
   if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
 }
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`${ic(err?'bell':'check')}<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3200);}
@@ -376,6 +430,16 @@ document.addEventListener('click',async e=>{
     case 'memo-close': if(!S.busy&&(e.target===t||t.tagName==='BUTTON')){ if(S.memo) S.memo.files.forEach(f=>URL.revokeObjectURL(f.url)); S.memo=null; render(); } break;
     case 'memo-rm': if(S.memo&&!S.busy){ const i=Number(t.dataset.i); const f=S.memo.files.splice(i,1)[0]; if(f) URL.revokeObjectURL(f.url); render(); } break;
     case 'memo-send': await sendMemo(); break;
+    case 'part': { if(!j) break; const part=t.dataset.part, st=t.dataset.st, car=(j.customers||{}).car_number||'', lab=part==='ext'?tr('외부세차','exterior wash'):tr('실내세차','interior wash');
+      if(st==='미완료'){ S.rsn={jobId:id,part,v:'',etc:''}; render(); break; }
+      if(st==='대기'){ await setPart(id,part,'대기','',tr('대기로 되돌렸어요.','Changed back to waiting.')); break; }
+      S.dialog={title:tr(`${lab} 완료 알림을 보낼까요?`,`Send "${lab} done" to the customer?`),body:tr(`${car} ${lab}를 완료로 처리하고 고객 앱에 '${lab}가 완료되었어요' 알림을 보내요.`,`Marks ${car} ${lab} as done and notifies the customer.`),ok:tr('알림 보내기','Send'),
+        run:()=>setPart(id,part,'완료','',part==='ext'?tr('외부세차 완료 알림을 보냈어요. +','Exterior done notice sent. +')+won(PAY):tr('실내세차 완료 알림을 보냈어요.','Interior done notice sent.'))}; render(); break; }
+    case 'rsn-pick': if(S.rsn&&!S.busy){ S.rsn.v=t.dataset.v; render(); if(S.rsn.v==='기타') setTimeout(()=>{const el=$('#rsn-etc'); if(el) el.focus();},30); } break;
+    case 'rsn-close': if(!S.busy&&(e.target===t||t.tagName==='BUTTON')){ S.rsn=null; render(); } break;
+    case 'rsn-send': { const r=S.rsn; if(!r||!r.v||S.busy) break; const why=r.v==='기타'?String(r.etc||'').trim():r.v;
+      if(!why){ toast(tr('기타 사유를 적어 주세요.','Please write the reason.'),true); break; }
+      await setPart(r.jobId,r.part,'미완료',r.v==='기타'?'기타: '+why:why,tr('미완료로 보고했어요.','Reported as not done.')); break; }
     case 'done': S.dialog={title:tr('고객에게 완료 알림을 보낼까요?','Send "wash done" to the customer?'),body:tr(`${(j.customers||{}).car_number||''} 세차를 완료로 처리하고 고객 앱에 '세차가 완료되었어요' 알림을 보내요.`,`Marks ${(j.customers||{}).car_number||''} as done and notifies the customer.`),ok:tr('알림 보내기','Send'),run:()=>upd(id,{status:'완료'},tr('완료 알림을 보냈어요. +','Done notice sent. +')+won(PAY))}; render(); break;
     case 'skip': S.dialog={title:tr('미작업으로 처리할까요?','Mark as not done?'),body:tr('차량이 없거나 세차를 못 한 경우에 눌러 주세요. 회사에 미작업으로 보고돼요.','Use this when the car was not there or could not be washed. It is reported to the office.'),ok:tr('미작업 처리','Not done'),run:()=>upd(id,{status:'미작업'},tr('미작업으로 처리했어요.','Marked as not done.'))}; render(); break;
     case 'undo': await upd(id,{status:'대기'},tr('다시 대기로 바꿨어요.','Changed back to waiting.')); break;
@@ -402,7 +466,7 @@ document.addEventListener('change',async e=>{
     list.slice(0,room).forEach(f=>S.memo.files.push({file:f,url:URL.createObjectURL(f)})); render();
   }
 });
-document.addEventListener('input',e=>{ if(e.target.id==='memo-body'&&S.memo){ S.memo.body=e.target.value; const b=document.querySelector('[data-act="memo-send"]'); if(b) b.disabled=S.busy||(!S.memo.body.trim()&&!S.memo.files.length); return; } if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nt-send'); if(b) b.disabled=!(S.sel.length&&S.notice.trim()); } });
+document.addEventListener('input',e=>{ if(e.target.id==='rsn-etc'&&S.rsn){ S.rsn.etc=e.target.value; return; } if(e.target.id==='memo-body'&&S.memo){ S.memo.body=e.target.value; const b=document.querySelector('[data-act="memo-send"]'); if(b) b.disabled=S.busy||(!S.memo.body.trim()&&!S.memo.files.length); return; } if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nt-send'); if(b) b.disabled=!(S.sel.length&&S.notice.trim()); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} else if(e.key==='Escape'&&S.memo&&!S.busy){S.memo=null;render();} });
 document.addEventListener('submit',async e=>{
   if(e.target.id!=='login') return; e.preventDefault();
@@ -424,7 +488,7 @@ document.addEventListener('submit',async e=>{
   S.session=data.session; S.ready=true;
   if(S.session) await loadAll(); else render();
   db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; S.jobs=[]; render(); return; } if(!was){ S.err=''; await loadAll(); } });
-  setInterval(()=>{ const ae=document.activeElement; if(S.session&&S.me&&!S.dialog&&!S.memo&&!(ae&&/INPUT|TEXTAREA/.test(ae.tagName))&&document.visibilityState==='visible') loadAll(); },60000);
+  setInterval(()=>{ const ae=document.activeElement; if(S.session&&S.me&&!S.dialog&&!S.memo&&!S.rsn&&!(ae&&/INPUT|TEXTAREA/.test(ae.tagName))&&document.visibilityState==='visible') loadAll(); },60000);
 })();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}</script>
