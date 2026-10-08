@@ -105,6 +105,7 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .part{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;background:var(--paper)}.part.ok{background:var(--ok);border-color:#7DBE98}.part.no{background:#F8E3DD;border-color:#E3B4A6}
 .part .by{font-weight:500;color:var(--sub);font-size:12.5px}.rsn{display:flex;flex-wrap:wrap;gap:8px}
 .tr-link{font-size:12px;font-weight:700;color:#1D3A6E;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.toast[hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -403,7 +404,7 @@ function render(){
   L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">${tr('취소','Cancel')}</button><button class="btn plain" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?tr('처리 중...','Working...'):esc(d.ok||tr('확인','OK'))}</button></div></div></div>`:S.rsn?rsnSheet():memoSheet();
   if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
 }
-let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`${ic(err?'bell':'check')}<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3200);}
+let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`${ic(err?'bell':'check')}<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2000);}
 async function upd(id,patch,okMsg){
   S.busy=true;
   const {error}=await db.from('wash_jobs').update(patch).eq('id',id);

@@ -274,6 +274,7 @@ tr.grp-sub>td{background:#F6F8FC}tr.grp-sub>td:nth-child(2){padding-left:22px}.g
 .mtag{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:999px;background:var(--slate);color:var(--blue);margin-right:4px}.mtag.none{background:#FDECEA;color:var(--red)}.mtag.svc{background:#FFF3D6;color:#8A5A00}.cust-btn{all:unset;cursor:pointer;font-weight:800;text-decoration:underline;text-decoration-color:#C9C3B3;text-underline-offset:3px}.cust-btn:hover{color:var(--blue)}
 .set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:10px}
 @media(max-width:900px){.pr-grid{grid-template-columns:1fr}}
+.toast[hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -1718,7 +1719,7 @@ function renderMain(){
   L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub" style="white-space:pre-line">${esc(d.body)}</p>${d.extra||''}<div class="acts"><button class="btn2" data-act="close">취소</button><button class="btn" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?'처리 중...':esc(d.ok||'확인')}</button></div></div></div>`:noteModalView();
   if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
 }
-let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3400);}
+let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2000);}
 function ask(title,body,ok,run,extra){ S.dialog={title,body,ok,run,extra}; render(); }
 async function act(fn,okMsg,after){
   try{ await fn(); kickPush(); if(okMsg) toast(okMsg); }catch(e){ if(e&&e.keep){ S.busy=false; render(); return; } toast(friendly(e),true); }
