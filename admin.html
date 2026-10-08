@@ -447,6 +447,7 @@ async function loadTab(){
     }
     if(S.tab==='today'){ const [nt,td]=await Promise.all([q(db.rpc('list_staff_notices',{p_scope:S.ntScope})),q(db.rpc('list_admin_todos',{p_scope:S.tdScope}))]); S.notices=nt||[]; S.todos=td||[]; }
     if(S.tab==='round'){
+      await loadRdCols();
       { const md=rdMonthDate(), mk=rdMonthKey(), end=keyOf(new Date(md.getFullYear(),md.getMonth()+1,0)), tk=keyOf(new Date());
         if(end>=tk){ try{ await db.rpc('ensure_wash_jobs',{p_from:mk>tk?mk:tk,p_to:end}); }catch(_){} }   // 이번 달 남은 자동 일정 미리 채우기
         try{ const mj=await q(db.rpc('list_month_jobs',{p_month:mk})); S.mjobs={}; (mj||[]).forEach(j=>(S.mjobs[j.customer_id]=S.mjobs[j.customer_id]||[]).push(j)); S.mjOk=true; }catch(_){ S.mjobs={}; S.mjOk=false; } }
@@ -619,6 +620,46 @@ function collRoundCell(m){ const r=m.customer_id&&(S.roundMap||{})[m.customer_id
   const plan=r.wash_plan||0, full=rdFull(r), mi=(S.mint||{})[m.id]||{}, n=ipN(mi.interior_plan), ino=(r.interior_done||0)+(r.int_only_done||0);
   return `<div class="rc-cell">${rdBoxes(r)}<div><b class="${full?'rt-done':''}">${plan?`${r.done_count}/${plan}회`:`${r.done_count}회`}</b>${r.skip_count?` <span style="color:var(--red);font-weight:700">미작업 ${r.skip_count}</span>`:''}
     · <span class="mtag" title="이번 달 실내세차 완료 (회차 실내 + 실내만 한 날)">🧽 실내 ${ino}회${n?` <small>(계약 ${n}회)</small>`:''}</span></div></div>`; }
+// 회차 현황 표 칸 — 사람마다 순서 · 보이기 · 숨기기 저장 (user_ui_prefs 'round_cols')
+const RD_COLS=[
+  ['apt','아파트',r=>`<td>${esc(r.complex||'-')}</td>`,1],
+  ['unit','동·호수',r=>`<td>${esc(r.unit||'-')}</td>`,1],
+  ['model','차종',r=>`<td>${esc(r.car_model||'-')}${clsTag(r.customer_id)}</td>`,1],
+  ['car','차량번호',r=>`<td>${S.customers.some(c=>c.id===r.customer_id)?`<button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${r.customer_id}" title="고객 정보 수정">${esc(r.car_number||'-')}</button>`:`<b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b>`}${r.wash_status!=='세차중'?` <span class="pill st-${r.wash_status==='해지'?'cancel':'pause'}">${esc(r.wash_status)}</span>`:''}</td>`,1],
+  ['name','고객',r=>`<td><b>${esc(r.name||'')}</b></td>`,1],
+  ['plan','정기권',r=>`<td class="nowrap">${r.wash_plan?`월 ${r.wash_plan}회`:'-'}${r.wash_weekday!=null?` · ${WDF[r.wash_weekday]}`:''}</td>`,1],
+  ['staff','담당 직원',r=>`<td class="nowrap">${esc(r.staff_name||'미배정')}</td>`,1],
+  ['round','회차',r=>{const full=rdFull(r), plan=r.wash_plan||0; return `<td class="nowrap">${rdBoxes(r)} <span class="${full?'rt-done':''}">${plan?`${r.done_count}/${plan}회`:`${r.done_count}회`}${full?' ✔ 완료':''}</span>${r.skip_count?` <span class="sub" style="color:var(--red)">미작업 ${r.skip_count}</span>`:''}${r.int_only_done||r.int_only_wait?` <span class="mtag" title="실내세차만 한 날 (회차에 안 셈)">🧽 실내 ${r.int_only_done||0}회${r.int_only_wait?` (+예정 ${r.int_only_wait})`:''}</span>`:''}</td>`;},1],
+  ['done','완료한 날',r=>`<td class="sub">${esc(r.done_dates||'-')}</td>`,1],
+  ['next','다음 회차',r=>`<td class="nowrap">${r.next_date?kdate(r.next_date):'-'}</td>`,1],
+  ['notice','입금 안내',r=>`<td class="nowrap">${r.notice_count?`<span class="pill p-ok">보냄 ${when(r.last_notice_at)}</span>${r.notice_count>1?` <small class="by">${r.notice_count}번</small>`:''}`:'-'}</td>`,1],
+  // ↓ 처음엔 숨김 — [⚙️ 표 칸 설정]에서 켜서 추가
+  ['phone','연락처',r=>`<td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td>`,0],
+  ['color','색상',r=>{const c=S.customers.find(x=>x.id===r.customer_id); return `<td>${esc((c&&c.car_color)||'-')}</td>`;},0],
+  ['wstatus','세차 상태',r=>`<td><span class="pill ${r.wash_status==='세차중'?'st-on':r.wash_status==='해지'?'st-cancel':'st-pause'}">${esc(r.wash_status||'세차중')}</span></td>`,0],
+  ['interior','실내',r=>{const x=(S.cint||{})[r.customer_id]; return `<td class="nowrap">${x?ipTag(x.interior_plan,x.interior_fee,x.class_price):'-'}</td>`;},0],
+  ['contract','계약일',r=>`<td class="nowrap">${ymd(r.contract_date)}</td>`,0],
+  ['skip','미작업',r=>`<td class="nowrap">${r.skip_count?`<b style="color:var(--red)">${r.skip_count}회</b>`:'-'}</td>`,0],
+  ['bill','수금',r=>`<td class="nowrap">${r.bill_state?`${esc(r.bill_state)}${r.bill_amount!=null?` · ${won0(r.bill_amount)}`:''}`:'-'}</td>`,0],
+];
+const RD_KEYS=RD_COLS.map(c=>c[0]);
+const rdColLabel=k=>{ const c=RD_COLS.find(x=>x[0]===k); if(!c) return k; if(k==='round'||k==='bill'){ const m=rdMonthDate().getMonth()+1; return `${m}월 ${c[1]}`; } return c[1]; };
+function rdColNorm(v){ v=v&&typeof v==='object'?v:{}; const order=(Array.isArray(v.order)?v.order:[]).filter((k,i,a)=>RD_KEYS.includes(k)&&a.indexOf(k)===i);
+  RD_KEYS.forEach(k=>{ if(!order.includes(k)) order.push(k); });
+  const hidden=Array.isArray(v.hidden)?v.hidden.filter(k=>RD_KEYS.includes(k)):RD_COLS.filter(c=>!c[3]).map(c=>c[0]);
+  // 새로 생긴 선택 칸은 숨김으로 시작 (저장해 둔 설정에 없는 칸)
+  if(Array.isArray(v.known)) RD_COLS.forEach(c=>{ if(!c[3]&&!v.known.includes(c[0])&&!hidden.includes(c[0])) hidden.push(c[0]); });
+  return {order,hidden:hidden.length>=RD_KEYS.length?[]:hidden,known:[...RD_KEYS]}; }
+const rdColsOn=()=>{ const P=S.rdCols||rdColNorm(null); return P.order.filter(k=>!P.hidden.includes(k)).map(k=>RD_COLS.find(c=>c[0]===k)); };
+async function loadRdCols(){ if(S.rdCols) return; let v=null; S.rdColsServer=false;
+  try{ v=await q(db.rpc('get_my_ui_pref',{p_key:'round_cols'})); S.rdColsServer=true; }catch(_){ try{ v=JSON.parse(localStorage.getItem('ah-round-cols')||'null'); }catch(__){} }
+  S.rdCols=rdColNorm(v); }
+function rdColSetHtml(){ const d=S.rdColDraft, L=d.order.length;
+  return `<ul class="tabset">${d.order.map((k,i)=>{const lab=rdColLabel(k), hid=d.hidden.includes(k), opt=!(RD_COLS.find(c=>c[0]===k)||[])[3];
+    return `<li class="${hid?'off':''}"><label class="flag"><input type="checkbox" data-rdcol="${k}" ${hid?'':'checked'}><span>${esc(lab)}${opt?' <small class="by">추가 칸</small>':''}</span></label><span class="grow"></span>
+      <button type="button" class="btn2 sm" data-act="rdColMove" data-k="${k}" data-d="-1" ${i===0?'disabled':''} aria-label="${esc(lab)} 앞으로">▲</button><button type="button" class="btn2 sm" data-act="rdColMove" data-k="${k}" data-d="1" ${i===L-1?'disabled':''} aria-label="${esc(lab)} 뒤로">▼</button></li>`;}).join('')}</ul>
+    <div class="row" style="margin-top:8px"><button class="link" data-act="rdColReset">처음 설정으로 되돌리기</button></div>
+    ${S.rdColsServer?'':'<p class="note">⚠ 30번 SQL 전이라 이 기기(브라우저)에만 저장돼요.</p>'}`; }
 function roundView(){
   const md=rdMonthDate(), title=`${md.getFullYear()}년 ${md.getMonth()+1}월`;
   const head=`<div class="row"><div class="grow"><h1 class="h">회차 현황</h1><p class="sub">고객 앱과 같은 기준이에요: 그 달 '세차완료' 횟수 / 정기권 횟수. 금액은 회차 칸(📅) 상세에서 볼 수 있어요. 회차를 다 채운 고객을 골라 고객 앱으로 입금 안내를 보낼 수 있어요. 회차 칸(📅)을 누르면 그 달 달력에서 완료한 날 · 잡힌 날을 보고 날짜를 고를 수 있어요 (연한 초록 = 날짜 잡힘, 진한 초록 = 완료, 칸 위 ✓ = 실내세차까지 완료, 칸 아래 파란 줄 = 실내 포함 예정).</p></div></div>
@@ -627,21 +668,15 @@ function roundView(){
   const apts=[...new Set(S.rounds.map(r=>r.complex).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
   const base=rdBase(), cnt={}; RD_TABS.forEach(([k,f])=>cnt[k]=base.filter(f).length);
   const list=base.filter((RD_TABS.find(([k])=>k===S.rdTab)||RD_TABS[0])[1]);
-  const ids=list.map(r=>r.customer_id), n=S.rdSel.length, allSel=ids.length&&ids.every(x=>S.rdSel.includes(x));
+  const ids=list.map(r=>r.customer_id), n=S.rdSel.length, allSel=ids.length&&ids.every(x=>S.rdSel.includes(x)), cols=rdColsOn();
   return head+`<div class="mini-tabs" role="tablist">${RD_TABS.map(([k])=>`<button role="tab" class="mtab" aria-selected="${S.rdTab===k}" data-act="rdTab" data-f="${k}">${k} <b>${cnt[k]}</b></button>`).join('')}</div>
   <form id="rdsearch" class="req-tools" role="search"><select class="inp" id="rdApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.rdApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <input class="inp grow" id="rdQ" type="search" value="${esc(S.rdQ)}" placeholder="차량번호 · 고객 · 동호수 · 연락처 검색" aria-label="검색"><label class="auto"><input type="checkbox" id="rdCancel" ${S.rdCancel?'checked':''}><span>해지 고객도 보기</span></label></form>
   <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}명 선택됨`:`${list.length}명`}</b>${n?`<button class="link" data-act="rdSelNone">선택 해제</button>`:''}<span class="grow"></span>
-    <button class="btn2 sm" data-act="rdExport">📤 엑셀로 받기</button><button class="btn sm" data-act="rdNotice" ${n?'':'disabled'}>📩 입금 안내 보내기 (고객 앱)</button></div>
-  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="rdSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차종</th><th>차량번호</th><th>고객</th><th>정기권</th><th>담당 직원</th><th>${md.getMonth()+1}월 회차</th><th>완료한 날</th><th>다음 회차</th><th>입금 안내</th></tr></thead><tbody>
-    ${list.map(r=>{const sel=S.rdSel.includes(r.customer_id), full=rdFull(r), plan=r.wash_plan||0;
-      const boxes=rdBoxes(r);
-      return `<tr class="${full?'round-full':''}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-rdsel="${r.customer_id}" ${sel?'checked':''} aria-label="${esc(r.car_number||'')} 선택"></td>
-      <td>${esc(r.complex||'-')}</td><td>${esc(r.unit||'-')}</td><td>${esc(r.car_model||'-')}${clsTag(r.customer_id)}</td><td>${S.customers.some(c=>c.id===r.customer_id)?`<button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${r.customer_id}" title="고객 정보 수정">${esc(r.car_number||'-')}</button>`:`<b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b>`}${r.wash_status!=='세차중'?` <span class="pill st-${r.wash_status==='해지'?'cancel':'pause'}">${esc(r.wash_status)}</span>`:''}</td><td><b>${esc(r.name||'')}</b></td>
-      <td class="nowrap">${plan?`월 ${plan}회`:'-'}${r.wash_weekday!=null?` · ${WDF[r.wash_weekday]}`:''}</td><td class="nowrap">${esc(r.staff_name||'미배정')}</td>
-      <td class="nowrap">${boxes} <span class="${full?'rt-done':''}">${plan?`${r.done_count}/${plan}회`:`${r.done_count}회`}${full?' ✔ 완료':''}</span>${r.skip_count?` <span class="sub" style="color:var(--red)">미작업 ${r.skip_count}</span>`:''}${r.int_only_done||r.int_only_wait?` <span class="mtag" title="실내세차만 한 날 (회차에 안 셈)">🧽 실내 ${r.int_only_done||0}회${r.int_only_wait?` (+예정 ${r.int_only_wait})`:''}</span>`:''}</td>
-      <td class="sub">${esc(r.done_dates||'-')}</td><td class="nowrap">${r.next_date?kdate(r.next_date):'-'}</td>
-      <td class="nowrap">${r.notice_count?`<span class="pill p-ok">보냄 ${when(r.last_notice_at)}</span>${r.notice_count>1?` <small class="by">${r.notice_count}번</small>`:''}`:'-'}</td></tr>`;}).join('')}
+    <button class="btn2 sm" data-act="rdColSet" title="표 칸 순서 바꾸기 · 추가 · 숨기기 (나에게만 적용)">⚙️ 표 칸 설정</button><button class="btn2 sm" data-act="rdExport">📤 엑셀로 받기</button><button class="btn sm" data-act="rdNotice" ${n?'':'disabled'}>📩 입금 안내 보내기 (고객 앱)</button></div>
+  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="rdSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th>${cols.map(c=>`<th>${esc(rdColLabel(c[0]))}</th>`).join('')}</tr></thead><tbody>
+    ${list.map(r=>{const sel=S.rdSel.includes(r.customer_id), full=rdFull(r);
+      return `<tr class="${full?'round-full':''}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-rdsel="${r.customer_id}" ${sel?'checked':''} aria-label="${esc(r.car_number||'')} 선택"></td>${cols.map(c=>c[2](r)).join('')}</tr>`;}).join('')}
   </tbody></table></div>`:`<div class="empty">${S.rounds.length?'이 탭에 해당하는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`}`;
 }
 function rdNoticeExtra(rows){
@@ -1883,6 +1918,17 @@ document.addEventListener('click',async e=>{
     case 'rcMonth': { const w=S.rdc; if(!w||w.loading) break; if((w.orig!==JSON.stringify(w.st)||Object.keys(w.int).length||Object.keys(w.idn).length||Object.keys(w.iod).length)&&!w.warned){ w.warned=true; toast('저장하지 않은 변경이 있어요. 한 번 더 누르면 저장하지 않고 넘어가요.',true); break; } w.warned=false;
       const [y,m]=w.month.split('-').map(Number), d=new Date(y,m-1+Number(t.dataset.d),1); await rcLoad(keyOf(d)); break; }
     case 'rdTab': S.rdTab=t.dataset.f; render(); break;
+    case 'rdColSet': S.rdColDraft=JSON.parse(JSON.stringify(S.rdCols||rdColNorm(null)));
+      ask('회차 현황 표 칸 설정','▲▼로 칸 순서를 바꾸고, 체크를 풀면 숨겨요. \'추가 칸\'(연락처 · 색상 · 실내 · 계약일 · 수금 등)은 체크하면 표에 생겨요. 나에게만 적용돼요 (사람마다 따로 저장).','저장',async()=>{
+        const v=rdColNorm(S.rdColDraft);
+        try{ if(S.rdColsServer) await q(db.rpc('set_my_ui_pref',{p_key:'round_cols',p_value:v})); else localStorage.setItem('ah-round-cols',JSON.stringify(v));
+          S.rdCols=v; toast('표 칸 설정을 저장했어요.'); }
+        catch(err){ toast(friendly(err),true); }
+        S.dialog=null; S.busy=false; S.rdColDraft=null; render(); },rdColSetHtml());
+      S.dialog.rebuild=rdColSetHtml; break;
+    case 'rdColMove': { const dd=S.rdColDraft; if(!dd) break; const i=dd.order.indexOf(t.dataset.k), j=i+Number(t.dataset.d); if(i<0||j<0||j>=dd.order.length) break;
+      [dd.order[i],dd.order[j]]=[dd.order[j],dd.order[i]]; S.dialog.extra=rdColSetHtml(); render(); break; }
+    case 'rdColReset': S.rdColDraft=rdColNorm(null); S.dialog.extra=rdColSetHtml(); render(); break;
     case 'rdSelNone': S.rdSel=[]; render(); break;
     case 'rdSelAll': { const ids=(t.dataset.ids||'').split(',').filter(Boolean).map(Number); const all=ids.every(x=>S.rdSel.includes(x)); S.rdSel=all?S.rdSel.filter(x=>!ids.includes(x)):[...new Set([...S.rdSel,...ids])]; render(); break; }
     case 'rdTplReset': S.rdTplDraft=RD_TPL_DEF; { const el=$('#rdTplIn'); if(el) el.value=RD_TPL_DEF; const pv=$('#rdPrev'); const r=(S.rounds||[]).find(x=>x.customer_id===S.rdSel[0]); if(pv&&r) pv.textContent=rdFill(RD_TPL_DEF,r); } break;
@@ -1982,6 +2028,9 @@ document.addEventListener('click',async e=>{
 document.addEventListener('toggle',e=>{ if(e.target&&e.target.id==='mgrBox') S.mgrOpen=e.target.open; },true);
 document.addEventListener('change',async e=>{
   const t=e.target;
+  if(t.dataset&&t.dataset.rdcol!==undefined&&S.rdColDraft){ const k=t.dataset.rdcol, h=S.rdColDraft.hidden;
+    if(t.checked) S.rdColDraft.hidden=h.filter(x=>x!==k); else { if(S.rdColDraft.order.length-h.length<=1){ t.checked=true; toast('칸은 1개 이상 보여야 해요.',true); return; } S.rdColDraft.hidden=[...h,k]; }
+    S.dialog.extra=rdColSetHtml(); render(); return; }
   if(t.dataset&&t.dataset.tset!==undefined&&S.tabDraft){ const k=t.dataset.tset, h=S.tabDraft.hidden;
     if(t.checked) S.tabDraft.hidden=h.filter(x=>x!==k); else { if(S.tabDraft.order.length-h.length<=1){ t.checked=true; toast('메뉴는 1개 이상 보여야 해요.',true); return; } S.tabDraft.hidden=[...h,k]; }
     S.dialog.extra=tabSetHtml(); render(); return; }
