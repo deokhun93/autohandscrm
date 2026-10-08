@@ -422,6 +422,7 @@ async function loadTab(){
       const ids=new Set((S.reqF==='trash'?S.trash:S.reqs).map(r=>r.id)); S.sel=S.sel.filter(x=>ids.has(x));
     }
     if(S.tab==='coll'){
+      await loadCols('coll');
       S.coll=await q(db.rpc('list_collections'))||[];
       try{ S.rdMonth=0; const mk=rdMonthKey(), [rd,mj]=await Promise.all([q(db.rpc('list_wash_rounds',{p_month:mk})),q(db.rpc('list_month_jobs',{p_month:mk}))]);
         S.rounds=rd||[]; S.roundMap={}; S.rounds.forEach(x=>S.roundMap[x.customer_id]=x); S.mjobs={}; (mj||[]).forEach(j=>(S.mjobs[j.customer_id]=S.mjobs[j.customer_id]||[]).push(j)); S.mjOk=true; }catch(_){ S.roundMap={}; }
@@ -436,6 +437,7 @@ async function loadTab(){
       await Promise.all(S.collOpen.map(id=>Promise.all([loadCBills(id),loadCNotes(id)])));
     }
     if(S.tab==='cmgr'){
+      await loadCols('cmgr');
       const [rows,st]=await Promise.all([q(db.rpc('list_customer_note_counts')),q(db.rpc('list_customer_status'))]);
       S.noteCnt={}; (rows||[]).forEach(r=>S.noteCnt[r.customer_id]=r);
       try{ const ci=await q(db.rpc('list_customer_interior')); S.cint={}; (ci||[]).forEach(r=>S.cint[r.customer_id]=r); S.cintOk=true; }catch(_){ S.cint={}; S.cintOk=false; }
@@ -447,7 +449,7 @@ async function loadTab(){
     }
     if(S.tab==='today'){ const [nt,td]=await Promise.all([q(db.rpc('list_staff_notices',{p_scope:S.ntScope})),q(db.rpc('list_admin_todos',{p_scope:S.tdScope}))]); S.notices=nt||[]; S.todos=td||[]; }
     if(S.tab==='round'){
-      await loadRdCols();
+      await loadCols('round');
       { const md=rdMonthDate(), mk=rdMonthKey(), end=keyOf(new Date(md.getFullYear(),md.getMonth()+1,0)), tk=keyOf(new Date());
         if(end>=tk){ try{ await db.rpc('ensure_wash_jobs',{p_from:mk>tk?mk:tk,p_to:end}); }catch(_){} }   // 이번 달 남은 자동 일정 미리 채우기
         try{ const mj=await q(db.rpc('list_month_jobs',{p_month:mk})); S.mjobs={}; (mj||[]).forEach(j=>(S.mjobs[j.customer_id]=S.mjobs[j.customer_id]||[]).push(j)); S.mjOk=true; }catch(_){ S.mjobs={}; S.mjOk=false; } }
@@ -629,7 +631,7 @@ const RD_COLS=[
   ['name','고객',r=>`<td><b>${esc(r.name||'')}</b></td>`,1],
   ['plan','정기권',r=>`<td class="nowrap">${r.wash_plan?`월 ${r.wash_plan}회`:'-'}${r.wash_weekday!=null?` · ${WDF[r.wash_weekday]}`:''}</td>`,1],
   ['staff','담당 직원',r=>`<td class="nowrap">${esc(r.staff_name||'미배정')}</td>`,1],
-  ['round','회차',r=>{const full=rdFull(r), plan=r.wash_plan||0; return `<td class="nowrap">${rdBoxes(r)} <span class="${full?'rt-done':''}">${plan?`${r.done_count}/${plan}회`:`${r.done_count}회`}${full?' ✔ 완료':''}</span>${r.skip_count?` <span class="sub" style="color:var(--red)">미작업 ${r.skip_count}</span>`:''}${r.int_only_done||r.int_only_wait?` <span class="mtag" title="실내세차만 한 날 (회차에 안 셈)">🧽 실내 ${r.int_only_done||0}회${r.int_only_wait?` (+예정 ${r.int_only_wait})`:''}</span>`:''}</td>`;},1],
+  ['round',()=>`${rdMonthDate().getMonth()+1}월 회차`,r=>{const full=rdFull(r), plan=r.wash_plan||0; return `<td class="nowrap">${rdBoxes(r)} <span class="${full?'rt-done':''}">${plan?`${r.done_count}/${plan}회`:`${r.done_count}회`}${full?' ✔ 완료':''}</span>${r.skip_count?` <span class="sub" style="color:var(--red)">미작업 ${r.skip_count}</span>`:''}${r.int_only_done||r.int_only_wait?` <span class="mtag" title="실내세차만 한 날 (회차에 안 셈)">🧽 실내 ${r.int_only_done||0}회${r.int_only_wait?` (+예정 ${r.int_only_wait})`:''}</span>`:''}</td>`;},1],
   ['done','완료한 날',r=>`<td class="sub">${esc(r.done_dates||'-')}</td>`,1],
   ['next','다음 회차',r=>`<td class="nowrap">${r.next_date?kdate(r.next_date):'-'}</td>`,1],
   ['notice','입금 안내',r=>`<td class="nowrap">${r.notice_count?`<span class="pill p-ok">보냄 ${when(r.last_notice_at)}</span>${r.notice_count>1?` <small class="by">${r.notice_count}번</small>`:''}`:'-'}</td>`,1],
@@ -640,26 +642,32 @@ const RD_COLS=[
   ['interior','실내',r=>{const x=(S.cint||{})[r.customer_id]; return `<td class="nowrap">${x?ipTag(x.interior_plan,x.interior_fee,x.class_price):'-'}</td>`;},0],
   ['contract','계약일',r=>`<td class="nowrap">${ymd(r.contract_date)}</td>`,0],
   ['skip','미작업',r=>`<td class="nowrap">${r.skip_count?`<b style="color:var(--red)">${r.skip_count}회</b>`:'-'}</td>`,0],
-  ['bill','수금',r=>`<td class="nowrap">${r.bill_state?`${esc(r.bill_state)}${r.bill_amount!=null?` · ${won0(r.bill_amount)}`:''}`:'-'}</td>`,0],
+  ['bill',()=>`${rdMonthDate().getMonth()+1}월 수금`,r=>`<td class="nowrap">${r.bill_state?`${esc(r.bill_state)}${r.bill_amount!=null?` · ${won0(r.bill_amount)}`:''}`:'-'}</td>`,0],
 ];
-const RD_KEYS=RD_COLS.map(c=>c[0]);
-const rdColLabel=k=>{ const c=RD_COLS.find(x=>x[0]===k); if(!c) return k; if(k==='round'||k==='bill'){ const m=rdMonthDate().getMonth()+1; return `${m}월 ${c[1]}`; } return c[1]; };
-function rdColNorm(v){ v=v&&typeof v==='object'?v:{}; const order=(Array.isArray(v.order)?v.order:[]).filter((k,i,a)=>RD_KEYS.includes(k)&&a.indexOf(k)===i);
-  RD_KEYS.forEach(k=>{ if(!order.includes(k)) order.push(k); });
-  const hidden=Array.isArray(v.hidden)?v.hidden.filter(k=>RD_KEYS.includes(k)):RD_COLS.filter(c=>!c[3]).map(c=>c[0]);
-  // 새로 생긴 선택 칸은 숨김으로 시작 (저장해 둔 설정에 없는 칸)
-  if(Array.isArray(v.known)) RD_COLS.forEach(c=>{ if(!c[3]&&!v.known.includes(c[0])&&!hidden.includes(c[0])) hidden.push(c[0]); });
-  return {order,hidden:hidden.length>=RD_KEYS.length?[]:hidden,known:[...RD_KEYS]}; }
-const rdColsOn=()=>{ const P=S.rdCols||rdColNorm(null); return P.order.filter(k=>!P.hidden.includes(k)).map(k=>RD_COLS.find(c=>c[0]===k)); };
-async function loadRdCols(){ if(S.rdCols) return; let v=null; S.rdColsServer=false;
-  try{ v=await q(db.rpc('get_my_ui_pref',{p_key:'round_cols'})); S.rdColsServer=true; }catch(_){ try{ v=JSON.parse(localStorage.getItem('ah-round-cols')||'null'); }catch(__){} }
-  S.rdCols=rdColNorm(v); }
-function rdColSetHtml(){ const d=S.rdColDraft, L=d.order.length;
-  return `<ul class="tabset">${d.order.map((k,i)=>{const lab=rdColLabel(k), hid=d.hidden.includes(k), opt=!(RD_COLS.find(c=>c[0]===k)||[])[3];
-    return `<li class="${hid?'off':''}"><label class="flag"><input type="checkbox" data-rdcol="${k}" ${hid?'':'checked'}><span>${esc(lab)}${opt?' <small class="by">추가 칸</small>':''}</span></label><span class="grow"></span>
-      <button type="button" class="btn2 sm" data-act="rdColMove" data-k="${k}" data-d="-1" ${i===0?'disabled':''} aria-label="${esc(lab)} 앞으로">▲</button><button type="button" class="btn2 sm" data-act="rdColMove" data-k="${k}" data-d="1" ${i===L-1?'disabled':''} aria-label="${esc(lab)} 뒤로">▼</button></li>`;}).join('')}</ul>
-    <div class="row" style="margin-top:8px"><button class="link" data-act="rdColReset">처음 설정으로 되돌리기</button></div>
-    ${S.rdColsServer?'':'<p class="note">⚠ 30번 SQL 전이라 이 기기(브라우저)에만 저장돼요.</p>'}`; }
+// ---- 표 칸 설정 (회차 현황 · 고객관리 · 수금관리 공통) — 사람마다 저장 (user_ui_prefs)
+//  칸 정의: [키, 이름, 칸 그리기(행, 정보), 처음부터 보임(1/0), 쓸 수 있는지(없으면 항상)]
+const TBL={ round:{key:'round_cols',name:'회차 현황',cols:()=>RD_COLS},
+            cmgr:{key:'cm_cols',name:'고객관리',cols:()=>CM_COLS},
+            coll:{key:'coll_cols',name:'수금관리',cols:()=>CL_COLS} };
+const colLabel=(t,k)=>{ const c=TBL[t].cols().find(x=>x[0]===k); if(!c) return k; return typeof c[1]==='function'?c[1]():c[1]; };
+function colNorm(t,v){ const C=TBL[t].cols(), K=C.map(c=>c[0]); v=v&&typeof v==='object'?v:{};
+  const order=(Array.isArray(v.order)?v.order:[]).filter((k,i,a)=>K.includes(k)&&a.indexOf(k)===i);
+  K.forEach(k=>{ if(!order.includes(k)){ const at=K.indexOf(k), prev=K.slice(0,at).reverse().find(x=>order.includes(x)); order.splice(prev?order.indexOf(prev)+1:0,0,k); } });
+  const hidden=Array.isArray(v.hidden)?v.hidden.filter(k=>K.includes(k)):C.filter(c=>!c[3]).map(c=>c[0]);
+  if(Array.isArray(v.known)) C.forEach(c=>{ if(!c[3]&&!v.known.includes(c[0])&&!hidden.includes(c[0])) hidden.push(c[0]); });   // 새로 생긴 추가 칸은 숨김으로
+  return {order,hidden:hidden.length>=K.length?[]:hidden,known:[...K]}; }
+const colsOn=t=>{ const P=(S.colPref||{})[t]||colNorm(t,null), C=TBL[t].cols();
+  return P.order.filter(k=>!P.hidden.includes(k)).map(k=>C.find(c=>c[0]===k)).filter(c=>c&&(!c[4]||c[4]())); };
+async function loadCols(t){ S.colPref=S.colPref||{}; if(S.colPref[t]) return; let v=null;
+  try{ v=await q(db.rpc('get_my_ui_pref',{p_key:TBL[t].key})); S.colServer=true; }catch(_){ S.colServer=false; try{ v=JSON.parse(localStorage.getItem('ah-'+TBL[t].key)||'null'); }catch(__){} }
+  S.colPref[t]=colNorm(t,v); }
+const colBtn=t=>`<button class="btn2 sm" data-act="colSet" data-t="${t}" title="표 칸 순서 바꾸기 · 추가 · 숨기기 (나에게만 적용)">⚙️ 표 칸 설정</button>`;
+function colSetHtml(){ const d=S.colDraft, t=d.t, L=d.order.length, C=TBL[t].cols();
+  return `<ul class="tabset">${d.order.map((k,i)=>{const c=C.find(x=>x[0]===k)||[], lab=colLabel(t,k), hid=d.hidden.includes(k), opt=!c[3], na=c[4]&&!c[4]();
+    return `<li class="${hid?'off':''}"><label class="flag"><input type="checkbox" data-colset="${k}" ${hid?'':'checked'}><span>${esc(lab)}${opt?' <small class="by">추가 칸</small>':''}${na?' <small class="by">(지금은 정보 없음)</small>':''}</span></label><span class="grow"></span>
+      <button type="button" class="btn2 sm" data-act="colMove" data-k="${k}" data-d="-1" ${i===0?'disabled':''} aria-label="${esc(lab)} 앞으로">▲</button><button type="button" class="btn2 sm" data-act="colMove" data-k="${k}" data-d="1" ${i===L-1?'disabled':''} aria-label="${esc(lab)} 뒤로">▼</button></li>`;}).join('')}</ul>
+    <div class="row" style="margin-top:8px"><button class="link" data-act="colReset">처음 설정으로 되돌리기</button></div>
+    ${S.colServer===false?'<p class="note">⚠ 30번 SQL 전이라 이 기기(브라우저)에만 저장돼요.</p>':''}`; }
 function roundView(){
   const md=rdMonthDate(), title=`${md.getFullYear()}년 ${md.getMonth()+1}월`;
   const head=`<div class="row"><div class="grow"><h1 class="h">회차 현황</h1><p class="sub">고객 앱과 같은 기준이에요: 그 달 '세차완료' 횟수 / 정기권 횟수. 금액은 회차 칸(📅) 상세에서 볼 수 있어요. 회차를 다 채운 고객을 골라 고객 앱으로 입금 안내를 보낼 수 있어요. 회차 칸(📅)을 누르면 그 달 달력에서 완료한 날 · 잡힌 날을 보고 날짜를 고를 수 있어요 (연한 초록 = 날짜 잡힘, 진한 초록 = 완료, 칸 위 ✓ = 실내세차까지 완료, 칸 아래 파란 줄 = 실내 포함 예정).</p></div></div>
@@ -668,13 +676,13 @@ function roundView(){
   const apts=[...new Set(S.rounds.map(r=>r.complex).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
   const base=rdBase(), cnt={}; RD_TABS.forEach(([k,f])=>cnt[k]=base.filter(f).length);
   const list=base.filter((RD_TABS.find(([k])=>k===S.rdTab)||RD_TABS[0])[1]);
-  const ids=list.map(r=>r.customer_id), n=S.rdSel.length, allSel=ids.length&&ids.every(x=>S.rdSel.includes(x)), cols=rdColsOn();
+  const ids=list.map(r=>r.customer_id), n=S.rdSel.length, allSel=ids.length&&ids.every(x=>S.rdSel.includes(x)), cols=colsOn('round');
   return head+`<div class="mini-tabs" role="tablist">${RD_TABS.map(([k])=>`<button role="tab" class="mtab" aria-selected="${S.rdTab===k}" data-act="rdTab" data-f="${k}">${k} <b>${cnt[k]}</b></button>`).join('')}</div>
   <form id="rdsearch" class="req-tools" role="search"><select class="inp" id="rdApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.rdApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <input class="inp grow" id="rdQ" type="search" value="${esc(S.rdQ)}" placeholder="차량번호 · 고객 · 동호수 · 연락처 검색" aria-label="검색"><label class="auto"><input type="checkbox" id="rdCancel" ${S.rdCancel?'checked':''}><span>해지 고객도 보기</span></label></form>
   <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}명 선택됨`:`${list.length}명`}</b>${n?`<button class="link" data-act="rdSelNone">선택 해제</button>`:''}<span class="grow"></span>
-    <button class="btn2 sm" data-act="rdColSet" title="표 칸 순서 바꾸기 · 추가 · 숨기기 (나에게만 적용)">⚙️ 표 칸 설정</button><button class="btn2 sm" data-act="rdExport">📤 엑셀로 받기</button><button class="btn sm" data-act="rdNotice" ${n?'':'disabled'}>📩 입금 안내 보내기 (고객 앱)</button></div>
-  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="rdSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th>${cols.map(c=>`<th>${esc(rdColLabel(c[0]))}</th>`).join('')}</tr></thead><tbody>
+    ${colBtn('round')}<button class="btn2 sm" data-act="rdExport">📤 엑셀로 받기</button><button class="btn sm" data-act="rdNotice" ${n?'':'disabled'}>📩 입금 안내 보내기 (고객 앱)</button></div>
+  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="rdSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th>${cols.map(c=>`<th>${esc(colLabel('round',c[0]))}</th>`).join('')}</tr></thead><tbody>
     ${list.map(r=>{const sel=S.rdSel.includes(r.customer_id), full=rdFull(r);
       return `<tr class="${full?'round-full':''}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-rdsel="${r.customer_id}" ${sel?'checked':''} aria-label="${esc(r.car_number||'')} 선택"></td>${cols.map(c=>c[2](r)).join('')}</tr>`;}).join('')}
   </tbody></table></div>`:`<div class="empty">${S.rounds.length?'이 탭에 해당하는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`}`;
@@ -1072,6 +1080,28 @@ async function custExport(tpl){
     const wb=X.utils.book_new(); X.utils.book_append_sheet(wb,ws,tpl?'고객 양식':'고객관리');
     const d=new Date(); X.writeFile(wb,tpl?'오토핸즈_고객관리_양식.xlsx':`오토핸즈_고객관리_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.xlsx`);
     toast(tpl?'엑셀 양식을 받았어요. 양식에 맞춰 적은 뒤 [📥 엑셀 넣기]로 올려 주세요.':`${rows.length}대를 엑셀로 받았어요.`); }catch(e){ toast(friendly(e),true); } }
+// 고객관리 표 칸 (x: 그 줄 정보 — kind · g · n · shown · st · gx · open · nn)
+const CM_COLS=[
+  ['apt','아파트',c=>`<td>${esc(c.complex||'-')}</td>`,1],
+  ['unit','동·호수',c=>`<td>${esc(c.unit||'-')}</td>`,1],
+  ['model','차종',c=>`<td>${esc(c.car_model||'-')}${clsTag(c.id)}</td>`,1],
+  ['car','차량번호',c=>`<td><button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>`,1],
+  ['status','상태',(c,x)=>`<td><span class="pill st-${x.st.k}">${esc(x.st.label)}</span></td>`,1],
+  ['name','고객',(c,x)=>`<td>${x.kind==='sub'?'<span class="grp-mark" aria-hidden="true">└</span>':''}<button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button>${x.kind==='head'?`<br><button class="grp-tog" data-act="cmGrp" data-g="${x.g}" aria-expanded="${x.gx}" title="같은 고객 앱 계정(휴대폰 번호)의 차량">🚗 ${x.n}대 ${x.gx?'접기 ▴':'펼치기 ▾'}</button>${x.shown<x.n&&x.gx?`<small class="by"> (검색 조건에 맞는 ${x.shown}대만)</small>`:''}`:''}</td>`,1],
+  ['phone','연락처',c=>`<td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td>`,1],
+  ['color','색상',c=>`<td>${esc(c.car_color||'-')}</td>`,1],
+  ['plan','정기권',c=>`<td class="nowrap">${c.wash_plan?'월 '+c.wash_plan+'회':'-'}${PICK_N[c.wash_plan]&&!S.noDays?(()=>{const n=((S.wdates||{})[c.id]||[]).length, N=PICK_N[c.wash_plan];return `<br><button class="mtag wd-pick${n<N?' warn':''}" data-act="wdPick" data-id="${c.id}" title="이번 달 세차 날짜 고르기">📅 날짜 ${n}/${N}</button>`;})():''}</td>`,1],
+  ['interior','실내',c=>`<td class="nowrap">${(()=>{const r=S.cint[c.id]||{};return ipTag(r.interior_plan,r.interior_fee,r.class_price);})()}</td>`,1,()=>S.cintOk],
+  ['days','지정 요일',c=>`<td class="nowrap">${wdTxt(c)}</td>`,1],
+  ['staff','담당 직원',c=>`<td class="nowrap">${esc(c.field_staff_id?staffName(c.field_staff_id):'미배정')}</td>`,1],
+  ['contract','계약일',c=>`<td class="nowrap">${c.contract_date?esc(String(c.contract_date).slice(2).replace(/-/g,'.')):'-'}</td>`,1],
+  ['memo','고객 메모',(c,x)=>`<td><button class="memo-tog" data-act="cmToggle" data-id="${c.id}" aria-expanded="${x.open}">${x.nn.starred?`<span class="star">⭐${x.nn.starred}</span>`:''}<span>메모 ${x.nn.total}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td>`,1],
+  // ↓ 추가 칸 (처음엔 숨김)
+  ['fee','세차 요금',c=>{const r=(S.cint||{})[c.id]||{}; return `<td class="nowrap">${r.wash_fee!=null?won0(r.wash_fee)+' /월':'-'}</td>`;},0,()=>S.cintOk],
+  ['cls','차급',c=>{const r=S.cls&&S.cls[c.id]; return `<td class="nowrap">${esc((r&&r.car_class)||'미분류')}</td>`;},0],
+  ['login','앱 아이디',c=>{const L=(S.logins||{})[c.id]; return `<td class="nowrap">${L?esc(L.login_id)+(L.pw_initial?' <small class="by">1234</small>':''):'-'}</td>`;},0],
+  ['resume','재개일',c=>{const st=S.cstat[c.id]||{}; return `<td class="nowrap">${st.pause_until?ymd(st.pause_until):'-'}</td>`;},0],
+];
 function cmgrView(){
   const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
   const qq=S.cmQ.replace(/\s/g,'').toLowerCase();
@@ -1079,7 +1109,7 @@ function cmgrView(){
   const cnt={all:base.length,on:0,new:0,pause:0,soon:0,move:0,cancel:0}; base.forEach(c=>cnt[cmState(c).k]++);
   const list=base.filter(c=>{const k=cmState(c).k;return S.cmSt==='all'||k===S.cmSt||(S.cmSt==='pause'&&k==='soon');});
   const ids=list.map(c=>c.id), allSel=ids.length&&ids.every(x=>S.cmSel.includes(x)), n=S.cmSel.length;
-  const COLS=S.cintOk?15:14;
+  const cols=colsOn('cmgr'), COLS=cols.length+1;
   // 한 고객 앱 계정(같은 휴대폰 번호)에 차량이 여러 대면 한 줄로 묶고 [🚗 N대 ▾]로 펼쳐요
   const LG=S.logins||{}, grpOf=c=>{const x=LG[c.id]; return x&&x.car_count>1?x.user_id:null;}, gOpen=S.cmGrpOpen||[];
   const rowsG=[], seenG=new Set();
@@ -1092,6 +1122,7 @@ function cmgrView(){
     <label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="custFile" accept=".xlsx,.xls,.csv" hidden></label>
     <button class="btn2 sm" data-act="custTpl">엑셀 양식 받기</button>
     <button class="btn2 sm" data-act="custExport">📤 엑셀로 받기</button>
+    ${colBtn('cmgr')}
     <button class="btn sm" data-act="custNew">+ 직접 추가</button>
     ${S.loginsOk?`<button class="btn2 sm" data-act="loginMakeAll" title="앱 계정이 없는 계약완료 고객 모두">📱 고객 앱 계정 만들기${(()=>{const n=S.customers.filter(c=>!(S.logins||{})[c.id]).length;return n?` <b>${n}</b>`:'';})()}</button>`:''}
   </div>
@@ -1109,12 +1140,9 @@ function cmgrView(){
     <button class="btn2 sm st-move" data-act="cmSet" data-s="이관중" ${n?'':'disabled'}>이관중</button>
     <button class="btn2 sm st-cancel" data-act="cmSet" data-s="해지" ${n?'':'disabled'}>해지</button>
     <button class="btn sm danger" data-act="cmTrash" ${n?'':'disabled'}>🗑 삭제</button></div>
-  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="cmSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th><th>아파트</th><th>동·호수</th><th>차종</th><th>차량번호</th><th>상태</th><th>고객</th><th>연락처</th><th>색상</th><th>정기권</th>${S.cintOk?'<th>실내</th>':''}<th>지정 요일</th><th>담당 직원</th><th>계약일</th><th>고객 메모</th></tr></thead><tbody>
+  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="cmSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th>${cols.map(c=>`<th>${esc(colLabel('cmgr',c[0]))}</th>`).join('')}</tr></thead><tbody>
     ${rowsG.map(({c,kind,g,n,shown})=>{const nn=S.noteCnt[c.id]||{total:0,starred:0}, open=S.cmOpen.includes(c.id), st=cmState(c), sel=S.cmSel.includes(c.id), gx=kind==='head'&&gOpen.includes(g);
-      return `<tr class="cm-row ${st.cls}${open?' open':''}${sel?' picked':''}${kind==='sub'?' grp-sub':''}${kind==='head'?' grp-head':''}"><td class="ck"><input type="checkbox" data-cmsel="${c.id}" ${sel?'checked':''} aria-label="${esc(c.car_number||'')} 선택"></td><td>${esc(c.complex||'-')}</td><td>${esc(c.unit||'-')}</td><td>${esc(c.car_model||'-')}${clsTag(c.id)}</td><td><button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>
-      <td><span class="pill st-${st.k}">${esc(st.label)}</span></td><td>${kind==='sub'?'<span class="grp-mark" aria-hidden="true">└</span>':''}<button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button>${kind==='head'?`<br><button class="grp-tog" data-act="cmGrp" data-g="${g}" aria-expanded="${gx}" title="같은 고객 앱 계정(휴대폰 번호)의 차량">🚗 ${n}대 ${gx?'접기 ▴':'펼치기 ▾'}</button>${shown<n&&gx?`<small class="by"> (검색 조건에 맞는 ${shown}대만)</small>`:''}`:''}</td>
-      <td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td><td>${esc(c.car_color||'-')}</td><td class="nowrap">${c.wash_plan?'월 '+c.wash_plan+'회':'-'}${PICK_N[c.wash_plan]&&!S.noDays?(()=>{const n=((S.wdates||{})[c.id]||[]).length, N=PICK_N[c.wash_plan];return `<br><button class="mtag wd-pick${n<N?' warn':''}" data-act="wdPick" data-id="${c.id}" title="이번 달 세차 날짜 고르기">📅 날짜 ${n}/${N}</button>`;})():''}</td>${S.cintOk?`<td class="nowrap">${(()=>{const r=S.cint[c.id]||{};return ipTag(r.interior_plan,r.interior_fee,r.class_price);})()}</td>`:''}<td class="nowrap">${wdTxt(c)}</td><td class="nowrap">${esc(c.field_staff_id?staffName(c.field_staff_id):'미배정')}</td><td class="nowrap">${c.contract_date?esc(String(c.contract_date).slice(2).replace(/-/g,'.')):'-'}</td>
-      <td><button class="memo-tog" data-act="cmToggle" data-id="${c.id}" aria-expanded="${open}">${nn.starred?`<span class="star">⭐${nn.starred}</span>`:''}<span>메모 ${nn.total}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td></tr>
+      return `<tr class="cm-row ${st.cls}${open?' open':''}${sel?' picked':''}${kind==='sub'?' grp-sub':''}${kind==='head'?' grp-head':''}"><td class="ck"><input type="checkbox" data-cmsel="${c.id}" ${sel?'checked':''} aria-label="${esc(c.car_number||'')} 선택"></td>${cols.map(col=>col[2](c,{kind,g,n,shown,st,gx,open,nn})).join('')}</tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box">${notesPanel(c)}</div></td></tr>`:''}`;}).join('')}
   </tbody></table></div>`:`<div class="empty">${S.cmQ||S.cmApt||S.cmSt!=='all'?'조건에 맞는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`}`;
 }
@@ -1395,6 +1423,36 @@ function cfPanel(rows){ const f=cfLoad(), open=S.cfOpen===undefined?cfOn():S.cfO
   return `<div class="cf-box"><div class="row" style="gap:8px"><button class="link" type="button" data-act="cfToggle" aria-expanded="${open}">🔎 분류 조건 ${nOn?`<b>${nOn}개 선택</b>`:''} ${open?'▴':'▾'}</button><span class="grow"></span>${nOn?'<button class="link" type="button" data-act="cfClear">분류 조건 모두 풀기</button>':''}</div>
     ${open?CF_GROUPS.map(([k,l])=>{ let ks=Object.keys(opts[k]); ks.sort(order[k]?(a,b)=>order[k](a)-order[k](b):(a,b)=>a.localeCompare(b,'ko')); f[k].forEach(x=>{ if(!ks.includes(x)) ks.push(x); });
       return `<div class="cf-row"><b class="cf-l">${l}</b><div class="cf-opts">${ks.map(x=>`<label class="cf-chip${f[k].includes(x)?' on':''}"><input type="checkbox" data-cf-k="${k}" data-cf-v="${esc(x)}" ${f[k].includes(x)?'checked':''}><span>${esc(x)} <small>${opts[k][x]||0}</small></span></label>`).join('')||'<span class="sub">-</span>'}</div></div>`; }).join('')+'<p class="note" style="margin:4px 0 0">같은 줄에서 여러 개 고르면 그중 하나라도 맞는 고객, 다른 줄끼리는 모두 맞는 고객만 보여요. 고른 조건은 이 컴퓨터에 기억돼요.</p>':''}</div>`; }
+// 수금관리 표 칸 (x: ed · ow · open)
+const CL_COLS=[
+  ['apt','아파트',(r,x)=>`<td>${esc(r.complex||'-')}${S.crole&&x.ow.length?`<span class="lock" title="담당 총무">${x.ed?'':'🔒 '}${esc(x.ow.join(', '))}</span>`:''}</td>`,1],
+  ['unit','동·호수',r=>`<td>${esc(r.unit||'-')}</td>`,1],
+  ['model','차종',r=>`<td>${esc(r.car_model||'-')}${r.car_class!==undefined?`<span class="cls ${r.car_class==='SUV'?'cls-suv':r.car_class?'':'cls-none'}">${esc(r.car_class||'미분류')}</span>`:''}</td>`,1],
+  ['car','차량번호',(r,x)=>`<td>${x.ed?`<button class="cust-btn car" style="font-size:14.5px" data-act="collEdit" data-id="${r.id}" title="정보 · 결제 종류 · 계좌 수정">${esc(r.car_number||'-')}</button>`:`<b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b>`}</td>`,1],
+  ['status','상태',r=>`<td class="nowrap">${wsPill(r)}</td>`,1],
+  ['name','고객(입금자명)',(r,x)=>`<td>${x.ed?`<button class="cust-btn" data-act="collEdit" data-id="${r.id}" title="정보 · 결제 종류 · 계좌 수정">${esc(r.name||'-')}</button>`:`<b>${esc(r.name||'-')}</b>`}${r.payer_name&&r.payer_name!==r.name?`<small class="by"> (${esc(r.payer_name)})</small>`:''}${(S.autoAdd||{})[r.id]&&(Date.now()-new Date(S.autoAdd[r.id]))/864e5<30?`<br><span class="mtag" title="계약완료되면서 자동으로 등록됐어요 · ${when(S.autoAdd[r.id])}">🆕 자동 등록</span>`:''}${r.fee==null&&r.wash_status!=='해지'?`<br><span class="mtag none" title="[정보 · 요금 수정]에서 월 요금을 넣어 주세요">요금 미입력</span>`:''}${pdefTag(r.id)?`<br>${pdefTag(r.id)}`:''}</td>`,1],
+  ['phone','연락처',r=>`<td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td>`,1],
+  ['color','색상',r=>`<td>${esc(r.car_color||'-')}</td>`,1],
+  ['plan','정기권',r=>`<td class="nowrap">${esc(r.wash_plan||'-')}</td>`,1],
+  ['interior','실내',r=>`<td class="nowrap">${(()=>{const x=S.mint[r.id]||{};return ipTag(x.interior_plan,x.interior_fee,x.class_price);})()}</td>`,1,()=>S.mintOk],
+  ['days','지정 요일',r=>`<td class="nowrap">${esc(r.wash_weekday||'-')}</td>`,1],
+  ['staff','담당 직원',r=>`<td class="nowrap">${esc(r.staff_name||'-')}</td>`,1],
+  ['contract','계약일',r=>`<td class="nowrap">${ymd(r.contract_date)}</td>`,1],
+  ['round','이번 달 회차 · 실내',r=>`<td class="nowrap">${collRoundCell(r)}</td>`,1],
+  ['state','수금',(r,x)=>`<td class="nowrap">${collPill(r.coll_state)}${r.cur_paid_amount&&!r.cur_paid?` <span class="pill part" title="이번 달 받은 돈">일부 ${won0(r.cur_paid_amount)}</span>`:''}${r.overdue_months>1?` <small class="by">${r.overdue_months}개월</small>`:''}${x.ed&&r.coll_state!=='수금완료'&&r.coll_state!=='청구없음'&&r.coll_state!=='일시정지'?` <button class="link" data-act="collPay" data-id="${r.id}">입금 확인</button>`:''}</td>`,1],
+  ['fee3','이번 달 요금 · 납부일',r=>`<td class="nowrap">${r.cur_paused?`<div class="fee3"><b>⏸ 이번 달 정지 · 0원</b><span class="sub">세차 요금 ${won0(r.cur_external)} (정지 달은 청구 안 함)</span><span>납부일 매달 ${r.due_day}일</span></div>`:r.cur_total===undefined?`${won0(r.fee)} · ${r.due_day}일`:`<div class="fee3"><span>외부세차비용 : ${won0(r.cur_external)}</span>${r.cur_round_deduct?`<span class="adj" title="회차 달력에서 미작업으로 표시한 회차만큼 자동으로 빼요">빠진 회차 ${r.cur_round_skip}회 차감 : −${won0(r.cur_round_deduct)}</span>`:''}<span>실내세차비용 : ${won0(r.cur_interior||0)}${r.cur_interior_count?` (${r.cur_interior_count}회)`:''}${r.cur_interior_skip?` · 빠진 실내 ${r.cur_interior_skip}회 뺌`:''}</span><b>매월 요금 : ${won0(r.cur_total)}</b><span>납부일 매달 ${r.due_day}일</span></div>`}</td>`,1],
+  ['unpaid','미입금',r=>`<td class="nowrap">${r.unpaid_amount?`<b style="color:var(--red)">${won0(r.unpaid_amount)}</b>`:'-'}</td>`,1],
+  ['notice','입금 안내',r=>`<td>${noticeChips(r)}</td>`,1],
+  ['memo','수금 메모',(r,x)=>`<td><button class="memo-tog" data-act="collToggle" data-id="${r.id}" aria-expanded="${x.open}">${r.star_count?`<span class="star">⭐${r.star_count}</span>`:''}<span>메모 ${r.note_count}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td>`,1],
+  // ↓ 추가 칸 (처음엔 숨김)
+  ['payer','입금자명',r=>`<td>${esc(r.payer_name||'-')}</td>`,0],
+  ['monthfee','월 요금',r=>`<td class="nowrap">${r.fee!=null?won0(r.fee):'-'}</td>`,0],
+  ['dueday','납부일',r=>`<td class="nowrap">${r.due_day?`매달 ${r.due_day}일`:'-'}</td>`,0],
+  ['total','이번 달 합계',r=>`<td class="nowrap"><b>${r.cur_paused?'0원':won0(r.cur_total)}</b></td>`,0],
+  ['paidamt','이번 달 받은 돈',r=>`<td class="nowrap">${r.cur_paid_amount?won0(r.cur_paid_amount):'-'}</td>`,0],
+  ['overdue','미납 개월',r=>`<td class="nowrap">${r.overdue_months?`<b style="color:var(--red)">${r.overdue_months}개월</b>`:'-'}</td>`,0],
+  ['lastpaid','최근 입금일',r=>`<td class="nowrap">${r.last_paid?ymd(r.last_paid):'-'}</td>`,0],
+];
 function collView(){
   if(!S.coll) return '<div class="empty">불러오는 중...</div>';
   const scoped=S.coll.filter(r=>inScope(r.complex)), edAny=collCanAny();
@@ -1408,13 +1466,14 @@ function collView(){
   const ids=list.filter(r=>canEditCx(r.complex)).map(r=>r.id), allSel=ids.length&&ids.every(x=>S.collSel.includes(x)), n=S.collSel.length;
   const sumUnpaid=list.reduce((a,r)=>a+(r.unpaid_amount||0),0), sumBill=list.reduce((a,r)=>a+(r.cur_total||0),0),
     sumPaid=list.reduce((a,r)=>a+Math.min(r.cur_paid?(r.cur_total||0):(r.cur_paid_amount||0),r.cur_total||0),0), sumRest=list.reduce((a,r)=>a+(r.cur_remaining||0),0);
-  const COLS=S.mintOk?20:19;
+  const cols=colsOn('coll'), COLS=cols.length+1;
   return `<div class="row"><div class="grow"><h1 class="h">수금관리</h1><p class="sub">영업CRM · 고객관리에서 고객이 '계약완료'가 되면 이 명단에 자동으로 들어와요(월 요금은 담당 총무가 입력). 매달 1일에 청구가 자동으로 생기고, [입금 확인]에서 받은 금액을 적으면 수금완료예요(덜 받으면 차액은 미수로 남아요). 납부일이 지나면 미납, 2개월 이상 밀리면 장기미납으로 자동으로 옮겨져요. 고객관리와 따로 관리하는 명단이에요.<br>예약 확정된 실내세차(세단 10,000원 · SUV 15,000원)는 그 달 청구에 자동으로 더해져요: 외부세차비용 + 실내세차비용 = 매월 요금.</p></div></div>
   ${roleBar()}
   <div class="coll-tools">
     ${edAny?`<label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="collFile" accept=".xlsx,.xls,.csv" hidden></label>
     <button class="btn2 sm" data-act="collTpl">엑셀 양식 받기</button>`:''}
     <button class="btn2 sm" data-act="collExport">📤 엑셀로 받기</button>
+    ${colBtn('coll')}
     ${edAny?`<button class="btn2 sm" data-act="collFromCust">고객관리에서 불러오기</button>
     <button class="btn sm" data-act="collNew">+ 직접 추가</button>`:''}
   </div>
@@ -1431,17 +1490,9 @@ function collView(){
     ${edAny?`<button class="btn2 sm" data-act="nBulk" data-s="1" ${n?'':'disabled'}>1차 안내 체크</button><button class="btn2 sm" data-act="nBulk" data-s="2" ${n?'':'disabled'}>2차 안내 체크</button>
     <button class="btn2 sm" data-act="collPayMonth" ${n?'':'disabled'}>이번 달 입금 확인</button>
     <button class="btn sm danger" data-act="collDel" ${n?'':'disabled'}>🗑 명단에서 삭제</button>`:''}</div>
-  ${list.length?`<div class="tbl cm-tbl coll-tbl"><table><thead><tr><th class="ck">${ids.length?`<input type="checkbox" data-act="collSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택">`:''}</th><th>아파트</th><th>동·호수</th><th>차종</th><th>차량번호</th><th>상태</th><th>고객(입금자명)</th><th>연락처</th><th>색상</th><th>정기권</th>${S.mintOk?'<th>실내</th>':''}<th>지정 요일</th><th>담당 직원</th><th>계약일</th><th>이번 달 회차 · 실내</th><th>수금</th><th>이번 달 요금 · 납부일</th><th>미입금</th><th>입금 안내</th><th>수금 메모</th></tr></thead><tbody>
+  ${list.length?`<div class="tbl cm-tbl coll-tbl"><table><thead><tr><th class="ck">${ids.length?`<input type="checkbox" data-act="collSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택">`:''}</th>${cols.map(c=>`<th>${esc(colLabel('coll',c[0]))}</th>`).join('')}</tr></thead><tbody>
     ${list.map(r=>{const open=S.collOpen.includes(r.id), sel=S.collSel.includes(r.id), ed=canEditCx(r.complex), ow=ownersOf(r.complex);
-      return `<tr class="cm-row coll-${{'미수금':'due','수금완료':'ok','미납':'late','장기미납':'long','일시정지':'pz'}[r.coll_state]||'none'}${open?' open':''}${sel?' picked':''}"><td class="ck">${ed?`<input type="checkbox" data-collsel="${r.id}" ${sel?'checked':''} aria-label="${esc(r.car_number||r.name||'')} 선택">`:''}</td>
-      <td>${esc(r.complex||'-')}${S.crole&&ow.length?`<span class="lock" title="담당 총무">${ed?'':'🔒 '}${esc(ow.join(', '))}</span>`:''}</td><td>${esc(r.unit||'-')}</td><td>${esc(r.car_model||'-')}${r.car_class!==undefined?`<span class="cls ${r.car_class==='SUV'?'cls-suv':r.car_class?'':'cls-none'}">${esc(r.car_class||'미분류')}</span>`:''}</td><td>${ed?`<button class="cust-btn car" style="font-size:14.5px" data-act="collEdit" data-id="${r.id}" title="정보 · 결제 종류 · 계좌 수정">${esc(r.car_number||'-')}</button>`:`<b class="car" style="font-size:14.5px">${esc(r.car_number||'-')}</b>`}</td><td class="nowrap">${wsPill(r)}</td>
-      <td>${ed?`<button class="cust-btn" data-act="collEdit" data-id="${r.id}" title="정보 · 결제 종류 · 계좌 수정">${esc(r.name||'-')}</button>`:`<b>${esc(r.name||'-')}</b>`}${r.payer_name&&r.payer_name!==r.name?`<small class="by"> (${esc(r.payer_name)})</small>`:''}${(S.autoAdd||{})[r.id]&&(Date.now()-new Date(S.autoAdd[r.id]))/864e5<30?`<br><span class="mtag" title="계약완료되면서 자동으로 등록됐어요 · ${when(S.autoAdd[r.id])}">🆕 자동 등록</span>`:''}${r.fee==null&&r.wash_status!=='해지'?`<br><span class="mtag none" title="[정보 · 요금 수정]에서 월 요금을 넣어 주세요">요금 미입력</span>`:''}${pdefTag(r.id)?`<br>${pdefTag(r.id)}`:''}</td>
-      <td class="nowrap">${esc(maskPhone(r.phone)||'-')}</td><td>${esc(r.car_color||'-')}</td><td class="nowrap">${esc(r.wash_plan||'-')}</td>${S.mintOk?`<td class="nowrap">${(()=>{const x=S.mint[r.id]||{};return ipTag(x.interior_plan,x.interior_fee,x.class_price);})()}</td>`:''}<td class="nowrap">${esc(r.wash_weekday||'-')}</td><td class="nowrap">${esc(r.staff_name||'-')}</td><td class="nowrap">${ymd(r.contract_date)}</td>
-      <td class="nowrap">${collRoundCell(r)}</td>
-      <td class="nowrap">${collPill(r.coll_state)}${r.cur_paid_amount&&!r.cur_paid?` <span class="pill part" title="이번 달 받은 돈">일부 ${won0(r.cur_paid_amount)}</span>`:''}${r.overdue_months>1?` <small class="by">${r.overdue_months}개월</small>`:''}${ed&&r.coll_state!=='수금완료'&&r.coll_state!=='청구없음'&&r.coll_state!=='일시정지'?` <button class="link" data-act="collPay" data-id="${r.id}">입금 확인</button>`:''}</td>
-      <td class="nowrap">${r.cur_paused?`<div class="fee3"><b>⏸ 이번 달 정지 · 0원</b><span class="sub">세차 요금 ${won0(r.cur_external)} (정지 달은 청구 안 함)</span><span>납부일 매달 ${r.due_day}일</span></div>`:r.cur_total===undefined?`${won0(r.fee)} · ${r.due_day}일`:`<div class="fee3"><span>외부세차비용 : ${won0(r.cur_external)}</span>${r.cur_round_deduct?`<span class="adj" title="회차 달력에서 미작업으로 표시한 회차만큼 자동으로 빼요">빠진 회차 ${r.cur_round_skip}회 차감 : −${won0(r.cur_round_deduct)}</span>`:''}<span>실내세차비용 : ${won0(r.cur_interior||0)}${r.cur_interior_count?` (${r.cur_interior_count}회)`:''}${r.cur_interior_skip?` · 빠진 실내 ${r.cur_interior_skip}회 뺌`:''}</span><b>매월 요금 : ${won0(r.cur_total)}</b><span>납부일 매달 ${r.due_day}일</span></div>`}</td><td class="nowrap">${r.unpaid_amount?`<b style="color:var(--red)">${won0(r.unpaid_amount)}</b>`:'-'}</td>
-      <td>${noticeChips(r)}</td>
-      <td><button class="memo-tog" data-act="collToggle" data-id="${r.id}" aria-expanded="${open}">${r.star_count?`<span class="star">⭐${r.star_count}</span>`:''}<span>메모 ${r.note_count}</span><svg class="i chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button></td></tr>
+      return `<tr class="cm-row coll-${{'미수금':'due','수금완료':'ok','미납':'late','장기미납':'long','일시정지':'pz'}[r.coll_state]||'none'}${open?' open':''}${sel?' picked':''}"><td class="ck">${ed?`<input type="checkbox" data-collsel="${r.id}" ${sel?'checked':''} aria-label="${esc(r.car_number||r.name||'')} 선택">`:''}</td>${cols.map(col=>col[2](r,{ed,ow,open})).join('')}</tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box coll-box">${collPanel(r)}</div></td></tr>`:''}`;}).join('')}
   </tbody></table></div>`:`<div class="empty">${S.coll.length?(scoped.length?'이 탭에 해당하는 고객이 없어요.':'내 담당 아파트에 수금 명단이 없어요. [내 담당 아파트만 보기]를 끄면 전체를 볼 수 있어요.'):'아직 수금 명단이 없어요. [엑셀 넣기] · [고객관리에서 불러오기] · [+ 직접 추가]로 시작하세요.'}</div>`}
   ${collSettingsPanel()}`;
@@ -1918,17 +1969,18 @@ document.addEventListener('click',async e=>{
     case 'rcMonth': { const w=S.rdc; if(!w||w.loading) break; if((w.orig!==JSON.stringify(w.st)||Object.keys(w.int).length||Object.keys(w.idn).length||Object.keys(w.iod).length)&&!w.warned){ w.warned=true; toast('저장하지 않은 변경이 있어요. 한 번 더 누르면 저장하지 않고 넘어가요.',true); break; } w.warned=false;
       const [y,m]=w.month.split('-').map(Number), d=new Date(y,m-1+Number(t.dataset.d),1); await rcLoad(keyOf(d)); break; }
     case 'rdTab': S.rdTab=t.dataset.f; render(); break;
-    case 'rdColSet': S.rdColDraft=JSON.parse(JSON.stringify(S.rdCols||rdColNorm(null)));
-      ask('회차 현황 표 칸 설정','▲▼로 칸 순서를 바꾸고, 체크를 풀면 숨겨요. \'추가 칸\'(연락처 · 색상 · 실내 · 계약일 · 수금 등)은 체크하면 표에 생겨요. 나에게만 적용돼요 (사람마다 따로 저장).','저장',async()=>{
-        const v=rdColNorm(S.rdColDraft);
-        try{ if(S.rdColsServer) await q(db.rpc('set_my_ui_pref',{p_key:'round_cols',p_value:v})); else localStorage.setItem('ah-round-cols',JSON.stringify(v));
-          S.rdCols=v; toast('표 칸 설정을 저장했어요.'); }
+    case 'colSet': { const tt=t.dataset.t; if(!TBL[tt]) break; await loadCols(tt);
+      S.colDraft={t:tt,...JSON.parse(JSON.stringify(S.colPref[tt]))};
+      ask(`${TBL[tt].name} 표 칸 설정`,'▲▼로 칸 순서를 바꾸고, 체크를 풀면 숨겨요. \'추가 칸\'은 체크하면 표에 생겨요. 나에게만 적용돼요 (사람마다 따로 저장).','저장',async()=>{
+        const v=colNorm(tt,S.colDraft);
+        try{ if(S.colServer!==false) await q(db.rpc('set_my_ui_pref',{p_key:TBL[tt].key,p_value:v})); else localStorage.setItem('ah-'+TBL[tt].key,JSON.stringify(v));
+          S.colPref[tt]=v; toast('표 칸 설정을 저장했어요.'); }
         catch(err){ toast(friendly(err),true); }
-        S.dialog=null; S.busy=false; S.rdColDraft=null; render(); },rdColSetHtml());
-      S.dialog.rebuild=rdColSetHtml; break;
-    case 'rdColMove': { const dd=S.rdColDraft; if(!dd) break; const i=dd.order.indexOf(t.dataset.k), j=i+Number(t.dataset.d); if(i<0||j<0||j>=dd.order.length) break;
-      [dd.order[i],dd.order[j]]=[dd.order[j],dd.order[i]]; S.dialog.extra=rdColSetHtml(); render(); break; }
-    case 'rdColReset': S.rdColDraft=rdColNorm(null); S.dialog.extra=rdColSetHtml(); render(); break;
+        S.dialog=null; S.busy=false; S.colDraft=null; render(); },colSetHtml());
+      S.dialog.rebuild=colSetHtml; break; }
+    case 'colMove': { const dd=S.colDraft; if(!dd) break; const i=dd.order.indexOf(t.dataset.k), j=i+Number(t.dataset.d); if(i<0||j<0||j>=dd.order.length) break;
+      [dd.order[i],dd.order[j]]=[dd.order[j],dd.order[i]]; S.dialog.extra=colSetHtml(); render(); break; }
+    case 'colReset': if(S.colDraft){ S.colDraft={t:S.colDraft.t,...colNorm(S.colDraft.t,null)}; S.dialog.extra=colSetHtml(); render(); } break;
     case 'rdSelNone': S.rdSel=[]; render(); break;
     case 'rdSelAll': { const ids=(t.dataset.ids||'').split(',').filter(Boolean).map(Number); const all=ids.every(x=>S.rdSel.includes(x)); S.rdSel=all?S.rdSel.filter(x=>!ids.includes(x)):[...new Set([...S.rdSel,...ids])]; render(); break; }
     case 'rdTplReset': S.rdTplDraft=RD_TPL_DEF; { const el=$('#rdTplIn'); if(el) el.value=RD_TPL_DEF; const pv=$('#rdPrev'); const r=(S.rounds||[]).find(x=>x.customer_id===S.rdSel[0]); if(pv&&r) pv.textContent=rdFill(RD_TPL_DEF,r); } break;
@@ -2028,9 +2080,9 @@ document.addEventListener('click',async e=>{
 document.addEventListener('toggle',e=>{ if(e.target&&e.target.id==='mgrBox') S.mgrOpen=e.target.open; },true);
 document.addEventListener('change',async e=>{
   const t=e.target;
-  if(t.dataset&&t.dataset.rdcol!==undefined&&S.rdColDraft){ const k=t.dataset.rdcol, h=S.rdColDraft.hidden;
-    if(t.checked) S.rdColDraft.hidden=h.filter(x=>x!==k); else { if(S.rdColDraft.order.length-h.length<=1){ t.checked=true; toast('칸은 1개 이상 보여야 해요.',true); return; } S.rdColDraft.hidden=[...h,k]; }
-    S.dialog.extra=rdColSetHtml(); render(); return; }
+  if(t.dataset&&t.dataset.colset!==undefined&&S.colDraft){ const k=t.dataset.colset, h=S.colDraft.hidden;
+    if(t.checked) S.colDraft.hidden=h.filter(x=>x!==k); else { if(S.colDraft.order.length-h.length<=1){ t.checked=true; toast('칸은 1개 이상 보여야 해요.',true); return; } S.colDraft.hidden=[...h,k]; }
+    S.dialog.extra=colSetHtml(); render(); return; }
   if(t.dataset&&t.dataset.tset!==undefined&&S.tabDraft){ const k=t.dataset.tset, h=S.tabDraft.hidden;
     if(t.checked) S.tabDraft.hidden=h.filter(x=>x!==k); else { if(S.tabDraft.order.length-h.length<=1){ t.checked=true; toast('메뉴는 1개 이상 보여야 해요.',true); return; } S.tabDraft.hidden=[...h,k]; }
     S.dialog.extra=tabSetHtml(); render(); return; }
