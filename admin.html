@@ -105,6 +105,22 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .cm-tbl th.ck,.cm-tbl td.ck{width:40px;text-align:center;padding-left:10px}.cm-tbl .ck input{width:18px;height:18px;margin:0;accent-color:var(--ink);vertical-align:middle}
 .cm-row.is-cancel td{background:#E6E3DB;color:#8A8577}.cm-row.is-cancel .car,.cm-row.is-cancel b{color:#8A8577}
 .cm-row.is-pause td{background:#FFF4C2}.cm-row.is-soon td{background:#FDE2E0}
+/* 2단계 상태 색: 정지 = 노란 음영 · 일시정지 = 연한 하늘색 · 해지 = 회색 */
+.cm-row.is-stop td{background:#FFF4C2}.cm-row.is-pz td{background:#E3F2FC}
+.pill.st-stop{background:#F7D64A;color:#5A4500}.pill.st-pz{background:#8CCBF2;color:#0B3954}
+.btn2.st-stop{border-color:#E6C23A;background:#FFF4C2}.btn2.st-pz{border-color:#8CCBF2;background:#E3F2FC}
+.chip.cst-stop[aria-pressed="true"]{background:#F7D64A;border-color:#E6C23A;color:#3D2F00}.chip.cst-pz[aria-pressed="true"]{background:#8CCBF2;border-color:#5FB3E8;color:#0B3954}
+.pz-reasons{display:flex;gap:6px;flex-wrap:wrap}
+/* 아파트 여러 개 선택 상자 */
+.apt-multi{position:relative}.apt-multi>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap}.apt-multi>summary::-webkit-details-marker{display:none}
+.apt-multi .am-pop{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:240px;max-height:320px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:8px}
+.apt-multi .am-pop label{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:14px}.apt-multi .am-pop label:hover{background:var(--bg)}
+.apt-multi .am-pop label{justify-content:flex-start;width:100%;text-align:left}.apt-multi .am-pop input{flex:0 0 auto;min-width:0;width:17px;height:17px;margin:0;accent-color:var(--ink)}
+.mtag.off-work{background:#E3F4EA;color:#1F5136}
+.int-pick{display:flex;align-items:center;gap:6px;margin-top:6px;white-space:nowrap}.int-pick select{min-height:30px;padding:2px 6px}.apt-multi .am-top{display:flex;gap:14px;white-space:nowrap;padding:2px 8px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+/* 아파트별 외부세차 휴무 */
+.off-tbl td{vertical-align:middle}.off-wd{display:flex;gap:4px;flex-wrap:wrap}.off-wd label{display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:32px;padding:0 6px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;background:var(--card)}
+.off-wd label:has(input:checked){background:#E6E3DB;border-color:#8A8577;color:#4A463C}.off-wd input{display:none}.off-dates{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
 .cm-row.picked td{box-shadow:inset 0 2px 0 var(--ink),inset 0 -2px 0 var(--ink)}
 .pill.st-on{background:var(--ok);color:var(--ok-ink)}.pill.st-pause{background:#F7D64A;color:#5A4500}.pill.st-soon{background:#C62828;color:#fff}.pill.st-cancel{background:#9A9384;color:#fff}
 .btn2:disabled{opacity:.45;cursor:not-allowed}
@@ -386,7 +402,7 @@ const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:nul
   ntScope:'now',notices:null,ntForm:null,
   rdMonth:0,rounds:null,rdTab:'전체',rdApt:'',rdQ:'',rdSel:[],rdCancel:false,
   liveDay:keyOf(new Date()),live:null,liveAt:null,frows:null,frState:'open',frMine:false,frSel:[],frReply:{},fmgr:[],purl:{},pview:null,cntField:0,cntFieldAll:0,
-  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,cmMonth:0,accs:[],cset:{payday:20,notice2_days:5},pr:{mode:'pay',off:0,from:'',to:'',method:'',proof:'',acct:'',rows:null},payMethod:'계좌이체',payProof:'없음',payAcct:'',cmData:null,cmView:'apt',crole:null,mineOnly:true,cxDraft:null,payAmt:'',payAmtTouched:false,payNote:'',adjVal:'',adjNote:'',collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',cancelNotify:true,resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
+  reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmApts:[],amOpen:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,cmMonth:0,accs:[],cset:{payday:20,notice2_days:5},pr:{mode:'pay',off:0,from:'',to:'',method:'',proof:'',acct:'',rows:null},payMethod:'계좌이체',payProof:'없음',payAcct:'',cmData:null,cmView:'apt',crole:null,mineOnly:true,cxDraft:null,payAmt:'',payAmtTouched:false,payNote:'',adjVal:'',adjNote:'',collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',cancelNotify:true,resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
   custQ:'', custApt:'전체', notice:'', noticeApt:'전체', noticeSel:[]};
 
@@ -437,6 +453,8 @@ async function loadTab(){
       const live=new Set(S.coll.map(r=>r.id)); S.collSel=S.collSel.filter(x=>live.has(x)); S.collOpen=S.collOpen.filter(x=>live.has(x));
       await Promise.all(S.collOpen.map(id=>Promise.all([loadCBills(id),loadCNotes(id)])));
     }
+    if(S.tab==='cust'){ try{ S.offd=await q(db.rpc('list_wash_offdays'))||[]; S.offOk=true; }catch(_){ S.offd=[]; S.offOk=false; }
+      try{ const ci=await q(db.rpc('list_customer_interior')); S.cint={}; (ci||[]).forEach(r=>S.cint[r.customer_id]=r); S.cintOk=true; }catch(_){ S.cint={}; S.cintOk=false; } S.intDraft={}; }
     if(S.tab==='cmgr'){
       await loadCols('cmgr');
       const [rows,st]=await Promise.all([q(db.rpc('list_customer_note_counts')),q(db.rpc('list_customer_status'))]);
@@ -1012,14 +1030,32 @@ function wdCell(plan,c){ const p=Number(plan)||0;
   if(PICK_N[p]) return '<span class="sub">📅 고객관리에서 날짜 고르기</span>';
   return `<select data-f="wash_weekday"><option value="">미정</option>${WD_ORDER.map(d=>`<option value="${d}" ${c.wash_weekday===d?'selected':''}>${WDF[d]}</option>`).join('')}</select>`; }
 
+/* 아파트별 외부세차 휴무 (54 SQL) — 요일 (0=일 ~ 6=토), 기본 수 · 토 */
+const OFF_N=['일','월','화','수','목','금','토'];
+function offdaysCard(){
+  if(!S.offOk) return `<details class="card" style="padding:12px 16px"><summary><b>🗓 아파트별 외부세차 휴무</b> <span class="sub">54 SQL을 실행하면 쓸 수 있어요</span></summary></details>`;
+  const L=S.offd||[], all=S.offAll||[3,6];
+  return `<details class="card" style="padding:12px 16px" data-hs-off ${S.offOpen?'open':''} id="offBox"><summary><b>🗓 아파트별 외부세차 휴무</b> <span class="sub">기본 수 · 토 휴무 · 아파트마다 바꾸고, 하루씩 '쉼 / 일함'으로 예외를 둘 수 있어요 (4단계 미완료 넘기기에서 써요)</span></summary>
+  <div class="row" style="gap:8px;margin:10px 0;flex-wrap:wrap"><span class="sub">모든 아파트 한꺼번에:</span><div class="off-wd">${OFF_N.map((l,w)=>`<label><input type="checkbox" data-offall="${w}" ${all.includes(w)?'checked':''}>${l}</label>`).join('')}</div><button class="btn2 sm" data-act="offAllSave">모든 아파트에 적용</button></div>
+  ${L.length?`<div class="tbl"><table class="off-tbl"><thead><tr><th>아파트</th><th>휴무 요일 (누르면 바로 저장)</th><th>하루씩 바꾼 날</th></tr></thead><tbody>${L.map((r,i)=>`<tr><td><b>${esc(r.complex)}</b>${r.is_default?' <small class="by">기본값</small>':''}</td>
+    <td><div class="off-wd">${OFF_N.map((l,w)=>`<label><input type="checkbox" data-offwd="${i}" value="${w}" ${(r.off_weekdays||[]).includes(w)?'checked':''}>${l}</label>`).join('')}</div></td>
+    <td><div class="off-dates">${(r.dates||[]).map(d=>`<span class="mtag${d.off?'':' off-work'}">${esc(String(d.date).slice(5).replace('-','/'))} ${d.off?'쉼':'일함'}${d.memo?' · '+esc(d.memo):''} <button class="link" data-act="offDel" data-i="${i}" data-d="${esc(d.date)}" aria-label="지우기">✕</button></span>`).join('')||'<span class="sub">없음</span>'}</div>
+      <div class="row" style="gap:6px;margin-top:6px"><input class="inp" type="date" id="offD${i}" min="${keyOf(new Date())}" style="max-width:150px"><select class="inp" id="offK${i}" style="max-width:96px"><option value="1">쉼</option><option value="0">일함</option></select><button class="btn2 sm" data-act="offAdd" data-i="${i}">추가</button></div></td></tr>`).join('')}</tbody></table></div>`:'<p class="sub">계약완료 고객의 아파트가 아직 없어요.</p>'}</details>`;
+}
+/* 정기권 칸의 '실내포함' — 정기권 회차와 같이 고를 수 있어요. 기본 1회 · 횟수 바꾸기 (고객관리 실내세차 방식과 같은 값) */
+function intPick(cid){ const plan=((S.cint||{})[cid]||{}).interior_plan||'', d=(S.intDraft||{})[cid];
+  const on=d?d.on:ipInc(plan), n=d?d.n:(plan==='every'?'every':String(ipN(plan)||1));
+  return `<div class="int-pick"><label class="auto"><input type="checkbox" data-intp="${cid}" ${on?'checked':''}><span>실내포함</span></label><select data-intn="${cid}" aria-label="실내 횟수" ${on?'':'hidden'}>${[1,2,3,4,5,6,7,8].map(k=>`<option value="${k}" ${n===String(k)?'selected':''}>월 ${k}회</option>`).join('')}<option value="every" ${n==='every'?'selected':''}>매회</option></select>${!on&&plan==='service'?'<small class="by">요청 서비스</small>':''}</div>`; }
+const intCode=(on,n)=>!on?'request':n==='every'?'every':Number(n)>1?'m'+n:'monthly';
 function custView(){
   const apts=['전체',...complexes()], qq=S.custQ.trim().toLowerCase(), fs=fieldStaff();
   const list=S.customers.filter(c=>(S.custApt==='전체'||c.complex===S.custApt)&&(!qq||[c.name,c.car_number,c.unit,c.phone].join(' ').toLowerCase().includes(qq)));
   return `<div class="row"><div class="grow"><h1 class="h">고객 세차 설정</h1><p class="sub">정기권·지정 요일·담당 현장직원을 모두 입력하고 저장하면, 지정 요일 날짜에 직원 앱에 자동으로 나타나요. 월 8회 · 12회는 매주 요일 2 · 3개, 월 2회(격주) · 월 3회는 고객관리의 📅 날짜에서 달마다 직접 골라요.</p></div></div>
+  ${offdaysCard()}
   <div class="row"><input class="inp" id="custQ" placeholder="이름·차량번호·동 검색" value="${esc(S.custQ)}" style="min-width:220px"><div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.custApt===a}" data-act="capt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div></div>
-  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권</th><th>지정 요일</th><th>차종</th><th>차급</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
+  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권 · 실내포함</th><th>지정 요일</th><th>차종</th><th>차급</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
     ${list.map(c=>`<tr data-cid="${c.id}"><td><b>${esc(c.name)}</b></td><td><input data-f="complex" value="${esc(c.complex||'')}" placeholder="예: 범어파크뷰" ${c.complex?'':'class="need"'}></td><td><input data-f="unit" value="${esc(c.unit||'')}" placeholder="예: 103동 1201호" style="max-width:120px"></td><td>${esc(c.car_number||'-')}</td>
-      <td><select data-f="wash_plan" data-rowplan="1">${planOpts(c.wash_plan)}</select></td>
+      <td><select data-f="wash_plan" data-rowplan="1">${planOpts(c.wash_plan)}</select>${S.cintOk?intPick(c.id):''}</td>
       <td class="wd-cell">${wdCell(c.wash_plan,c)}</td>
       <td><input data-f="car_model" value="${esc(c.car_model||'')}" placeholder="예: 아반떼"></td>
       <td>${(()=>{const r=S.cls&&S.cls[c.id], man=r&&r.class_source==='직접'?r.car_class:''; if(!S.cls) return '<span class="sub">SQL 20 필요</span>';
@@ -1031,6 +1067,17 @@ function custView(){
 }
 
 /* ---------- 탭: 고객관리 (차량별 메모·처리이력) ---------- */
+// 일시정지 = 짧게 쉼(하늘색) · 정지 = 한 달 이상(노랑). 종류를 안 고른 예전 고객은 기간으로 나눠요 (54 SQL과 같은 규칙)
+function pzKind(st){ if(st.pause_kind) return st.pause_kind; if(!st.pause_until) return '정지';
+  const from=st.status_changed_at?String(st.status_changed_at).slice(0,10):keyOf(new Date());
+  return (new Date(st.pause_until+'T00:00:00')-new Date(from+'T00:00:00'))/864e5>=30?'정지':'일시정지'; }
+const PZ_WHY=['수리','여행','차량변경','기타'];
+/* 아파트 여러 개 선택 상자 — key: S[key]에 고른 아파트 배열을 저장 (비면 전체) */
+function aptMulti(key,apts,label){ const sel=S[key]||[], n=sel.length;
+  return `<details class="apt-multi" data-am="${key}"${S.amOpen===key?' open':''}><summary class="inp" aria-label="${esc(label||'아파트 고르기')}">🏢 ${n?(n===1?esc(sel[0]):`아파트 ${n}곳`):'아파트 전체'} ▾</summary>
+    <div class="am-pop"><div class="am-top"><button type="button" class="link" data-act="amAll" data-k="${key}">모두 고르기</button><button type="button" class="link" data-act="amNone" data-k="${key}">선택 해제 (전체)</button></div>
+    ${apts.map(a=>`<label><input type="checkbox" data-amk="${key}" value="${esc(a)}" ${sel.includes(a)?'checked':''}>${esc(a)}</label>`).join('')||'<p class="sub" style="padding:6px 8px">아파트가 없어요.</p>'}</div></details>`; }
+const aptIn=(key,c)=>{ const sel=S[key]||[]; return !sel.length||sel.includes(c); };
 async function loadNotes(cid){ S.notes[cid]=await q(db.rpc('list_customer_notes',{p_customer_id:cid}))||[]; }
 function cmState(c){
   const st=S.cstat[c.id]||{wash_status:'세차중'};
@@ -1038,8 +1085,10 @@ function cmState(c){
   if(st.wash_status==='일시정지'){
     const days=st.pause_until?Math.round((new Date(st.pause_until+'T00:00:00')-new Date(keyOf(new Date())+'T00:00:00'))/86400000):null;
     const md=st.pause_until?st.pause_until.slice(5).replace('-','/').replace(/^0/,''):'';
-    if(days!=null&&days<=7) return {k:'soon',label:`재개 임박 · ${md} (D-${days})`,cls:'is-soon',days};
-    return {k:'pause',label:`일시정지 · ${md} 재개`,cls:'is-pause',days};
+    const kind=pzKind(st), why=st.pause_reason?` · ${st.pause_reason}`:'';
+    if(days!=null&&days<=7) return {k:'soon',label:`재개 임박 · ${kind} ${md} (D-${days})${why}`,cls:'is-soon',pill:'st-soon',days};
+    return kind==='정지'?{k:'stop',label:`정지 · ${md?md+' 재개':'재개 미정'}${why}`,cls:'is-stop',pill:'st-stop',days}
+      :{k:'pause',label:`일시정지 · ${md?md+' 재개':'재개 미정'}${why}`,cls:'is-pz',pill:'st-pz',days};
   }
   if(st.wash_status==='이관중') return {k:'move',label:'이관중',cls:'is-move'};
   // 신규: 계약일로부터 30일 이내 (자동)
@@ -1144,7 +1193,7 @@ const CM_COLS=[
   ['unit','동·호수',c=>`<td>${esc(c.unit||'-')}</td>`,1],
   ['model','차종',c=>`<td>${esc(c.car_model||'-')}${clsTag(c.id)}</td>`,1],
   ['car','차량번호',c=>`<td><button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>`,1],
-  ['status','상태',(c,x)=>`<td><span class="pill st-${x.st.k}">${esc(x.st.label)}</span></td>`,1],
+  ['status','상태',(c,x)=>`<td><span class="pill ${x.st.pill||'st-'+x.st.k}">${esc(x.st.label)}</span></td>`,1],
   ['name','고객',(c,x)=>`<td>${x.kind==='sub'?'<span class="grp-mark" aria-hidden="true">└</span>':''}<button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button>${x.kind==='head'?`<br><button class="grp-tog" data-act="cmGrp" data-g="${x.g}" aria-expanded="${x.gx}" title="같은 고객 앱 계정(휴대폰 번호)의 차량">🚗 ${x.n}대 ${x.gx?'접기 ▴':'펼치기 ▾'}</button>${x.shown<x.n&&x.gx?`<small class="by"> (검색 조건에 맞는 ${x.shown}대만)</small>`:''}`:''}</td>`,1],
   ['phone','연락처',c=>`<td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td>`,1],
   ['color','색상',c=>`<td>${esc(c.car_color||'-')}</td>`,1],
@@ -1158,14 +1207,15 @@ const CM_COLS=[
   ['fee','세차 요금',c=>{const r=(S.cint||{})[c.id]||{}; return `<td class="nowrap">${r.wash_fee!=null?won0(r.wash_fee)+' /월':'-'}</td>`;},0,()=>S.cintOk],
   ['cls','차급',c=>{const r=S.cls&&S.cls[c.id]; return `<td class="nowrap">${esc((r&&r.car_class)||'미분류')}</td>`;},0],
   ['login','앱 아이디',c=>{const L=(S.logins||{})[c.id]; return `<td class="nowrap">${L?esc(L.login_id)+(L.pw_initial?' <small class="by">1234</small>':''):'-'}</td>`;},0],
-  ['resume','재개일',c=>{const st=S.cstat[c.id]||{}; return `<td class="nowrap">${st.pause_until?ymd(st.pause_until):'-'}</td>`;},0],
+  ['resume','재개일',c=>{const st=S.cstat[c.id]||{}; return `<td class="nowrap">${st.pause_until?ymd(st.pause_until):st.wash_status==='일시정지'?'미정':'-'}</td>`;},0],
+  ['pzwhy','쉬는 사유',c=>{const st=S.cstat[c.id]||{}; return `<td>${st.wash_status==='일시정지'&&st.pause_reason?esc(st.pause_reason):'-'}</td>`;},0],
 ];
 function cmgrView(){
   const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
   const qq=S.cmQ.replace(/\s/g,'').toLowerCase();
-  const base=S.customers.filter(c=>(!S.cmApt||c.complex===S.cmApt)&&(!qq||[c.car_number,c.name,c.unit,c.phone,c.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq)));
-  const cnt={all:base.length,on:0,new:0,pause:0,soon:0,move:0,cancel:0}; base.forEach(c=>cnt[cmState(c).k]++);
-  const list=base.filter(c=>{const k=cmState(c).k;return S.cmSt==='all'||k===S.cmSt||(S.cmSt==='pause'&&k==='soon');});
+  const base=S.customers.filter(c=>aptIn('cmApts',c.complex)&&(!qq||[c.car_number,c.name,c.unit,c.phone,c.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq)));
+  const cnt={all:base.length,on:0,new:0,pause:0,stop:0,soon:0,move:0,cancel:0}; base.forEach(c=>cnt[cmState(c).k]++);
+  const list=base.filter(c=>{const x=cmState(c), k=x.k;return S.cmSt==='all'||k===S.cmSt||(k==='soon'&&(S.cmSt==='pause'||S.cmSt==='stop')&&pzKind(S.cstat[c.id]||{})===(S.cmSt==='stop'?'정지':'일시정지'));});
   const ids=list.map(c=>c.id), allSel=ids.length&&ids.every(x=>S.cmSel.includes(x)), n=S.cmSel.length;
   const cols=colsOn('cmgr'), COLS=cols.length+1;
   // 한 고객 앱 계정(같은 휴대폰 번호)에 차량이 여러 대면 한 줄로 묶고 [🚗 N대 ▾]로 펼쳐요
@@ -1175,7 +1225,7 @@ function cmgrView(){
     const mem=list.filter(x=>grpOf(x)===g), head=mem.find(x=>LG[x.id].is_primary)||mem[0];
     rowsG.push({c:head,kind:'head',g,n:LG[head.id].car_count,shown:mem.length});
     if(gOpen.includes(g)) mem.filter(x=>x!==head).forEach(x=>rowsG.push({c:x,kind:'sub',g})); }
-  return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.<br>신규 = 계약일로부터 30일 이내 (자동) · 이관중 = 관리자가 직접 표시 (세차 일정은 그대로)</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.<br>신규 = 계약일로부터 30일 이내 (자동) · 이관중 = 관리자가 직접 표시 (세차 일정은 그대로)<br>일시정지(하늘색) = 짧게 쉼 (수리, 이번 주 패스 등) · 정지(노랑) = 한 달 이상 쉼 · 해지(회색) · 다시 시작할 날을 모르면 '미정'</p></div></div>
   <div class="coll-tools">
     <label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="custFile" accept=".xlsx,.xls,.csv" hidden></label>
     <button class="btn2 sm" data-act="custTpl">엑셀 양식 받기</button>
@@ -1187,14 +1237,15 @@ function cmgrView(){
   ${S.loginsOk?'<p class="note" style="margin:0">📱 고객 앱 아이디 = 휴대폰 번호 (예: 010-1234-5678 → 01012345678) · 처음 비밀번호 1234 · 같은 번호의 차량은 한 계정으로 묶여요 · 계약완료 고객이 들어오면 자동으로 만들어져요.</p>':''}
   ${S.custImportMsg?`<div class="note" style="background:#FFF8E6;border:1px solid #E9D9A8;border-radius:10px;padding:8px 12px"><b>결과</b> · ${esc(S.custImportMsg.head)}<button class="link" data-act="custMsgClose" style="float:right">닫기</button>${S.custImportMsg.list.length?`<ul style="margin:6px 0 0;padding-left:18px">${S.custImportMsg.list.slice(0,30).map(m=>`<li>${m.row?esc(m.row)+'번째 줄 ':''}${esc(m.car||'')} — ${esc(m.msg)}</li>`).join('')}${S.custImportMsg.list.length>30?`<li>외 ${S.custImportMsg.list.length-30}건</li>`:''}</ul>`:''}</div>`:''}
   <form id="cmsearch" class="req-tools" role="search">
-    <select class="inp" id="cmApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.cmApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
+    ${aptMulti('cmApts',apts,'아파트별 보기 (여러 개 고르기)')}
     <input class="inp grow" id="cmQ" type="search" value="${esc(S.cmQin)}" placeholder="차량번호 · 이름 · 동호수 · 연락처 검색" aria-label="검색">
-    <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.cmQ||S.cmApt?`<button class="link" type="button" data-act="cmClear">초기화</button>`:''}
+    <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.cmQ||S.cmApts.length?`<button class="link" type="button" data-act="cmClear">초기화</button>`:''}
   </form>
-  <div class="chips">${[['all','전체'],['on','세차중'],['new','신규'],['pause','일시정지'],['soon','재개 임박'],['move','이관중'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
+  <div class="chips">${[['all','전체'],['on','세차중'],['new','신규'],['pause','일시정지'],['stop','정지'],['soon','재개 임박'],['move','이관중'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k==='pause'?'pz':k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
   <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}<span class="grow"></span>
     <button class="btn2 sm" data-act="cmSet" data-s="세차중" ${n?'':'disabled'}>세차중으로</button>
-    <button class="btn2 sm st-pause" data-act="cmPause" ${n?'':'disabled'}>일시중지</button>
+    <button class="btn2 sm st-pz" data-act="cmPause" data-k="일시정지" ${n?'':'disabled'}>일시정지</button>
+    <button class="btn2 sm st-stop" data-act="cmPause" data-k="정지" ${n?'':'disabled'}>정지</button>
     <button class="btn2 sm st-move" data-act="cmSet" data-s="이관중" ${n?'':'disabled'}>이관중</button>
     <button class="btn2 sm st-cancel" data-act="cmSet" data-s="해지" ${n?'':'disabled'}>해지</button>
     <button class="btn sm danger" data-act="cmTrash" ${n?'':'disabled'}>🗑 삭제</button></div>
@@ -1202,7 +1253,7 @@ function cmgrView(){
     ${rowsG.map(({c,kind,g,n,shown})=>{const nn=S.noteCnt[c.id]||{total:0,starred:0}, open=S.cmOpen.includes(c.id), st=cmState(c), sel=S.cmSel.includes(c.id), gx=kind==='head'&&gOpen.includes(g);
       return `<tr class="cm-row ${st.cls}${open?' open':''}${sel?' picked':''}${kind==='sub'?' grp-sub':''}${kind==='head'?' grp-head':''}"><td class="ck"><input type="checkbox" data-cmsel="${c.id}" ${sel?'checked':''} aria-label="${esc(c.car_number||'')} 선택"></td>${cols.map(col=>col[2](c,{kind,g,n,shown,st,gx,open,nn})).join('')}</tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box">${notesPanel(c)}</div></td></tr>`:''}`;}).join('')}
-  </tbody></table></div>`:`<div class="empty">${S.cmQ||S.cmApt||S.cmSt!=='all'?'조건에 맞는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`}`;
+  </tbody></table></div>`:`<div class="empty">${S.cmQ||S.cmApts.length||S.cmSt!=='all'?'조건에 맞는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`}`;
 }
 function notesPanel(c){
   const list=S.notes[c.id];
@@ -1825,7 +1876,17 @@ document.addEventListener('click',async e=>{
     case 'reqF': S.reqF=t.dataset.f; S.memoEdit=null; S.sel=[]; await loadTab(); break;
     case 'selAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; const all=ids.every(x=>S.sel.includes(x)); S.sel=all?S.sel.filter(x=>!ids.includes(x)):[...new Set([...S.sel,...ids])]; render(); break; }
     case 'selNone': S.sel=[]; render(); break;
-    case 'cmClear': S.cmQ=''; S.cmQin=''; S.cmApt=''; render(); break;
+    case 'cmClear': S.cmQ=''; S.cmQin=''; S.cmApt=''; S.cmApts=[]; render(); break;
+    case 'offAllSave': { const days=S.offAll||[3,6];
+      ask('모든 아파트의 휴무 요일을 바꿀까요?',`모든 아파트를 ${days.map(w=>OFF_N[w]).join(' · ')||'휴무 없음'}으로 맞춰요. 하루씩 바꾼 날은 그대로예요.`,'적용',
+        ()=>act(async()=>{ await q(db.rpc('set_wash_off_weekdays',{p_complex:null,p_weekdays:days,p_all:true})); },'모든 아파트에 적용했어요.')); break; }
+    case 'offAdd': { const r=(S.offd||[])[Number(t.dataset.i)]; if(!r) break; const d=($('#offD'+t.dataset.i)||{}).value, k=($('#offK'+t.dataset.i)||{}).value;
+      if(!d){ toast('날짜를 골라 주세요.',true); break; }
+      try{ await q(db.rpc('set_wash_offday_date',{p_complex:r.complex,p_date:d,p_off:k==='1',p_memo:null})); toast(`${r.complex} ${d.slice(5).replace('-','/')} ${k==='1'?'쉼':'일함'}으로 정했어요.`); S.offOpen=true; await loadTab(); render(); }catch(e){ toast(friendly(e),true); } break; }
+    case 'offDel': { const r=(S.offd||[])[Number(t.dataset.i)]; if(!r) break;
+      try{ await q(db.rpc('set_wash_offday_date',{p_complex:r.complex,p_date:t.dataset.d,p_off:null,p_memo:null})); toast('지웠어요. 그날은 요일 기본대로예요.'); S.offOpen=true; await loadTab(); render(); }catch(e){ toast(friendly(e),true); } break; }
+    case 'amAll': { const k=t.dataset.k; S[k]=[...t.closest('.apt-multi').querySelectorAll('input[data-amk]')].map(i=>i.value); S.amOpen=k; render(); break; }
+    case 'amNone': { const k=t.dataset.k; S[k]=[]; S.amOpen=k; render(); break; }
     case 'cmSt': S.cmSt=t.dataset.f; render(); break;
     case 'collTab': S.collTab=t.dataset.f; S.collSel=[]; render(); break;
     case 'collClear': S.collQ=''; S.collQin=''; S.collApt=''; render(); break;
@@ -1959,11 +2020,25 @@ document.addEventListener('click',async e=>{
         :'일시정지·해지·이관중을 풀고 다시 정기세차 일정이 만들어지게 해요.';
       ask(`선택한 ${ids.length}대를 ${st==='해지'?'해지':st==='이관중'?'이관중으로':'세차중으로'} 처리할까요?`,body,'확인',()=>act(async()=>{ const n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:st,p_resume:null})); S.cmSel=[]; toast(`${n||0}대를 ${st} 처리했어요.`); },null)); break; }
     case 'cmPause': { const ids=[...S.cmSel]; if(!ids.length) break;
-      const tmr=new Date(); tmr.setDate(tmr.getDate()+1); const min=keyOf(tmr);
-      if(!S.pauseDate||S.pauseDate<min){ const d=new Date(); d.setDate(d.getDate()+14); S.pauseDate=keyOf(d); }
-      ask(`선택한 ${ids.length}대를 일시중지할까요?`,'다시 시작할 날짜를 골라 주세요. 그 전까지는 세차 일정이 만들어지지 않고, 목록에서 노란색으로 보여요.\n재개일 일주일 전부터는 빨간색(재개 임박)으로 바뀌고, 재개일이 되면 자동으로 세차중으로 돌아가요.','확인',
-        ()=>act(async()=>{ const n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:'일시정지',p_resume:S.pauseDate})); S.cmSel=[]; toast(`${n||0}대를 ${S.pauseDate.slice(5).replace('-','/')}까지 일시중지했어요.`); },null),
-        `<label class="field"><span style="font-weight:700;font-size:13px">다시 시작하는 날</span><input class="inp" type="date" id="pauseDate" min="${min}" value="${S.pauseDate}"></label>`); break; }
+      const kind=t.dataset.k||'일시정지', tmr=new Date(); tmr.setDate(tmr.getDate()+1); const min=keyOf(tmr);
+      const d0=new Date(); d0.setDate(d0.getDate()+(kind==='정지'?31:7));
+      S.pz={kind,date:keyOf(d0),undecided:kind==='정지',why:'',memo:''};
+      const build=()=>{ const z=S.pz; return `<div class="field"><span style="font-weight:700;font-size:13px">종류</span><div class="pz-reasons">${['일시정지','정지'].map(k=>`<label class="auto"><input type="radio" name="pzKind" data-pz="kind" value="${k}" ${z.kind===k?'checked':''}><span>${k==='정지'?'정지 (한 달 이상 · 노랑)':'일시정지 (짧게 · 하늘색)'}</span></label>`).join('')}</div></div>
+        <label class="field"><span style="font-weight:700;font-size:13px">다시 시작하는 날</span><input class="inp" type="date" data-pz="date" min="${min}" value="${esc(z.date)}" ${z.undecided?'disabled':''}></label>
+        <label class="auto"><input type="checkbox" data-pz="undecided" ${z.undecided?'checked':''}><span>아직 몰라요 (미정)</span></label>
+        <div class="field"><span style="font-weight:700;font-size:13px">사유</span><div class="pz-reasons">${PZ_WHY.map(w=>`<label class="auto"><input type="radio" name="pzWhy" data-pz="why" value="${w}" ${z.why===w?'checked':''}><span>${w}</span></label>`).join('')}</div>
+        <input class="inp" data-pz="memo" maxlength="150" value="${esc(z.memo)}" placeholder="메모 (선택) 예: 앞범퍼 수리, 10/20까지 입고" style="margin-top:6px"></div>`; };
+      ask(`선택한 ${ids.length}대를 쉬게 할까요?`,'쉬는 동안은 세차 일정이 만들어지지 않고, 수금관리에서 그 달은 0원(⏸ 정지)이 돼요.\n다시 시작하는 날이 되면 자동으로 세차중으로 돌아가요. 미정이면 직접 [세차중으로]를 눌러 주세요.','확인',
+        ()=>act(async()=>{ const z=S.pz, resume=z.undecided?null:z.date;
+          if(!z.undecided&&(!z.date||z.date<min)){ toast('다시 시작할 날을 내일 이후로 골라 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
+          const why=[z.why,z.memo.trim()].filter(Boolean).join(' · ');
+          let n;
+          try{ n=await q(db.rpc('set_customer_pause',{p_ids:ids,p_kind:z.kind,p_resume:resume,p_reason:why||null})); }
+          catch(e){ if(!/set_customer_pause|function|schema cache/i.test(String(e&&e.message||e))) throw e;
+            if(!resume){ toast('미정으로 두려면 54 SQL을 먼저 실행해 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
+            n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:'일시정지',p_resume:resume})); }
+          S.cmSel=[]; toast(`${n||0}대를 ${z.kind}했어요 · ${resume?resume.slice(5).replace('-','/')+' 다시 시작':'다시 시작 미정'}`); },null),
+        build()); S.dialog.rebuild=build; break; }
     case 'cmTrash': { const ids=[...S.cmSel]; if(!ids.length) break;
       ask(`선택한 ${ids.length}명을 휴지통으로 이동할까요?`,'휴지통으로 이동된 고객은 30일이 지나면 자동으로 완전히 삭제됩니다.\n30일 안에는 영업CRM [🗑 휴지통]에서 복원할 수 있어요.','확인',
         ()=>act(async()=>{ const n=await q(db.rpc('trash_customers',{p_ids:ids})); S.customers=S.customers.filter(c=>!ids.includes(c.id)); S.cmSel=[]; toast(`${n||0}명을 휴지통으로 옮겼어요.`); },null)); break; }
@@ -2002,7 +2077,7 @@ document.addEventListener('click',async e=>{
       S.cuform=c?{id:c.id,complex:c.complex||'',unit:c.unit||'',car_number:c.car_number||'',name:c.name||'',phone:c.phone||'',car_model:c.car_model||'',car_color:c.car_color||'',
         car_class:(S.cls&&S.cls[c.id]&&S.cls[c.id].class_source==='직접')?S.cls[c.id].car_class:'',wash_plan:c.wash_plan??'',wash_weekday:c.wash_weekday??'',wash_days:sortWd(c.wash_days||[]),field_staff_id:c.field_staff_id||'',contract_date:c.contract_date||'',memo:'',
         interior_plan:((S.cint||{})[c.id]||{}).interior_plan||'',fee:((S.cint||{})[c.id]||{}).wash_fee??'',interior_fee:((S.cint||{})[c.id]||{}).interior_fee??''}
-        :{wash_status:'세차중',complex:S.cmApt||''};
+        :{wash_status:'세차중',complex:S.cmApts.length===1?S.cmApts[0]:''};
       ask(c?`고객 정보 수정 · ${c.car_number||c.name||''}`:'고객 직접 추가',c?'고친 내용은 수금관리 명단(연결된 고객)에도 함께 반영돼요.':'기존에 관리하던 고객을 한 명씩 넣을 때 써요. 여러 명은 [📥 엑셀 넣기]가 편해요.',c?'저장':'추가',
         ()=>act(async()=>{ const f={...S.cuform}; if(!String(f.car_number||'').trim()){ toast('차량번호를 적어 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
           if(f.wash_status==='일시정지'&&!f.pause_until){ toast('다시 시작할 날을 골라 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
@@ -2200,6 +2275,11 @@ document.addEventListener('click',async e=>{
       const clsSel=tr.querySelector('[data-f="car_class"]');
       try{ await q(db.from('customers').update(patch).eq('id',id)); Object.assign(S.customers.find(c=>c.id===id),patch);
         if(clsSel&&clsSel.value!==clsSel.dataset.was) await q(db.rpc('set_customer_car_class',{p_id:id,p_class:clsSel.value||null}));
+        { const d=(S.intDraft||{})[id], old=((S.cint||{})[id]||{}).interior_plan||'';
+          if(d){ const code=intCode(d.on,d.n||'1'); if(code!==(old||'request')&&!(code==='request'&&!ipInc(old))){
+            await q(db.rpc('set_interior_contract',{p_customer_id:id,p_member_id:null,p_plan:code}));
+            S.cint[id]={...(S.cint[id]||{customer_id:id}),interior_plan:code}; }
+            delete S.intDraft[id]; } }
         if(S.cls){ await loadCls(); render(); } if(!S.slotApt&&patch.complex) S.slotApt=patch.complex; toast(PICK_N[pl]?`저장했어요. 월 ${pl}회는 고객관리의 📅 날짜에서 이번 달 날짜를 골라 주세요.`:patch.wash_plan&&patch.wash_weekday!==null&&patch.field_staff_id?`저장했어요. ${need?'매주 '+daysTxt(rdays)+'요일':(pl===2?'격주 ':'매주 ')+WDF[patch.wash_weekday]}마다 직원 앱에 나타나요.`:'저장했어요. 정기권·지정 요일·담당 직원이 모두 있어야 직원 앱에 나타나요.'); }catch(err){ toast(friendly(err),true); }
       break;
     }
@@ -2209,7 +2289,11 @@ document.addEventListener('click',async e=>{
     case 'nsend': ask(`${S.noticeSel.length}명에게 공지를 보낼까요?`,S.notice.trim(),'보내기',()=>act(async()=>{const n=await q(db.rpc('send_customer_notice',{p_customer_ids:S.noticeSel,p_title:'공지사항',p_body:S.notice.trim()}));toast(`${n||0}명에게 보냈어요.`);S.notice='';S.noticeSel=[];},null)); break;
   }
 });
-document.addEventListener('toggle',e=>{ if(e.target&&e.target.id==='mgrBox') S.mgrOpen=e.target.open; },true);
+document.addEventListener('toggle',e=>{ if(e.target&&e.target.id==='mgrBox') S.mgrOpen=e.target.open;
+  if(e.target&&e.target.id==='offBox') S.offOpen=e.target.open;
+  if(e.target&&e.target.classList&&e.target.classList.contains('apt-multi')){ const k=e.target.dataset.am; if(e.target.open) S.amOpen=k; else if(S.amOpen===k) S.amOpen=''; } },true);
+// 아파트 선택 상자 밖을 누르면 닫아요
+document.addEventListener('click',e=>{ if(!S.amOpen||e.target.closest('.apt-multi')) return; document.querySelectorAll('.apt-multi[open]').forEach(d=>d.open=false); S.amOpen=''; });
 document.addEventListener('change',async e=>{
   const t=e.target;
   if(t.dataset&&t.dataset.colset!==undefined&&S.colDraft){ const k=t.dataset.colset, h=S.colDraft.hidden;
@@ -2232,6 +2316,17 @@ document.addEventListener('change',async e=>{
   if(t.dataset.rsel){ const id=Number(t.dataset.rsel); S.sel=t.checked?[...new Set([...S.sel,id])]:S.sel.filter(x=>x!==id); render(); return; }
   if(t.id==='reqApt'){ S.reqApt=t.value; await loadTab(); return; }
   if(t.id==='cmApt'){ S.cmApt=t.value; render(); return; }
+  if(t.dataset.intp){ const id=Number(t.dataset.intp), plan=((S.cint||{})[id]||{}).interior_plan||''; S.intDraft=S.intDraft||{};
+    const cur=S.intDraft[id]||{on:ipInc(plan),n:plan==='every'?'every':String(ipN(plan)||1)}; S.intDraft[id]={...cur,on:t.checked};
+    const sel=t.closest('.int-pick').querySelector('select'); if(sel){ sel.hidden=!t.checked; if(t.checked&&!S.intDraft[id].n) S.intDraft[id].n=sel.value; } return; }
+  if(t.dataset.intn){ const id=Number(t.dataset.intn); S.intDraft=S.intDraft||{}; S.intDraft[id]={...(S.intDraft[id]||{on:true}),n:t.value}; return; }
+  if(t.dataset.offall!==undefined){ const w=Number(t.dataset.offall), cur=S.offAll||[3,6]; S.offAll=t.checked?[...new Set([...cur,w])].sort():cur.filter(x=>x!==w); return; }
+  if(t.dataset.offwd!==undefined){ const r=(S.offd||[])[Number(t.dataset.offwd)]; if(!r) return; const w=Number(t.value), cur=r.off_weekdays||[];
+    const days=t.checked?[...new Set([...cur,w])].sort():cur.filter(x=>x!==w);
+    try{ await q(db.rpc('set_wash_off_weekdays',{p_complex:r.complex,p_weekdays:days,p_all:false})); r.off_weekdays=days; r.is_default=false; toast(`${r.complex} 휴무: ${days.map(x=>OFF_N[x]).join(' · ')||'없음'}`); }catch(e){ toast(friendly(e),true); }
+    S.offOpen=true; render(); return; }
+  if(t.dataset.amk){ const k=t.dataset.amk, v=t.value, cur=S[k]||[]; S[k]=t.checked?[...new Set([...cur,v])]:cur.filter(x=>x!==v); S.amOpen=k; render(); return; }
+  if(t.dataset.pz&&S.pz){ const k=t.dataset.pz; S.pz[k]=t.type==='checkbox'?t.checked:t.value; if(k!=='memo'&&k!=='date'&&S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } return; }
   if(t.dataset.nstar){ S.noteStar[Number(t.dataset.nstar)]=t.checked; return; }
   if(t.dataset.cmsel){ const id=Number(t.dataset.cmsel); S.cmSel=t.checked?[...new Set([...S.cmSel,id])]:S.cmSel.filter(x=>x!==id); render(); return; }
   if(t.id==='nm-star'){ S.nmStar=t.checked; return; }
@@ -2308,6 +2403,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.nsel){ const id=Number(t.dataset.nsel); S.noticeSel=t.checked?[...new Set([...S.noticeSel,id])]:S.noticeSel.filter(x=>x!==id); render(); }
 });
 document.addEventListener('input',e=>{ if(e.target.id==='rsnEtc'&&S.rsn){ S.rsn.etc=e.target.value; return; }
+  if(e.target.dataset&&(e.target.dataset.pz==='memo'||e.target.dataset.pz==='date')&&S.pz){ S.pz[e.target.dataset.pz]=e.target.value; return; }
   if(e.target.dataset&&e.target.dataset.ipc){ const k=e.target.dataset.ipc; S.ipDraft=S.ipDraft||{}; const r=(S.iprices||[]).find(x=>x.car_class===k)||{}; const v=e.target.value.trim(); if(String(r.price)===v.replace(/\D/g,'')&&v!=='') delete S.ipDraft[k]; else S.ipDraft[k]=v; const b=document.querySelector('[data-act=ipSave]'); if(b) b.disabled=!Object.keys(S.ipDraft).length; return; }
   if(/^nt(Title|Body)$/.test(e.target.id)){ ntRead(); return; }
   if(/^td(Title|Memo)$/.test(e.target.id)){ tdRead(); return; }
