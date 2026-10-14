@@ -295,6 +295,8 @@ tr.grp-sub>td{background:#F6F8FC}tr.grp-sub>td:nth-child(2){padding-left:22px}.g
 .set-grid{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:10px}
 @media(max-width:900px){.pr-grid{grid-template-columns:1fr}}
 .toast[hidden]{display:none!important}
+.carry-box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin:10px 0}.carry-box .note{margin:4px 0 0}.sub.carried{color:var(--gold-dark);font-weight:700}
+.cp-btn{border:0;background:none;cursor:pointer;font-size:15px;padding:0 4px;vertical-align:middle}.cp-thumb{width:140px;height:96px;border-radius:10px;border:1px solid var(--line);overflow:hidden;padding:0;background:var(--muted);cursor:pointer;flex:0 0 auto}.cp-thumb img{width:100%;height:100%;object-fit:cover;display:block}.cp-none{display:flex;align-items:center;justify-content:center;color:var(--sub,#888);font-size:13px;cursor:default}
 </style>
 </head>
 <body>
@@ -467,6 +469,7 @@ async function loadTab(){
       if(!S.noDays) try{ const wd=await q(db.rpc('list_wash_dates',{p_month:keyOf(new Date())})); S.wdates={}; (wd||[]).forEach(r=>S.wdates[r.customer_id]=r.dates||[]); }catch(_){ S.wdates={}; }
       try{ const lg=await q(db.rpc('list_customer_logins')); S.logins={}; (lg||[]).forEach(r=>S.logins[r.customer_id]=r); S.loginsOk=true; }catch(_){ S.logins={}; S.loginsOk=false; }
       S.cstat={}; (st||[]).forEach(r=>S.cstat[r.id]=r);
+      await loadCarPhotos(S.customers.map(c=>c.id));
       const live=new Set((st||[]).map(r=>r.id)); S.customers=S.customers.filter(c=>live.has(c.id)); S.cmSel=S.cmSel.filter(x=>live.has(x));
       await Promise.all(S.cmOpen.map(loadNotes));
     }
@@ -499,7 +502,9 @@ async function loadTab(){
     if(S.tab==='jobs'){ await loadCols('jobs');
       if(!S.crole){ try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){ S.crole=null; } }
       const base='id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,phone,complex,unit,car_number,car_model,car_color,wash_plan)';
-      try{ S.jobs=await q(db.from('wash_jobs').select(base+',interior_staff_id,skip_reason,interior_skip,interior_reason,interior_done_at').eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[]; S.jobs53=true; }
+      const b53=base+',interior_staff_id,skip_reason,interior_skip,interior_reason,interior_done_at';
+      try{ S.carry=(await q(db.rpc('get_wash_carry'))||[])[0]||null; }catch(_){ S.carry=undefined; }   // 57 SQL 전이면 undefined
+      try{ S.jobs=await q(db.from('wash_jobs').select(S.carry!==undefined?b53+',carried':b53).eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[]; S.jobs53=true; }
       catch(_){ S.jobs=await q(db.from('wash_jobs').select(base).eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[]; S.jobs53=false; } }
     if(S.tab==='slots'&&S.slotApt){ const {from,to}=monthRange();
       const [sl,rq,cw]=await Promise.all([q(db.rpc('list_interior_slots',{p_complex:S.slotApt,p_from:from,p_to:to})),q(db.rpc('list_interior_requests',{p_complex:S.slotApt})),q(db.rpc('get_interior_closed_weekdays',{p_complex:S.slotApt}))]);
@@ -777,6 +782,29 @@ async function signPhotos(paths){
   const need=[...new Set(paths)].filter(p=>p&&!S.purl[p]); if(!need.length) return;
   try{ const {data}=await db.storage.from('field-photos').createSignedUrls(need,3600); (data||[]).forEach(d=>{ if(d.signedUrl) S.purl[d.path]=d.signedUrl; }); }catch(_){}
 }
+/* ---------- 차량 정면 사진 1장 (SQL 57 · 저장소 car-photos) ---------- */
+async function loadCarPhotos(ids){
+  try{ const r=await q(db.rpc('list_car_photos',{p_customer_ids:ids})); S.cphoto={}; (r||[]).forEach(x=>S.cphoto[x.customer_id]=x); S.cphotoOk=true;
+    const need=(r||[]).map(x=>x.path).filter(p=>p&&!S.purl['car:'+p]);
+    if(need.length){ const {data}=await db.storage.from('car-photos').createSignedUrls(need,3600); (data||[]).forEach(d=>{ if(d.signedUrl) S.purl['car:'+d.path]=d.signedUrl; }); }
+  }catch(_){ S.cphoto={}; S.cphotoOk=false; } }
+async function shrinkImage(file){
+  try{ const url=URL.createObjectURL(file); const img=await new Promise((ok,no)=>{const im=new Image();im.onload=()=>ok(im);im.onerror=no;im.src=url;});
+    const k=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight)), cv=document.createElement('canvas'); cv.width=Math.round(img.naturalWidth*k); cv.height=Math.round(img.naturalHeight*k);
+    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); URL.revokeObjectURL(url); const blob=await new Promise(r=>cv.toBlob(r,'image/jpeg',0.8)); if(blob) return blob; }catch(_){}
+  return file; }
+async function uploadCarPhoto(cid,file){
+  const blob=await shrinkImage(file), path=`${cid}/${S.me.id}-${Date.now()}.jpg`;
+  const up=await db.storage.from('car-photos').upload(path,blob,{contentType:'image/jpeg',upsert:false}); if(up.error) throw up.error;
+  let old; try{ old=await q(db.rpc('set_car_photo',{p_customer_id:cid,p_path:path})); }catch(e){ db.storage.from('car-photos').remove([path]).catch(()=>{}); throw e; }
+  if(old) db.storage.from('car-photos').remove([old]).catch(()=>{});
+  await loadCarPhotos(S.customers.map(c=>c.id)); }
+const carPhotoBtn=cid=>{ const p=(S.cphoto||{})[cid]; return p?`<button class="cp-btn" data-act="carPv" data-id="${cid}" title="차량 정면 사진 보기 · ${esc(p.taken_by||'')} ${p.taken_at?when(p.taken_at):''}" aria-label="차량 정면 사진 보기">📷</button>`:''; };
+function carPhotoBox(cid){ const p=(S.cphoto||{})[cid], src=p&&S.purl['car:'+p.path];
+  return `<div class="cm-box cp-box" style="grid-column:1/-1"><b style="font-size:14px">📷 차량 정면 사진</b>
+    <div class="row" style="gap:12px;margin-top:8px;align-items:flex-start">${src?`<button class="cp-thumb" data-act="carPv" data-id="${cid}" aria-label="사진 크게 보기"><img src="${src}" alt="차량 정면 사진"></button>`:'<div class="cp-thumb cp-none">사진 없음</div>'}
+      <div class="grow"><p class="note" style="margin:0 0 8px">${p?`${esc(p.taken_by||'')} · ${p.taken_at?when(p.taken_at):''} 올림`:'현장직원이 직원앱에서 찍어 올리거나, 여기서 올릴 수 있어요.'}</p>
+      <label class="btn2 sm" style="cursor:pointer">${p?'사진 바꾸기':'사진 올리기'}<input type="file" id="cpFile" data-cid="${cid}" accept="image/*" hidden></label>${p?` <button class="link" data-act="carPhotoDel" data-id="${cid}" style="color:var(--red)">${S.cpDel===cid?'한 번 더 누르면 지워져요':'사진 지우기'}</button>`:''}</div></div></div>`; }
 function photoViewer(){
   const v=S.pview, src=S.purl[v.list[v.i]]||'';
   return `<div class="pv" data-act="pvClose"><img src="${src}" alt="현장 사진 ${v.i+1}" data-stop>
@@ -911,7 +939,7 @@ function jStaffSel(j,part){ const fs=fieldStaff(), cur=part==='ext'?j.staff_id:j
   if(part==='int'&&!S.jobs53) return esc(staffName(j.staff_id)||'외부 직원과 같음');
   return `<select data-jstaff="${j.id}" data-part="${part}" aria-label="${part==='ext'?'외부세차':'실내세차'} 직원">${part==='int'?`<option value="">외부 직원과 같음${j.staff_id?` (${esc(staffName(j.staff_id))})`:''}</option>`:'<option value="">미배정</option>'}${fs.map(x=>`<option value="${x.id}" ${x.id===cur?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`; }
 const JB_COLS=[
-  ['car','차량번호',j=>{const c=j.customers||{}; return `<td>${S.customers.some(x=>x.id===j.customer_id)?`<button class="cust-btn car" style="font-size:14px" data-act="custEdit" data-id="${j.customer_id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>`:`<b class="car" style="font-size:14px">${esc(c.car_number||'-')}</b>`}${j.moved_from?`<br><span class="sub">원래 ${kdate(j.moved_from)}</span>`:''}</td>`;},1],
+  ['car','차량번호',j=>{const c=j.customers||{}; return `<td>${S.customers.some(x=>x.id===j.customer_id)?`<button class="cust-btn car" style="font-size:14px" data-act="custEdit" data-id="${j.customer_id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>`:`<b class="car" style="font-size:14px">${esc(c.car_number||'-')}</b>`}${j.moved_from?`<br><span class="sub${j.carried?' carried':''}">${j.carried?'↪ 못 한 차량 · ':''}원래 ${kdate(j.moved_from)}</span>`:''}</td>`;},1],
   ['model','차종',j=>`<td>${esc((j.customers||{}).car_model||'-')}${clsTag(j.customer_id)}</td>`,1],
   ['color','색상',j=>`<td>${esc((j.customers||{}).car_color||'-')}</td>`,1],
   ['apt','아파트',j=>`<td>${esc((j.customers||{}).complex||'-')}</td>`,1],
@@ -922,7 +950,7 @@ const JB_COLS=[
   ['ext','외부 상태',j=>`<td class="nowrap">${jStSel(j,'ext')}</td>`,1],
   ['int_staff','실내 직원',j=>`<td>${jIO(j)?jStaffSel(j,'ext'):jStaffSel(j,'int')}</td>`,1],
   ['int','실내 상태',j=>`<td class="nowrap">${jStSel(j,'int')}</td>`,1],
-  ['del','관리',j=>`<td>${j.status==='대기'&&!j.interior_done?`<button class="link" data-act="del-job" data-id="${j.id}">삭제</button>`:''}</td>`,1],
+  ['del','관리',j=>`<td class="nowrap">${S.carry!==undefined&&j.status!=='완료'&&!j.interior_done?`<button class="link" data-act="mv-job" data-id="${j.id}">날짜 옮기기</button>`:''}${S.carry!==undefined&&j.status!=='완료'&&!j.interior_done&&j.status==='대기'?' · ':''}${j.status==='대기'&&!j.interior_done?`<button class="link" data-act="del-job" data-id="${j.id}">삭제</button>`:''}</td>`,1],
   // ↓ 추가 칸
   ['name','고객',j=>`<td>${esc((j.customers||{}).name||'-')}</td>`,0],
   ['phone','연락처',j=>`<td class="nowrap">${esc(maskPhone((j.customers||{}).phone)||'-')}</td>`,0],
@@ -953,7 +981,8 @@ function jobsView(){
   return `<div class="row"><div class="grow"><h1 class="h">세차 일정</h1><p class="sub">날짜를 고르면 지정 요일 고객이 자동으로 들어가요. 외부세차 · 실내세차 직원을 따로 정할 수 있고(실내 직원을 비우면 외부 직원이 실내도 해요), 외부 · 실내 상태도 따로 바꿀 수 있어요. 미완료는 사유를 골라요. 여기서 바꾼 상태는 고객에게 알림을 보내지 않아요.</p></div></div>
   <div class="row"><button class="btn2" data-act="jday" data-d="-1">이전</button><input type="date" class="inp" id="jday" value="${S.jobDay}" aria-label="날짜"><button class="btn2" data-act="jday" data-d="1">다음</button>
     <span class="grow"></span><button class="btn gold" data-act="gen">${kdate(S.jobDay)} 일정 만들기</button></div>
-  <div class="summary"><div style="background:var(--gold-soft)"><b>${c(ext,j=>jExtSt(j)==='대기')} · ${c(ints,j=>jIntSt(j)==='대기')}</b><span>대기 (외부 · 실내)</span></div><div style="background:var(--ok)"><b>${c(ext,j=>jExtSt(j)==='완료')} · ${c(ints,j=>jIntSt(j)==='완료')}</b><span>완료 (외부 · 실내)</span></div><div style="background:var(--skip)"><b>${c(ext,j=>jExtSt(j)==='미완료')} · ${c(ints,j=>jIntSt(j)==='미완료')}</b><span>미완료 (외부 · 실내)</span></div><div style="background:var(--card);border:1px solid var(--line)"><b>${list.length}${list.length<all.length?` / ${all.length}`:''}</b><span>차량</span></div></div>
+  ${S.carry?`<div class="carry-box"><label class="auto"><input type="checkbox" id="carryOn" ${S.carry.is_on?'checked':''}><span><b>못 한 차량 다음 근무일로 자동 넘기기</b></span></label><p class="note">대기로 남았거나 현장 사정(차량 없음 · 차량 잠김 · 우천 · 시간 부족)으로 미완료한 차량은 다음 날 낮 12시가 지나면 그 아파트의 다음 근무일로 옮겨져요. 패스(수리 · 여행 · 차량변경) · 고객 요청 취소 · 기타 사유는 넘기지 않아요. 넘어온 차량은 '↪ 못 한 차량'으로 보여요.${S.carry.is_on?'':' <b style="color:var(--red)">지금은 꺼져 있어요.</b>'}</p></div>`:''}
+  <div class="summary"><div style="background:var(--gold-soft)"><b>${c(ext,j=>jExtSt(j)==='대기')} · ${c(ints,j=>jIntSt(j)==='대기')}</b><span>대기 (외부 · 실내)</span></div><div style="background:var(--ok)"><b>${c(ext,j=>jExtSt(j)==='완료')} · ${c(ints,j=>jIntSt(j)==='완료')}</b><span>완료 (외부 · 실내)</span></div><div style="background:var(--skip)"><b>${c(ext,j=>jExtSt(j)==='미완료')} · ${c(ints,j=>jIntSt(j)==='미완료')}</b><span>미완료 (외부 · 실내)</span></div><div style="background:var(--card);border:1px solid var(--line)"><b>${list.length}${list.length<all.length?` / ${all.length}`:''}</b><span>차량${c(list,j=>j.carried)?` · ↪ 넘어온 차량 ${c(list,j=>j.carried)}`:''}</span></div></div>
   <div class="card"><div class="row"><b class="grow">차량 추가</b><select class="inp" id="add-cust" style="min-width:260px" aria-label="추가할 고객"><option value="">고객 고르기</option>${S.customers.map(c=>`<option value="${c.id}">${esc(c.complex)} ${esc(c.unit||'')} · ${esc(c.car_number||c.name)}</option>`).join('')}</select><button class="btn sm" data-act="add-job">추가</button></div></div>
   ${S.jobs53===false?'<p class="note" style="color:var(--red)">⚠ 53번 SQL을 실행하면 외부 · 실내 직원 따로 배정 · 상태 · 사유를 쓸 수 있어요.</p>':''}
   ${jfPanel(all)}
@@ -1197,6 +1226,7 @@ function custFormHtml(){ const f=S.cuform||{}, fs=fieldStaff(), isNew=!f.id;
       <label class="field"><span>실내 요금 (1회 금액 · 원)</span><input class="inp" data-cu="interior_fee" inputmode="numeric" value="${esc(f.interior_fee??'')}" placeholder="${f.interior_plan==='service'?'받지 않음':'비우면 차급 기본값'}" ${f.interior_plan==='service'?'disabled':''}></label></div>
       ${f.interior_plan?`<p class="note" style="margin:4px 0 0">${esc(IP_DESC[f.interior_plan])}${ipN(f.interior_plan)>0&&String(f.interior_fee??'').replace(/\D/g,'')?` → <b>매달 실내 ${won0(Number(String(f.interior_fee).replace(/\D/g,''))*ipN(f.interior_plan))}</b>`:''}</p>`:''}</div>`
      :`${isNew?`<label class="field"><span>월 요금 (원 · 수금관리에 들어가요)</span><input class="inp" data-cu="fee" inputmode="numeric" value="${esc(f.fee||'')}" placeholder="예: 55000"></label>`:''}`}
+    ${!isNew&&S.cphotoOk?carPhotoBox(f.id):''}
     <label class="field" style="grid-column:1/-1"><span>${isNew?'메모 (선택)':'메모 추가 (선택 · 고객 메모에 새로 남아요)'}</span><input class="inp" data-cu="memo" maxlength="2000" value="${esc(f.memo||'')}" placeholder="예: 앞범퍼 기존 스크래치"></label></div>
     ${isNew?'<p class="note">같은 차량번호가 이미 있으면 새로 만들지 않고 그 고객 정보를 고쳐요. 계약완료 고객으로 들어가 세차 일정 · 수금관리(이번 달부터 청구)에 연결돼요.</p>':'<p class="note">세차 상태(일시정지 · 해지 등)는 목록에서 체크한 뒤 위쪽 버튼으로 바꿔 주세요.</p>'}`; }
 async function reloadCustomers(){ const cust=await custQuery(); S.customers=cust||[]; await loadCls(); }
@@ -1229,7 +1259,7 @@ const CM_COLS=[
   ['apt','아파트',c=>`<td>${esc(c.complex||'-')}</td>`,1],
   ['unit','동·호수',c=>`<td>${esc(c.unit||'-')}</td>`,1],
   ['model','차종',c=>`<td>${esc(c.car_model||'-')}${clsTag(c.id)}</td>`,1],
-  ['car','차량번호',c=>`<td><button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>`,1],
+  ['car','차량번호',c=>`<td><button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>${carPhotoBtn(c.id)}${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>`,1],
   ['status','상태',(c,x)=>`<td><span class="pill ${x.st.pill||'st-'+x.st.k}">${esc(x.st.label)}</span></td>`,1],
   ['name','고객',(c,x)=>`<td>${x.kind==='sub'?'<span class="grp-mark" aria-hidden="true">└</span>':''}<button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button>${x.kind==='head'?`<br><button class="grp-tog" data-act="cmGrp" data-g="${x.g}" aria-expanded="${x.gx}" title="같은 고객 앱 계정(휴대폰 번호)의 차량">🚗 ${x.n}대 ${x.gx?'접기 ▴':'펼치기 ▾'}</button>${x.shown<x.n&&x.gx?`<small class="by"> (검색 조건에 맞는 ${x.shown}대만)</small>`:''}`:''}</td>`,1],
   ['phone','연락처',c=>`<td class="nowrap">${esc(maskPhone(c.phone)||'-')}</td>`,1],
@@ -2267,13 +2297,22 @@ document.addEventListener('click',async e=>{
       ask(`선택한 ${ids.length}건을 삭제할까요?`,'메모와 첨부 사진이 함께 지워지고 되돌릴 수 없어요.','삭제',()=>act(async()=>{ const n=await q(db.rpc('delete_field_reports',{p_ids:ids})); if(paths.length) await db.storage.from('field-photos').remove(paths).catch(()=>{}); S.frSel=[]; toast(`${n||0}건을 삭제했어요.`); },null)); break; }
     case 'frReply': { const el=$('#frr-'+id), v=el?el.value:''; try{ await q(db.rpc('save_field_report_reply',{p_id:id,p_reply:v})); delete S.frReply[id]; toast(v.trim()?'처리 메모를 저장했어요. 직원웹에도 보여요.':'처리 메모를 지웠어요.'); await loadTab(); }catch(err){ toast(friendly(err),true); } break; }
     case 'pvOpen': { const r=(S.frows||[]).find(x=>x.id===id); if(!r) break; S.pview={list:r.photos||[],i:Number(t.dataset.i)||0}; render(); break; }
+    case 'carPv': { const p=(S.cphoto||{})[id]; if(!p) break; S.pview={list:['car:'+p.path],i:0,back:S.dialog}; S.dialog=null; render(); break; }
+    case 'carPhotoDel': { const rb=()=>{ if(S.dialog&&S.dialog.rebuild) S.dialog.extra=S.dialog.rebuild(); render(); };
+      if(S.cpDel!==id){ S.cpDel=id; rb(); break; }
+      S.cpDel=null; try{ const old=await q(db.rpc('set_car_photo',{p_customer_id:id,p_path:null})); if(old) db.storage.from('car-photos').remove([old]).catch(()=>{}); await loadCarPhotos(S.customers.map(c=>c.id)); toast('사진을 지웠어요.'); }catch(err){ toast(friendly(err),true); }
+      rb(); break; }
     case 'pvMove': if(S.pview){ const L=S.pview.list.length; S.pview.i=(S.pview.i+Number(t.dataset.d)+L)%L; render(); } break;
-    case 'pvClose': if(!e.target.closest('[data-stop]')||t.tagName==='BUTTON'){ S.pview=null; render(); } break;
+    case 'pvClose': if(!e.target.closest('[data-stop]')||t.tagName==='BUTTON'){ const back=S.pview&&S.pview.back; S.pview=null; if(back){ S.dialog=back; if(back.rebuild) back.extra=back.rebuild(); } render(); } break;
     case 'rsnPick': if(S.rsn&&S.dialog){ S.rsn.v=t.dataset.v; S.dialog.extra=rsnHtml(); render(); if(S.rsn.v==='기타') setTimeout(()=>{const el=document.getElementById('rsnEtc'); if(el) el.focus();},30); } break;
     case 'jfToggle': { const f=jfLoad(), nOn=JF_GROUPS.reduce((a,[k])=>a+f[k].length,0); S.jfOpen=!(S.jfOpen===undefined?nOn>0:S.jfOpen); render(); break; }
     case 'jfClear': S.jf=null; try{ localStorage.removeItem('ah-jobs-filter'); }catch(_){} render(); break;
     case 'jday': {const [y,m,d]=S.jobDay.split('-').map(Number);S.jobDay=keyOf(new Date(y,m-1,d+Number(t.dataset.d)));await loadTab();break;}
     case 'gen': ask(`${kdate(S.jobDay)} 일정을 만들까요?`,'지정 요일이 이 날인 계약 고객을 담당 직원에게 자동 배정해요. 이미 있는 차량은 다시 넣지 않아요.','일정 만들기',()=>act(async()=>{const n=await q(db.rpc('generate_wash_jobs',{p_date:S.jobDay}));toast(`${n||0}대를 새로 넣었어요.`);},null)); break;
+    case 'mv-job': { const j=S.jobs.find(x=>x.id===id); if(!j) break; const c=j.customers||{}; S.mv={id,date:''};
+      const html=()=>`<label class="field"><span>옮길 날짜</span><input type="date" class="inp" id="mvDate" value="${S.mv.date}" min="${keyOf(new Date())}"></label><p class="note">${esc(c.complex||'')} 휴무일인지 확인해 주세요. 고객에게 알림은 가지 않아요. 원래 날짜에는 다시 자동으로 생기지 않아요.</p>`;
+      ask(`날짜 옮기기 · ${c.car_number||''}`,`${kdate(j.wash_date)} 일정을 다른 날로 옮겨요.`,'옮기기',()=>act(async()=>{ if(!S.mv.date){ toast('옮길 날짜를 골라 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
+        await q(db.rpc('admin_move_job',{p_job_id:id,p_date:S.mv.date})); toast(`${kdate(S.mv.date)}로 옮겼어요.`); S.mv=null; },null),html()); break; }
     case 'add-job': {
       const cid=Number(($('#add-cust')||{}).value||0); if(!cid){toast('추가할 고객을 골라 주세요.',true);break;}
       const c=S.customers.find(x=>x.id===cid);
@@ -2360,6 +2399,11 @@ document.addEventListener('toggle',e=>{ if(e.target&&e.target.id==='mgrBox') S.m
 document.addEventListener('click',e=>{ if(!S.amOpen||e.target.closest('.apt-multi')) return; document.querySelectorAll('.apt-multi[open]').forEach(d=>d.open=false); S.amOpen=''; });
 document.addEventListener('change',async e=>{
   const t=e.target;
+  if(t.id==='mvDate'&&S.mv){ S.mv.date=t.value; return; }
+  if(t.id==='cpFile'&&t.files&&t.files[0]){ const cid=Number(t.dataset.cid), f=t.files[0]; toast('사진 올리는 중...');
+    try{ await uploadCarPhoto(cid,f); toast('차량 사진을 저장했어요.'); }catch(err){ toast(/bucket|not found/i.test(err.message||'')?'사진 저장소가 아직 없어요. 57번 SQL을 실행해 주세요.':friendly(err),true); }
+    if(S.dialog&&S.dialog.rebuild) S.dialog.extra=S.dialog.rebuild(); render(); return; }
+  if(t.id==='carryOn'){ const on=t.checked; try{ await q(db.rpc('set_wash_carry',{p_on:on})); toast(on?'못 한 차량 자동 넘기기를 켰어요. 오늘 일정부터 적용돼요.':'자동 넘기기를 껐어요.'); }catch(err){ t.checked=!on; toast(friendly(err),true); } await loadTab(); return; }
   if(t.dataset&&t.dataset.colset!==undefined&&S.colDraft){ const k=t.dataset.colset, h=S.colDraft.hidden;
     if(t.checked) S.colDraft.hidden=h.filter(x=>x!==k); else { if(S.colDraft.order.length-h.length<=1){ t.checked=true; toast('칸은 1개 이상 보여야 해요.',true); return; } S.colDraft.hidden=[...h,k]; }
     S.dialog.extra=colSetHtml(); render(); return; }
@@ -2471,7 +2515,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.jint){ await act(()=>q(db.from('wash_jobs').update({interior:t.checked}).eq('id',Number(t.dataset.jint))),null); return; }
   if(t.dataset.nsel){ const id=Number(t.dataset.nsel); S.noticeSel=t.checked?[...new Set([...S.noticeSel,id])]:S.noticeSel.filter(x=>x!==id); render(); }
 });
-document.addEventListener('input',e=>{ if(e.target.id==='rsnEtc'&&S.rsn){ S.rsn.etc=e.target.value; return; } if(e.target.dataset&&e.target.dataset.rcwhyetc&&S.rdc){ S.rdc.rs[e.target.dataset.rcwhyetc]=e.target.value.trim(); return; }
+document.addEventListener('input',e=>{ if(e.target.id==='rsnEtc'&&S.rsn){ S.rsn.etc=e.target.value; return; } if(e.target.id==='mvDate'&&S.mv){ S.mv.date=e.target.value; return; } if(e.target.dataset&&e.target.dataset.rcwhyetc&&S.rdc){ S.rdc.rs[e.target.dataset.rcwhyetc]=e.target.value.trim(); return; }
   if(e.target.dataset&&(e.target.dataset.pz==='memo'||e.target.dataset.pz==='date')&&S.pz){ S.pz[e.target.dataset.pz]=e.target.value; return; }
   if(e.target.dataset&&e.target.dataset.ipc){ const k=e.target.dataset.ipc; S.ipDraft=S.ipDraft||{}; const r=(S.iprices||[]).find(x=>x.car_class===k)||{}; const v=e.target.value.trim(); if(String(r.price)===v.replace(/\D/g,'')&&v!=='') delete S.ipDraft[k]; else S.ipDraft[k]=v; const b=document.querySelector('[data-act=ipSave]'); if(b) b.disabled=!Object.keys(S.ipDraft).length; return; }
   if(/^nt(Title|Body)$/.test(e.target.id)){ ntRead(); return; }
