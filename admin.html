@@ -116,9 +116,10 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .apt-multi .am-pop{position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:240px;max-height:320px;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:8px}
 .apt-multi .am-pop label{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;font-size:14px}.apt-multi .am-pop label:hover{background:var(--bg)}
 .apt-multi .am-pop label{justify-content:flex-start;width:100%;text-align:left}.apt-multi .am-pop input{flex:0 0 auto;min-width:0;width:17px;height:17px;margin:0;accent-color:var(--ink)}
-.mtag.off-work{background:#E3F4EA;color:#1F5136}.apt-multi .am-top{display:flex;gap:14px;white-space:nowrap;padding:2px 8px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.mtag.off-work{background:#E3F4EA;color:#1F5136}
+.int-pick{display:flex;align-items:center;gap:6px;margin-top:6px;white-space:nowrap}.int-pick select{min-height:30px;padding:2px 6px}.apt-multi .am-top{display:flex;gap:14px;white-space:nowrap;padding:2px 8px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
 /* 아파트별 외부세차 휴무 */
-.off-tbl td{vertical-align:middle}.off-wd{display:flex;gap:4px;flex-wrap:wrap}.off-wd label{display:inline-flex;align-items:center;justify-content:center;min-width:52px;height:32px;padding:0 6px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;background:var(--card)}
+.off-tbl td{vertical-align:middle}.off-wd{display:flex;gap:4px;flex-wrap:wrap}.off-wd label{display:inline-flex;align-items:center;justify-content:center;min-width:38px;height:32px;padding:0 6px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;font-weight:700;cursor:pointer;background:var(--card)}
 .off-wd label:has(input:checked){background:#E6E3DB;border-color:#8A8577;color:#4A463C}.off-wd input{display:none}.off-dates{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
 .cm-row.picked td{box-shadow:inset 0 2px 0 var(--ink),inset 0 -2px 0 var(--ink)}
 .pill.st-on{background:var(--ok);color:var(--ok-ink)}.pill.st-pause{background:#F7D64A;color:#5A4500}.pill.st-soon{background:#C62828;color:#fff}.pill.st-cancel{background:#9A9384;color:#fff}
@@ -452,7 +453,8 @@ async function loadTab(){
       const live=new Set(S.coll.map(r=>r.id)); S.collSel=S.collSel.filter(x=>live.has(x)); S.collOpen=S.collOpen.filter(x=>live.has(x));
       await Promise.all(S.collOpen.map(id=>Promise.all([loadCBills(id),loadCNotes(id)])));
     }
-    if(S.tab==='cust'){ try{ S.offd=await q(db.rpc('list_wash_offdays'))||[]; S.offOk=true; }catch(_){ S.offd=[]; S.offOk=false; } }
+    if(S.tab==='cust'){ try{ S.offd=await q(db.rpc('list_wash_offdays'))||[]; S.offOk=true; }catch(_){ S.offd=[]; S.offOk=false; }
+      try{ const ci=await q(db.rpc('list_customer_interior')); S.cint={}; (ci||[]).forEach(r=>S.cint[r.customer_id]=r); S.cintOk=true; }catch(_){ S.cint={}; S.cintOk=false; } S.intDraft={}; }
     if(S.tab==='cmgr'){
       await loadCols('cmgr');
       const [rows,st]=await Promise.all([q(db.rpc('list_customer_note_counts')),q(db.rpc('list_customer_status'))]);
@@ -1028,27 +1030,32 @@ function wdCell(plan,c){ const p=Number(plan)||0;
   if(PICK_N[p]) return '<span class="sub">📅 고객관리에서 날짜 고르기</span>';
   return `<select data-f="wash_weekday"><option value="">미정</option>${WD_ORDER.map(d=>`<option value="${d}" ${c.wash_weekday===d?'selected':''}>${WDF[d]}</option>`).join('')}</select>`; }
 
-/* 아파트별 외부세차 휴무 (54 SQL) — 요일 = 세차하는 밤 (0=일요일 밤 ~ 6=토요일 밤), 기본 수 · 토 밤 */
-const OFF_N=['일밤','월밤','화밤','수밤','목밤','금밤','토밤'];
+/* 아파트별 외부세차 휴무 (54 SQL) — 요일 (0=일 ~ 6=토), 기본 수 · 토 */
+const OFF_N=['일','월','화','수','목','금','토'];
 function offdaysCard(){
   if(!S.offOk) return `<details class="card" style="padding:12px 16px"><summary><b>🗓 아파트별 외부세차 휴무</b> <span class="sub">54 SQL을 실행하면 쓸 수 있어요</span></summary></details>`;
   const L=S.offd||[], all=S.offAll||[3,6];
-  return `<details class="card" style="padding:12px 16px" data-hs-off ${S.offOpen?'open':''} id="offBox"><summary><b>🗓 아파트별 외부세차 휴무</b> <span class="sub">기본 수 · 토 밤 휴무 · 아파트마다 바꾸고, 하루씩 '쉼 / 일함'으로 예외를 둘 수 있어요 (4단계 미완료 넘기기에서 써요)</span></summary>
+  return `<details class="card" style="padding:12px 16px" data-hs-off ${S.offOpen?'open':''} id="offBox"><summary><b>🗓 아파트별 외부세차 휴무</b> <span class="sub">기본 수 · 토 휴무 · 아파트마다 바꾸고, 하루씩 '쉼 / 일함'으로 예외를 둘 수 있어요 (4단계 미완료 넘기기에서 써요)</span></summary>
   <div class="row" style="gap:8px;margin:10px 0;flex-wrap:wrap"><span class="sub">모든 아파트 한꺼번에:</span><div class="off-wd">${OFF_N.map((l,w)=>`<label><input type="checkbox" data-offall="${w}" ${all.includes(w)?'checked':''}>${l}</label>`).join('')}</div><button class="btn2 sm" data-act="offAllSave">모든 아파트에 적용</button></div>
-  ${L.length?`<div class="tbl"><table class="off-tbl"><thead><tr><th>아파트</th><th>휴무 밤 (누르면 바로 저장)</th><th>하루씩 바꾼 날</th></tr></thead><tbody>${L.map((r,i)=>`<tr><td><b>${esc(r.complex)}</b>${r.is_default?' <small class="by">기본값</small>':''}</td>
+  ${L.length?`<div class="tbl"><table class="off-tbl"><thead><tr><th>아파트</th><th>휴무 요일 (누르면 바로 저장)</th><th>하루씩 바꾼 날</th></tr></thead><tbody>${L.map((r,i)=>`<tr><td><b>${esc(r.complex)}</b>${r.is_default?' <small class="by">기본값</small>':''}</td>
     <td><div class="off-wd">${OFF_N.map((l,w)=>`<label><input type="checkbox" data-offwd="${i}" value="${w}" ${(r.off_weekdays||[]).includes(w)?'checked':''}>${l}</label>`).join('')}</div></td>
     <td><div class="off-dates">${(r.dates||[]).map(d=>`<span class="mtag${d.off?'':' off-work'}">${esc(String(d.date).slice(5).replace('-','/'))} ${d.off?'쉼':'일함'}${d.memo?' · '+esc(d.memo):''} <button class="link" data-act="offDel" data-i="${i}" data-d="${esc(d.date)}" aria-label="지우기">✕</button></span>`).join('')||'<span class="sub">없음</span>'}</div>
       <div class="row" style="gap:6px;margin-top:6px"><input class="inp" type="date" id="offD${i}" min="${keyOf(new Date())}" style="max-width:150px"><select class="inp" id="offK${i}" style="max-width:96px"><option value="1">쉼</option><option value="0">일함</option></select><button class="btn2 sm" data-act="offAdd" data-i="${i}">추가</button></div></td></tr>`).join('')}</tbody></table></div>`:'<p class="sub">계약완료 고객의 아파트가 아직 없어요.</p>'}</details>`;
 }
+/* 정기권 칸의 '실내포함' — 정기권 회차와 같이 고를 수 있어요. 기본 1회 · 횟수 바꾸기 (고객관리 실내세차 방식과 같은 값) */
+function intPick(cid){ const plan=((S.cint||{})[cid]||{}).interior_plan||'', d=(S.intDraft||{})[cid];
+  const on=d?d.on:ipInc(plan), n=d?d.n:(plan==='every'?'every':String(ipN(plan)||1));
+  return `<div class="int-pick"><label class="auto"><input type="checkbox" data-intp="${cid}" ${on?'checked':''}><span>실내포함</span></label><select data-intn="${cid}" aria-label="실내 횟수" ${on?'':'hidden'}>${[1,2,3,4,5,6,7,8].map(k=>`<option value="${k}" ${n===String(k)?'selected':''}>월 ${k}회</option>`).join('')}<option value="every" ${n==='every'?'selected':''}>매회</option></select>${!on&&plan==='service'?'<small class="by">요청 서비스</small>':''}</div>`; }
+const intCode=(on,n)=>!on?'request':n==='every'?'every':Number(n)>1?'m'+n:'monthly';
 function custView(){
   const apts=['전체',...complexes()], qq=S.custQ.trim().toLowerCase(), fs=fieldStaff();
   const list=S.customers.filter(c=>(S.custApt==='전체'||c.complex===S.custApt)&&(!qq||[c.name,c.car_number,c.unit,c.phone].join(' ').toLowerCase().includes(qq)));
   return `<div class="row"><div class="grow"><h1 class="h">고객 세차 설정</h1><p class="sub">정기권·지정 요일·담당 현장직원을 모두 입력하고 저장하면, 지정 요일 날짜에 직원 앱에 자동으로 나타나요. 월 8회 · 12회는 매주 요일 2 · 3개, 월 2회(격주) · 월 3회는 고객관리의 📅 날짜에서 달마다 직접 골라요.</p></div></div>
   ${offdaysCard()}
   <div class="row"><input class="inp" id="custQ" placeholder="이름·차량번호·동 검색" value="${esc(S.custQ)}" style="min-width:220px"><div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.custApt===a}" data-act="capt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div></div>
-  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권</th><th>지정 요일</th><th>차종</th><th>차급</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
+  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권 · 실내포함</th><th>지정 요일</th><th>차종</th><th>차급</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
     ${list.map(c=>`<tr data-cid="${c.id}"><td><b>${esc(c.name)}</b></td><td><input data-f="complex" value="${esc(c.complex||'')}" placeholder="예: 범어파크뷰" ${c.complex?'':'class="need"'}></td><td><input data-f="unit" value="${esc(c.unit||'')}" placeholder="예: 103동 1201호" style="max-width:120px"></td><td>${esc(c.car_number||'-')}</td>
-      <td><select data-f="wash_plan" data-rowplan="1">${planOpts(c.wash_plan)}</select></td>
+      <td><select data-f="wash_plan" data-rowplan="1">${planOpts(c.wash_plan)}</select>${S.cintOk?intPick(c.id):''}</td>
       <td class="wd-cell">${wdCell(c.wash_plan,c)}</td>
       <td><input data-f="car_model" value="${esc(c.car_model||'')}" placeholder="예: 아반떼"></td>
       <td>${(()=>{const r=S.cls&&S.cls[c.id], man=r&&r.class_source==='직접'?r.car_class:''; if(!S.cls) return '<span class="sub">SQL 20 필요</span>';
@@ -2268,6 +2275,11 @@ document.addEventListener('click',async e=>{
       const clsSel=tr.querySelector('[data-f="car_class"]');
       try{ await q(db.from('customers').update(patch).eq('id',id)); Object.assign(S.customers.find(c=>c.id===id),patch);
         if(clsSel&&clsSel.value!==clsSel.dataset.was) await q(db.rpc('set_customer_car_class',{p_id:id,p_class:clsSel.value||null}));
+        { const d=(S.intDraft||{})[id], old=((S.cint||{})[id]||{}).interior_plan||'';
+          if(d){ const code=intCode(d.on,d.n||'1'); if(code!==(old||'request')&&!(code==='request'&&!ipInc(old))){
+            await q(db.rpc('set_interior_contract',{p_customer_id:id,p_member_id:null,p_plan:code}));
+            S.cint[id]={...(S.cint[id]||{customer_id:id}),interior_plan:code}; }
+            delete S.intDraft[id]; } }
         if(S.cls){ await loadCls(); render(); } if(!S.slotApt&&patch.complex) S.slotApt=patch.complex; toast(PICK_N[pl]?`저장했어요. 월 ${pl}회는 고객관리의 📅 날짜에서 이번 달 날짜를 골라 주세요.`:patch.wash_plan&&patch.wash_weekday!==null&&patch.field_staff_id?`저장했어요. ${need?'매주 '+daysTxt(rdays)+'요일':(pl===2?'격주 ':'매주 ')+WDF[patch.wash_weekday]}마다 직원 앱에 나타나요.`:'저장했어요. 정기권·지정 요일·담당 직원이 모두 있어야 직원 앱에 나타나요.'); }catch(err){ toast(friendly(err),true); }
       break;
     }
@@ -2304,6 +2316,10 @@ document.addEventListener('change',async e=>{
   if(t.dataset.rsel){ const id=Number(t.dataset.rsel); S.sel=t.checked?[...new Set([...S.sel,id])]:S.sel.filter(x=>x!==id); render(); return; }
   if(t.id==='reqApt'){ S.reqApt=t.value; await loadTab(); return; }
   if(t.id==='cmApt'){ S.cmApt=t.value; render(); return; }
+  if(t.dataset.intp){ const id=Number(t.dataset.intp), plan=((S.cint||{})[id]||{}).interior_plan||''; S.intDraft=S.intDraft||{};
+    const cur=S.intDraft[id]||{on:ipInc(plan),n:plan==='every'?'every':String(ipN(plan)||1)}; S.intDraft[id]={...cur,on:t.checked};
+    const sel=t.closest('.int-pick').querySelector('select'); if(sel){ sel.hidden=!t.checked; if(t.checked&&!S.intDraft[id].n) S.intDraft[id].n=sel.value; } return; }
+  if(t.dataset.intn){ const id=Number(t.dataset.intn); S.intDraft=S.intDraft||{}; S.intDraft[id]={...(S.intDraft[id]||{on:true}),n:t.value}; return; }
   if(t.dataset.offall!==undefined){ const w=Number(t.dataset.offall), cur=S.offAll||[3,6]; S.offAll=t.checked?[...new Set([...cur,w])].sort():cur.filter(x=>x!==w); return; }
   if(t.dataset.offwd!==undefined){ const r=(S.offd||[])[Number(t.dataset.offwd)]; if(!r) return; const w=Number(t.value), cur=r.off_weekdays||[];
     const days=t.checked?[...new Set([...cur,w])].sort():cur.filter(x=>x!==w);
