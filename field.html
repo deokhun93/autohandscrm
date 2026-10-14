@@ -89,6 +89,9 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .dialog .acts{display:flex;gap:10px;width:100%;margin-top:6px}.dialog .acts>*{flex:1}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);width:calc(100% - 32px);max-width:488px;background:var(--ink);color:#fff;border-radius:14px;padding:12px 14px;font-size:13.5px;z-index:60;display:flex;gap:10px;align-items:center}
 .toast.err{background:#7A2E1C}
+.bulk-bar{position:sticky;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);z-index:20;box-shadow:0 10px 24px rgba(12,20,34,.25)}
+.dg-list{list-style:none;margin:0;padding:10px 12px;width:100%;max-height:40vh;overflow:auto;background:var(--bg,#F4F6FA);border-radius:12px;display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.dg-list li{font-weight:700;font-size:14px;padding:4px 10px;border-radius:8px;background:var(--paper);border:1px solid var(--line-2,#d5dbe5)}
 .loading{display:grid;place-items:center;min-height:60vh;color:var(--sub)}
 .pw{position:relative}.pw input{padding-right:48px;width:100%}
 .pw-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:42px;height:42px;display:grid;place-items:center;border:0;background:none;color:#6B7280;border-radius:8px;cursor:pointer}
@@ -293,6 +296,23 @@ async function setPart(id,part,st,reason,okMsg){
   if(error){ toast(friendly(error),true); render(); return; }
   kickPush(); if(okMsg) toast(okMsg); await loadAll();
 }
+/* ---------- 여러 대 한 번에 완료 (외부세차만, 실내는 따로 체크) ---------- */
+function bulkTargets(){
+  return S.jobs.filter(j=>S.sel.includes(j.customer_id)&&j.status!=='완료'&&(S.v53?(!j.interior_only&&j.my_ext):true));
+}
+async function bulkDone(list){
+  let ok=0; const fail=[];
+  for(const j of list){
+    const r=S.v53?await db.rpc('field_set_part',{p_job_id:j.id,p_part:'ext',p_state:'완료',p_reason:null})
+                 :await db.from('wash_jobs').update({status:'완료'}).eq('id',j.id);
+    if(r.error) fail.push((j.customers||{}).car_number||'#'+j.id); else ok++;
+  }
+  S.busy=false; S.dialog=null;
+  if(ok){ kickPush(); const done=new Set(list.map(j=>j.customer_id)); S.sel=S.sel.filter(x=>!done.has(x)); }
+  if(fail.length) toast(tr(`${ok}대 완료, ${fail.length}대 실패: ${fail.join(', ')}`,`${ok} done, ${fail.length} failed: ${fail.join(', ')}`),true);
+  else toast(tr(`${ok}대 완료 알림을 보냈어요. +`,`${ok} done notices sent. +`)+won(ok*PAY));
+  await loadAll();
+}
 function jobCardOld(j){
   const c=j.customers||{}, open=j.status==='대기', needInt=j.interior&&!j.interior_done, picked=S.sel.includes(j.customer_id);
   const msg=S.reqs.find(r=>r.customer_id===j.customer_id&&(r.status==='접수'||Date.now()-new Date(r.created_at)<7*864e5));
@@ -328,7 +348,8 @@ function homeView(){
   <div class="money t"><span style="font-weight:700">${S.day===keyOf(new Date())?tr('오늘 수당','Today\'s pay'):tr('이날 수당','Pay this day')}</span><b>${won(s.today_done*PAY)}</b></div>
   ${noticeCard(list)}
   ${apts.length>2?`<div class="chips" role="group" aria-label="${tr('아파트 선택','Apartment')}">${apts.map(a=>`<button class="chip" aria-pressed="${S.apt===a}" data-act="apt" data-a="${esc(a)}">${a==='전체'?tr('전체','All'):esc(a)}</button>`).join('')}</div>`:''}
-  ${list.length?groups.map(g=>`<div class="apt-h">${esc(g)}</div>${list.filter(j=>((j.customers||{}).complex||'기타')===g).map(jobCard).join('')}`).join(''):`<div class="empty">${tr('이 날 배정된 세차가 없어요.','No cars assigned for this day.')}<p class="note" style="margin-top:8px">${tr('관리자 모드 › 고객 세차 설정에서 정기권·지정 요일·담당 현장직원이 모두 입력된 고객만, 지정 요일 날짜에 자동으로 보여요. 월 2회 고객은 격주로 보여요.','Cars appear here automatically on their scheduled day once the office assigns them to you.')}</p></div>`}`;
+  ${list.length?groups.map(g=>`<div class="apt-h">${esc(g)}</div>${list.filter(j=>((j.customers||{}).complex||'기타')===g).map(jobCard).join('')}`).join(''):`<div class="empty">${tr('이 날 배정된 세차가 없어요.','No cars assigned for this day.')}<p class="note" style="margin-top:8px">${tr('관리자 모드 › 고객 세차 설정에서 정기권·지정 요일·담당 현장직원이 모두 입력된 고객만, 지정 요일 날짜에 자동으로 보여요. 월 2회 고객은 격주로 보여요.','Cars appear here automatically on their scheduled day once the office assigns them to you.')}</p></div>`}
+  ${(()=>{const n=bulkTargets().length; return n?`<button class="btn full bulk-bar" data-act="bulk-done" ${S.busy?'disabled':''}>${tr(`선택한 ${n}대 완료`,`Mark ${n} selected as done`)}<span class="arr">${ic('check')}</span></button>`:'';})()}`;
 }
 function noticeCard(list){
   const n=S.sel.length, allOn=list.length&&list.every(j=>S.sel.includes(j.customer_id));
@@ -401,7 +422,7 @@ function render(){
   if(window.AppNav) AppNav.set('field', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
   if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
   const L=$('#layer'),d=S.dialog;
-  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p><div class="acts"><button class="btn2" data-act="close">${tr('취소','Cancel')}</button><button class="btn plain" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?tr('처리 중...','Working...'):esc(d.ok||tr('확인','OK'))}</button></div></div></div>`:S.rsn?rsnSheet():memoSheet();
+  L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p>${d.list?`<ul class="dg-list">${d.list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}<div class="acts"><button class="btn2" data-act="close">${tr('취소','Cancel')}</button><button class="btn plain" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?tr('처리 중...','Working...'):esc(d.ok||tr('확인','OK'))}</button></div></div></div>`:S.rsn?rsnSheet():memoSheet();
   if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
 }
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`${ic(err?'bell':'check')}<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2000);}
@@ -443,6 +464,11 @@ document.addEventListener('click',async e=>{
       await setPart(r.jobId,r.part,'미완료',r.v==='기타'?'기타: '+why:why,tr('미완료로 보고했어요.','Reported as not done.')); break; }
     case 'done': S.dialog={title:tr('고객에게 완료 알림을 보낼까요?','Send "wash done" to the customer?'),body:tr(`${(j.customers||{}).car_number||''} 세차를 완료로 처리하고 고객 앱에 '세차가 완료되었어요' 알림을 보내요.`,`Marks ${(j.customers||{}).car_number||''} as done and notifies the customer.`),ok:tr('알림 보내기','Send'),run:()=>upd(id,{status:'완료'},tr('완료 알림을 보냈어요. +','Done notice sent. +')+won(PAY))}; render(); break;
     case 'skip': S.dialog={title:tr('미작업으로 처리할까요?','Mark as not done?'),body:tr('차량이 없거나 세차를 못 한 경우에 눌러 주세요. 회사에 미작업으로 보고돼요.','Use this when the car was not there or could not be washed. It is reported to the office.'),ok:tr('미작업 처리','Not done'),run:()=>upd(id,{status:'미작업'},tr('미작업으로 처리했어요.','Marked as not done.'))}; render(); break;
+    case 'bulk-done': { const list=bulkTargets(); if(!list.length||S.busy) break;
+      const skipped=S.sel.length-list.length;
+      S.dialog={title:tr(`${list.length}대를 완료하시겠습니까?`,`Mark ${list.length} car(s) as done?`),
+        body:tr(`외부세차를 완료로 처리하고 고객 앱에 완료 알림을 보내요. 실내세차는 차량마다 따로 체크해 주세요.${skipped>0?` (이미 완료된 ${skipped}대는 빠져요)`:''}`,`Marks the exterior wash done and notifies each customer. Check interior washes one by one.${skipped>0?` (${skipped} already done are skipped)`:''}`),
+        list:list.map(j=>(j.customers||{}).car_number||tr('차량번호 없음','No plate')),ok:tr('확인','OK'),run:()=>bulkDone(list)}; render(); break; }
     case 'undo': await upd(id,{status:'대기'},tr('다시 대기로 바꿨어요.','Changed back to waiting.')); break;
     case 'confirm': if(S.dialog&&!S.busy){ S.busy=true; render(); await S.dialog.run(); } break;
     case 'sel-all': {const ids=S.jobs.filter(j=>S.apt==='전체'||((j.customers||{}).complex||'기타')===S.apt).map(j=>j.customer_id);const all=ids.every(x=>S.sel.includes(x));S.sel=all?S.sel.filter(x=>!ids.includes(x)):[...new Set([...S.sel,...ids])];render();break;}
