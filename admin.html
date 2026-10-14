@@ -489,7 +489,7 @@ async function refreshCounts(){
   try{
     const [r,a]=await Promise.all([db.rpc('list_requests_admin',{p_state:'open',p_complex:null,p_q:null,p_limit:1000}),db.rpc('list_customer_accounts',{p_only_pending:true})]);
     S.cntReq=(r.data||[]).length; S.cntAcc=(a.data||[]).length;
-    try{ const c=await db.rpc('count_admin_todos'); if(!c.error&&c.data&&c.data[0]) S.cntTodo=c.data[0].today_open; }catch(_){}
+    try{ const c=await db.rpc('count_admin_todos'); if(!c.error&&c.data&&c.data[0]) S.cntTodo=c.data[0].mine_open; }catch(_){}
     const f=await db.rpc('count_field_reports'); if(!f.error&&f.data&&f.data[0]){ S.cntField=f.data[0].new_mine; S.cntFieldAll=f.data[0].new_all; }
   }catch(_){}
 }
@@ -520,10 +520,8 @@ function todayView(){
     </div>
     <div class="row" style="margin-top:10px"><span class="grow"></span>${f.id?`<button class="btn2" data-act="ntCancel">고치기 취소</button>`:''}<button class="btn" data-act="ntSave">${f.id?'고친 내용 저장':'공지 올리기 · 알림 보내기'}</button></div></section>`;
   const list=S.notices;
-  return `<div class="row"><div class="grow"><h1 class="h">오늘</h1><p class="sub">총무 · 관리자가 함께 보는 오늘의 할 일과, 전 직원에게 보내는 오늘의 공지예요.</p></div></div>
-  ${todoSection()}
+  return `<div class="row"><div class="grow"><h1 class="h">오늘</h1><p class="sub">전 직원에게 보내는 오늘의 공지와, 내가 챙길 오늘의 할 일이에요.</p></div></div>
   <div class="sec-h"><h2>📢 오늘의 공지</h2><span class="sub">직원이 [확인했어요]를 누르면 누가 읽었는지 보여요.</span></div>
-  ${form}
   <div class="chips">${[['now','지금 보이는 공지'],['next','예정'],['past','지난 공지'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.ntScope===k}" data-act="ntScope" data-f="${k}">${l}</button>`).join('')}</div>
   ${!list?'<div class="empty">불러오는 중...</div>':list.length?`<div class="fr-list">${list.map(n=>`<article class="nt-item${n.important?' imp':''}">
     <div class="row" style="gap:8px;flex-wrap:wrap">${n.important?'<span class="pill st-soon">중요</span>':''}<span class="pill p-hold">${NT_TG[n.target]||'전 직원'}</span><b style="font-size:15.5px">${esc(n.title||'(제목 없음)')}</b><span class="grow"></span>
@@ -532,7 +530,9 @@ function todayView(){
     <div class="nt-read">읽음 <b>${n.read_count}</b> / 대상 ${n.target_count}명${n.readers?` · 읽은 사람: ${esc(n.readers)}`:''}${n.unread?`<br>아직 안 읽음: ${esc(n.unread)}`:''}</div>
     <div class="row" style="gap:8px"><span class="sub">${esc(n.author||'')} · ${when(n.created_at)}${n.updated_at?` · 수정 ${esc(n.editor||'')} ${when(n.updated_at)}`:''}</span><span class="grow"></span>
       <button class="btn2 sm" data-act="ntEdit" data-id="${n.id}">고치기</button><button class="btn sm danger" data-act="ntDel" data-id="${n.id}">🗑 삭제</button></div></article>`).join('')}</div>`
-  :`<div class="empty">${S.ntScope==='now'?'지금 보이는 공지가 없어요. 위에서 새 공지를 올려 보세요.':'공지가 없어요.'}</div>`}`;
+  :`<div class="empty">${S.ntScope==='now'?'지금 보이는 공지가 없어요. 아래에서 새 공지를 올려 보세요.':'공지가 없어요.'}</div>`}
+  ${form}
+  ${todoSection()}`;
 }
 /* ---------- 오늘의 할 일 (총무 요청 ⑧) ---------- */
 const PR={1:'긴급',2:'높음',3:'보통',4:'낮음'};
@@ -541,26 +541,25 @@ function tdDue(t){ if(!t.due_date) return '기한 없음'; const today=keyOf(new
   if(t.due_date<today){ const d=Math.round((new Date(today)-new Date(t.due_date))/864e5); return `<span class="late-t">지연 ${d}일 (${kdate(t.due_date)} 마감)</span>`; }
   return t.due_date===today?'<b>오늘 마감</b>':kdate(t.due_date)+' 마감'; }
 function todoSection(){
-  const f=S.tdForm||(S.tdForm=tdBlank()), admins=S.staff.filter(s=>['admin','master'].includes(s.role)), list=S.todos;
+  const f=S.tdForm||(S.tdForm=tdBlank()), list=S.todos&&S.todos.filter(t=>!t.assignee||t.assignee===S.me.id);   // 내 할 일 (예전 공용 할 일 포함)
   const open=(list||[]).filter(t=>!t.done_at).length;
   return `<div class="sec-h"><h2>✅ 오늘의 할 일</h2><span class="sub">${list?`남은 할 일 ${open}개`:''}</span></div>
   <section class="card"><div class="td-add">
     <label class="field full"><span style="font-weight:700;font-size:13px">${f.id?'할 일 고치기':'할 일'}</span><input class="inp" id="tdTitle" maxlength="200" value="${esc(f.title)}" placeholder="예: 미납 고객 3명 입금 확인 전화"></label>
     <label class="field full"><span style="font-weight:700;font-size:13px">메모 <span class="sub">(선택)</span></span><input class="inp" id="tdMemo" maxlength="1000" value="${esc(f.memo)}" placeholder="자세한 내용"></label>
     <label class="field"><span style="font-weight:700;font-size:13px">우선순위</span><select class="inp" id="tdPri">${[1,2,3,4].map(k=>`<option value="${k}" ${Number(f.priority)===k?'selected':''}>${PR[k]}</option>`).join('')}</select></label>
-    <label class="field"><span style="font-weight:700;font-size:13px">담당</span><select class="inp" id="tdWho"><option value="">공용 (누구나)</option>${admins.map(a=>`<option value="${a.id}" ${f.assignee===a.id?'selected':''}>${esc(a.name)}${a.id===S.me.id?' (나)':''}</option>`).join('')}</select></label>
     <label class="field"><span style="font-weight:700;font-size:13px">마감일 <span class="sub">(비우면 기한 없음)</span></span><input class="inp" type="date" id="tdDue" value="${esc(f.due)}"></label>
     <div class="row" style="gap:6px">${f.id?`<button class="btn2" data-act="tdCancel">취소</button>`:''}<button class="btn" data-act="tdSave">${f.id?'저장':'+ 추가'}</button></div>
-  </div><p class="note" style="margin:8px 0 0">담당을 다른 관리자로 정하면 그 사람 휴대폰으로 알림이 가요.</p></section>
-  <div class="chips">${[['today','오늘 할 일'],['mine','내 할 일'],['open','남은 할 일 전체'],['done','완료'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.tdScope===k}" data-act="tdScope" data-f="${k}">${l}</button>`).join('')}</div>
+  </div><p class="note" style="margin:8px 0 0">할 일은 로그인한 나만 보여요.</p></section>
+  <div class="chips">${[['today','오늘 할 일'],['open','남은 할 일 전체'],['done','완료'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.tdScope===k}" data-act="tdScope" data-f="${k}">${l}</button>`).join('')}</div>
   ${!list?'<div class="empty">불러오는 중...</div>':list.length?`<div class="td-list">${list.map(t=>`<div class="td${t.done_at?' done':t.overdue?' late':''}"><input type="checkbox" data-tddone="${t.id}" ${t.done_at?'checked':''} aria-label="${esc(t.title)} 완료">
     <div class="bd"><div><span class="pr pr${t.priority}">${PR[t.priority]}</span><span class="tt">${esc(t.title)}</span></div>${t.memo?`<div class="mm">${esc(t.memo)}</div>`:''}
-      <div class="mt">담당 <b style="color:var(--text)">${esc(t.assignee_name||'공용')}</b> · ${tdDue(t)} · ${esc(t.author||'')} ${when(t.created_at)}${t.done_at?` · <b style="color:#1F5136">완료 ${esc(t.done_name||'')} ${when(t.done_at)}</b>`:''}</div></div>
+      <div class="mt">${t.assignee?'':'공용 · '}${tdDue(t)} · ${esc(t.author||'')} ${when(t.created_at)}${t.done_at?` · <b style="color:#1F5136">완료 ${esc(t.done_name||'')} ${when(t.done_at)}</b>`:''}</div></div>
     ${t.done_at?'':`<button class="link" data-act="tdEdit" data-id="${t.id}">고치기</button>`}<button class="link" data-act="tdDel" data-id="${t.id}" style="color:var(--err)">삭제</button></div>`).join('')}</div>`
   :`<div class="empty">${S.tdScope==='today'?'오늘 할 일이 없어요. 위에서 추가해 보세요.':'할 일이 없어요.'}</div>`}`;
 }
 function tdRead(){ const g=id=>($('#'+id)||{}); const f=S.tdForm||(S.tdForm=tdBlank());
-  if(g('tdTitle').value!==undefined){ f.title=g('tdTitle').value; f.memo=g('tdMemo').value; f.priority=Number(g('tdPri').value)||3; f.assignee=g('tdWho').value||''; f.due=g('tdDue').value||''; } return f; }
+  if(g('tdTitle').value!==undefined){ f.title=g('tdTitle').value; f.memo=g('tdMemo').value; f.priority=Number(g('tdPri').value)||3; f.assignee=S.me.id; f.due=g('tdDue').value||''; } return f; }
 async function tdSave(){ const f=tdRead(); if(!f.title.trim()){ toast('할 일을 적어 주세요.',true); $('#tdTitle')&&$('#tdTitle').focus(); return; }
   try{ await q(db.rpc('save_admin_todo',{p_id:f.id,p_title:f.title,p_memo:f.memo,p_priority:f.priority,p_assignee:f.assignee||null,p_due:f.due||null}));
     kickPush(); toast(f.id?'저장했어요.':'할 일을 추가했어요.'); const keep={priority:f.priority,assignee:f.assignee,due:f.due}; S.tdForm={...tdBlank(),...(f.id?{}:keep)}; await refreshCounts(); await loadTab(); setTimeout(()=>$('#tdTitle')&&$('#tdTitle').focus(),30); }
@@ -2292,8 +2291,9 @@ async function start(){
   try{ sessionStorage.setItem(STAFF_ALIVE_KEY,'1'); }catch(_){}
   staffStartBeat();
   S.session=data.session; S.ready=true;
-  { const h=(location.hash||'').slice(1); let saved=''; try{ saved=localStorage.getItem('ah-admin-tab')||''; }catch(_){}
-    if(TAB_KEYS.includes(h)){ S.tab=h; S.fromHash=true; } else if(TAB_KEYS.includes(saved)) S.tab=saved; }
+  // 앱을 새로 열면 '오늘(공지·할 일)'부터 보여줘요. 링크(#탭)로 들어오거나 새로고침하면 그 탭 그대로예요.
+  { const h=(location.hash||'').slice(1);
+    if(TAB_KEYS.includes(h)){ S.tab=h; S.fromHash=true; } else S.tab='today'; }
   // 주소 끝(#cmgr 등)만 바꿔도 그 메뉴로 이동
   window.addEventListener('hashchange',async()=>{ const h=(location.hash||'').slice(1); if(TAB_KEYS.includes(h)&&h!==S.tab&&S.me){ setTab(h); render(); await loadTab(); } });
   if(S.session) await start(); else render();
