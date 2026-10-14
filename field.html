@@ -96,6 +96,7 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .pw{position:relative}.pw input{padding-right:48px;width:100%}
 .pw-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:42px;height:42px;display:grid;place-items:center;border:0;background:none;color:#6B7280;border-radius:8px;cursor:pointer}
 .auto{display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer;user-select:none}.auto input{width:20px;height:20px;accent-color:#0C1422;margin:0;flex:none}
+.cn-line{margin:0;display:flex;flex-direction:column;gap:4px;font-size:13px;background:#FFF6DA;border:1px solid #F0D98A;border-radius:10px;padding:8px 10px;color:#4A3B00}.cn-line b{font-size:12px}.cn-line span.imp{font-weight:800}
 .memo-line{margin:0;display:flex;flex-direction:column;gap:3px;font-size:12.5px;background:#EEF2F8;border-radius:10px;padding:8px 10px;color:var(--text)}
 .memo-line .st{font-size:11px;font-weight:700;color:var(--sub)}.memo-line .st b{color:#1F5136}.memo-line .rp{color:#1D3A6E;font-weight:600}
 .sheet{width:100%;max-width:440px;background:var(--paper);border-radius:20px;padding:20px 16px 16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(12,20,34,.3);max-height:92vh;overflow:auto}
@@ -223,6 +224,8 @@ async function loadAll(){
     if(jobs.error) throw jobs.error; if(sum.error) throw sum.error;
     S.jobs=jobs.data||[]; S.sum=(sum.data&&sum.data[0])||null; S.reqs=reqs.error?[]:(reqs.data||[]);
     try{ const r=await db.rpc('list_my_field_reports',{p_date:S.day}); S.reps=r.error?[]:(r.data||[]); }catch(_){ S.reps=[]; }
+    // 관리자가 '현장직원에게도 보이기'로 표시한 고객 메모 (차주 요청사항 등 · 56 SQL 전이면 건너뜀)
+    try{ const ids=[...new Set(S.jobs.map(j=>j.customer_id))]; const r=ids.length?await db.rpc('staff_car_notes',{p_customer_ids:ids}):{data:[]}; S.cnotes={}; (r.error?[]:(r.data||[])).forEach(n=>(S.cnotes[n.customer_id]=S.cnotes[n.customer_id]||[]).push(n)); }catch(_){ S.cnotes={}; }
     S.sel=S.sel.filter(id=>S.jobs.some(j=>j.customer_id===id));
     S.err='';
   }catch(e){ S.err=friendly(e); }
@@ -246,6 +249,9 @@ function blockedView(){
 function langSw(){ return `<span class="lang-sw" role="group" aria-label="Language"><button type="button" data-act="lang" data-l="ko" aria-pressed="${LANG==='ko'}">한국어</button><button type="button" data-act="lang" data-l="en" aria-pressed="${LANG==='en'}">English</button></span>`; }
 function logo(){return `<div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>STAFF</small></span></div>`;}
 function jobCard(j){ return S.v53?jobCard2(j):jobCardOld(j); }
+// 고객 메모 (관리자가 직원에게 보이게 한 것) — 차주 요청사항 등
+function carNotes(j){ const L=(S.cnotes||{})[j.customer_id]||[]; if(!L.length) return '';
+  return `<div class="cn-line"><b>📌 ${tr('차주 요청 · 메모','Owner requests · notes')}</b>${L.map(n=>`<span class="${n.important?'imp':''}">${n.important?'⭐ ':''}${esc(n.body)} ${LANG==='en'?trLink(n.body,'en'):''}</span>`).join('')}</div>`; }
 /* ---------- 외부 · 실내 따로 (SQL 53) ---------- */
 const RSN=[['차량 없음','Car not there'],['차량 잠김','Car locked'],['고객 요청 취소','Customer cancelled'],['우천','Rain'],['시간 부족','Not enough time'],['기타','Other']];
 const rsnTr=v=>{ const r=RSN.find(x=>x[0]===v); return r?tr(r[0],r[1]):v; };
@@ -274,6 +280,7 @@ function jobCard2(j){
     <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)}"><span class="box">${ic('check')}</span></label>
       <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span><span class="tag">${kind}</span>${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')}</span>`:''}</div></div>
     <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
+    ${carNotes(j)}
     ${io?'':partRow(j,'ext')}${j.interior?partRow(j,'int'):''}
     ${msg?`<p class="req-line">${ic('msg',16)}<span><b>${tr('고객 요청','Customer request')}</b> ${esc(msg.message)} ${LANG==='en'?trLink(msg.message,'en'):''}</span></p>`:''}
     ${S.reps.filter(r=>r.job_id===j.id).map(r=>`<p class="memo-line"><span>📝 ${esc(r.body||tr('(사진만 보냄)','(photos only)'))}${r.photos&&r.photos.length?` · 📷 ${r.photos.length}`:''}</span><span class="st">${hm(r.created_at)} → ${esc(r.manager_name||tr('관리자','Manager'))} · ${r.done_at?`<b>${tr('처리완료','Resolved')}</b>`:r.read_at?`<b>${tr('관리자 확인함','Seen by manager')}</b>`:tr('전달됨','Sent')}</span>${r.reply?`<span class="rp">${tr('관리자','Manager')}: ${esc(r.reply)} ${LANG==='en'?trLink(r.reply,'en'):''}</span>`:''}</p>`).join('')}
@@ -325,6 +332,7 @@ function jobCardOld(j){
       <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span>${j.interior?`<span class="tag">${tr('실내세차','Interior')}</span>`:''}${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')}</span>`:''}</div>
       <span class="pill ${j.status}">${j.status==='대기'?tr('세차대기','Waiting'):j.status==='완료'?tr('세차완료','Done'):tr('미작업','Not done')}</span></div>
     <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
+    ${carNotes(j)}
     ${j.interior?`<label class="int-check ${j.interior_done?'on':''}"><input type="checkbox" data-int="${j.id}" ${j.interior_done?'checked':''} ${open?'':'disabled'}><span class="box">${ic('check')}</span>${tr('실내세차 완료','Interior done')}</label>${open&&needInt?`<p class="note">${tr('실내세차를 체크해야 완료 알림을 보낼 수 있어요.','Check "Interior done" first.')}</p>`:''}`:''}
     ${msg?`<p class="req-line">${ic('msg',16)}<span><b>${tr('고객 요청','Customer request')}</b> ${esc(msg.message)} ${LANG==='en'?trLink(msg.message,'en'):''}</span></p>`:''}
     ${S.reps.filter(r=>r.job_id===j.id).map(r=>`<p class="memo-line"><span>📝 ${esc(r.body||tr('(사진만 보냄)','(photos only)'))}${r.photos&&r.photos.length?` · 📷 ${r.photos.length}`:''}</span><span class="st">${hm(r.created_at)} → ${esc(r.manager_name||tr('관리자','Manager'))} · ${r.done_at?`<b>${tr('처리완료','Resolved')}</b>`:r.read_at?`<b>${tr('관리자 확인함','Seen by manager')}</b>`:tr('전달됨','Sent')}</span>${r.reply?`<span class="rp">${tr('관리자','Manager')}: ${esc(r.reply)} ${LANG==='en'?trLink(r.reply,'en'):''}</span>`:''}</p>`).join('')}
