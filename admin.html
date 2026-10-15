@@ -1148,6 +1148,8 @@ function resAddHtml(){
 function intReqPanel(){
   const all=S.intReqs.filter(irPass), fs=fieldStaff(), ALL=S.slotApt==='__all__';
   const isDone=r=>r.status==='승인'&&r.interior_done;
+  // 배정 대기가 없으면 처음엔 [예약 확정]을 보여줘요 (기존 예약이 안 보이는 것처럼 느껴지지 않게)
+  if(S.intView==='all'&&!S.intViewPicked&&!all.some(r=>r.status!=='승인')&&all.some(r=>r.status==='승인'&&!isDone(r))) S.intView='done';
   const list=S.intView==='day'&&S.slotDay?all.filter(r=>r.target_date===S.slotDay):S.intView==='done'?all.filter(r=>r.status==='승인'&&!isDone(r)):S.intView==='fin'?all.filter(isDone).sort((a,b)=>a.target_date<b.target_date?1:-1):all.filter(r=>r.status!=='승인');
   const ids=list.filter(r=>r.source!=='round').map(r=>r.id), n=S.intSel.length, allSel=ids.length&&ids.every(x=>S.intSel.includes(x));
   const selRows=all.filter(r=>S.intSel.includes(r.id)), anyNew=selRows.some(r=>r.status!=='승인');
@@ -2526,7 +2528,7 @@ document.addEventListener('click',async e=>{
     case 'capStep': { const el=$('#capVal'); const v=Math.max(1,Math.min(50,(Number(el&&el.value)||0)+Number(t.dataset.d))); S.capVal=String(v); if(el) el.value=v; break; }
     case 'capSave': { const v=Number(($('#capVal')||{}).value||0); if(!(v>=1&&v<=50)){ toast('받을 수 있는 대수는 1~50대로 적어 주세요.',true); break; } const had=S.slots.some(x=>x.slot_date===S.slotDay);
       await act(()=>q(db.rpc('set_interior_capacity',{p_complex:S.slotApt,p_date:S.slotDay,p_capacity:v})),had?`${kdate(S.slotDay)} ${v}대로 바꿨어요.`:`${kdate(S.slotDay)} 신청을 열었어요 (${v}대).`); S.capVal=''; break; }
-    case 'intView': S.intView=t.dataset.f; S.intSel=[]; render(); break;
+    case 'intView': S.intView=t.dataset.f; S.intViewPicked=true; S.intSel=[]; render(); break;
     case 'wdTog': { const w=Number(t.dataset.w), cur=S.wdDraft||[...S.closedWd]; S.wdDraft=cur.includes(w)?cur.filter(x=>x!==w):[...cur,w]; render(); break; }
     case 'wdCancel': S.wdDraft=null; S.wdAll=false; render(); break;
     case 'wdSave': { const days=(S.wdDraft||S.closedWd).slice().sort(), names=days.length?days.map(d=>WD[d]).join('·')+'요일':'없음';
