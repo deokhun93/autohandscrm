@@ -110,6 +110,11 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .part .by{font-weight:500;color:var(--sub);font-size:12.5px}.rsn{display:flex;flex-wrap:wrap;gap:8px}
 .tr-link{font-size:12px;font-weight:700;color:#1D3A6E;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
 .toast[hidden]{display:none!important}
+.find{display:flex;gap:8px;align-items:center}.find input{flex:1;min-width:0;font:inherit;font-size:15px;padding:11px 14px;border:1px solid var(--line-2);border-radius:12px;background:#fff}
+.chip small,.apt-h small{font-weight:600;opacity:.7;letter-spacing:0}
+.cp{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:6px;cursor:pointer;font:inherit;font-size:12px;color:var(--sub);text-align:left}.cp img{width:96px;height:64px;object-fit:cover;border-radius:8px;display:block}
+.cp-add{display:block;text-align:center;border:1px dashed var(--line-2);border-radius:12px;padding:10px;font-size:13px;font-weight:700;color:var(--sub);cursor:pointer;background:#fff}
+.cpv{position:fixed;inset:0;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:60;padding:16px}.cpv img{max-width:100%;max-height:78vh;border-radius:10px}
 </style>
 </head>
 <body>
@@ -203,7 +208,11 @@ const hm=ts=>{const d=new Date(ts);return `${pad(d.getHours())}:${pad(d.getMinut
 const SWATCH={'흰색':'#fff','화이트':'#fff','검정':'#1B2433','검정색':'#1B2433','블랙':'#1B2433','회색':'#94A3B8','그레이':'#94A3B8','은색':'#CBD5E1','실버':'#CBD5E1','파란색':'#3B82F6','빨간색':'#DC2626','노란색':'#FDE047','초록색':'#16A34A','갈색':'#92400E','남색':'#1E3A8A'};
 function friendly(err){const m=(err&&err.message)||String(err||'');if(/Invalid login credentials/i.test(m))return tr('이메일 또는 비밀번호가 맞지 않아요.','Wrong email or password.');if(/Failed to fetch|network/i.test(m))return tr('인터넷 연결을 확인해 주세요.','Please check your internet connection.');if(/[가-힣]/.test(m))return LANG==='en'?'Something went wrong (message in Korean): '+m:m;return tr('문제가 생겼어요. 잠시 후 다시 시도해 주세요.','Something went wrong. Please try again.');}
 
-const S={ready:false,session:null,me:null,day:keyOf(new Date()),jobs:[],sum:null,reqs:[],reps:[],memo:null,sel:[],notice:'',apt:'전체',busy:false,dialog:null,err:''};
+const S={ready:false,session:null,me:null,day:keyOf(new Date()),jobs:[],sum:null,reqs:[],reps:[],memo:null,sel:[],notice:'',apt:(()=>{ try{ return localStorage.getItem('ah-field-apt')||'전체'; }catch(_){ return '전체'; } })(),q:'',cphoto:{},busy:false,dialog:null,err:''};
+// 차량 검색: 차량번호(띄어쓰기 무시 · 뒤 4자리) · 고객 이름 · 동호수
+const normQ=v=>String(v||'').replace(/\s+/g,'').toLowerCase();
+function jobMatch(j,q){ if(!q) return true; const c=j.customers||{}; return [c.car_number,c.name,c.unit,c.car_model].some(x=>normQ(x).includes(q)); }
+const aptOf=j=>(j.customers||{}).complex||'기타';
 
 async function loadMe(){
   const {data,error}=await db.from('profiles').select('id,name,role,status').eq('id',S.session.user.id).maybeSingle();
@@ -226,6 +235,12 @@ async function loadAll(){
     try{ const r=await db.rpc('list_my_field_reports',{p_date:S.day}); S.reps=r.error?[]:(r.data||[]); }catch(_){ S.reps=[]; }
     // 관리자가 '현장직원에게도 보이기'로 표시한 고객 메모 (차주 요청사항 등 · 56 SQL 전이면 건너뜀)
     try{ const ids=[...new Set(S.jobs.map(j=>j.customer_id))]; const r=ids.length?await db.rpc('staff_car_notes',{p_customer_ids:ids}):{data:[]}; S.cnotes={}; (r.error?[]:(r.data||[])).forEach(n=>(S.cnotes[n.customer_id]=S.cnotes[n.customer_id]||[]).push(n)); }catch(_){ S.cnotes={}; }
+    // 차량 정면 사진 (57 SQL 전이면 건너뜀)
+    try{ const ids=[...new Set(S.jobs.map(j=>j.customer_id))]; const r=ids.length?await db.rpc('list_car_photos',{p_customer_ids:ids}):{data:[]}; S.cpOk=!r.error; S.cphoto={};
+      const rows=r.error?[]:(r.data||[]), need=rows.map(x=>x.path).filter(p=>!(S.purl||{})[p]); S.purl=S.purl||{};
+      if(need.length){ const {data}=await db.storage.from('car-photos').createSignedUrls(need,3600); (data||[]).forEach(d=>{ if(d.signedUrl) S.purl[d.path]=d.signedUrl; }); }
+      rows.forEach(x=>S.cphoto[x.customer_id]={...x,url:S.purl[x.path]}); }catch(_){ S.cphoto={}; }
+    if(S.apt!=='전체'&&!S.jobs.some(j=>aptOf(j)===S.apt)) S.apt='전체';
     S.sel=S.sel.filter(id=>S.jobs.some(j=>j.customer_id===id));
     S.err='';
   }catch(e){ S.err=friendly(e); }
@@ -249,6 +264,10 @@ function blockedView(){
 function langSw(){ return `<span class="lang-sw" role="group" aria-label="Language"><button type="button" data-act="lang" data-l="ko" aria-pressed="${LANG==='ko'}">한국어</button><button type="button" data-act="lang" data-l="en" aria-pressed="${LANG==='en'}">English</button></span>`; }
 function logo(){return `<div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>STAFF</small></span></div>`;}
 function jobCard(j){ return S.v53?jobCard2(j):jobCardOld(j); }
+// 차량 정면 사진 1장 — 없으면 찍어서 올리기
+function carPhoto(j){ if(!S.cpOk) return ''; const p=S.cphoto[j.customer_id];
+  if(p&&p.url) return `<button type="button" class="cp" data-act="cp-view" data-c="${j.customer_id}" aria-label="${tr('차량 사진 크게 보기','View car photo')}"><img src="${p.url}" alt="${tr('차량 정면 사진','Car front photo')}" loading="lazy"><span>${tr('정면 사진','Front photo')}</span></button>`;
+  return `<label class="cp-add">${S.cpBusy===j.customer_id?tr('올리는 중...','Uploading...'):`📷 ${tr('차량 정면 사진 찍어 올리기','Take a front photo of the car')}`}<input type="file" accept="image/*" capture="environment" data-cpup="${j.customer_id}" hidden ${S.cpBusy?'disabled':''}></label>`; }
 // 고객 메모 (관리자가 직원에게 보이게 한 것) — 차주 요청사항 등
 function carNotes(j){ const L=(S.cnotes||{})[j.customer_id]||[]; if(!L.length) return '';
   return `<div class="cn-line"><b>📌 ${tr('차주 요청 · 메모','Owner requests · notes')}</b>${L.map(n=>`<span class="${n.important?'imp':''}">${n.important?'⭐ ':''}${esc(n.body)} ${LANG==='en'?trLink(n.body,'en'):''}</span>`).join('')}</div>`; }
@@ -278,7 +297,8 @@ function jobCard2(j){
   const kind=io?tr('실내만','Interior only'):j.interior?tr('외부 + 실내','Exterior + Interior'):tr('외부만','Exterior only');
   return `<article class="job ${picked?'picked':''}">
     <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)}"><span class="box">${ic('check')}</span></label>
-      <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span><span class="tag">${kind}</span>${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')}</span>`:''}</div></div>
+      <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span><span class="tag">${kind}</span>${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')} · ${tr('원래','from')} ${esc(kdate(j.moved_from))}</span>`:''}</div></div>
+    ${carPhoto(j)}
     <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
     ${carNotes(j)}
     ${io?'':partRow(j,'ext')}${j.interior?partRow(j,'int'):''}
@@ -341,9 +361,10 @@ function jobCardOld(j){
 }
 function homeView(){
   const s=S.sum||{today_total:0,today_done:0,today_wait:0,today_skip:0,month_done:0};
-  const apts=['전체',...new Set(S.jobs.map(j=>(j.customers||{}).complex||'기타'))];
-  const list=S.jobs.filter(j=>S.apt==='전체'||((j.customers||{}).complex||'기타')===S.apt);
-  const groups=[...new Set(list.map(j=>(j.customers||{}).complex||'기타'))];
+  const apts=['전체',...new Set(S.jobs.map(aptOf))], q=normQ(S.q);
+  const list=S.jobs.filter(j=>(S.apt==='전체'||aptOf(j)===S.apt)&&jobMatch(j,q));
+  const groups=[...new Set(list.map(aptOf))];
+  const done=j=>j.interior_only?j.interior_done:j.status==='완료', aptCnt=a=>{ const L=a==='전체'?S.jobs:S.jobs.filter(j=>aptOf(j)===a); return `${L.filter(done).length}/${L.length}`; };
   const month=S.day.slice(5,7).replace(/^0/,'');
   return `<div class="appbar">${logo()}<div class="row" style="gap:8px"><button class="icon-btn" data-act="push-on" aria-label="${pushState==='on'?tr('휴대폰 알림 켜짐','Notifications on'):tr('휴대폰 알림 켜기','Turn on notifications')}" style="${pushState==='on'?'background:var(--navy,#0C1422);color:#E2C77F;border-color:transparent':''}">${ic('bell')}</button><button class="icon-btn" data-act="reload" aria-label="${tr('새로고침','Refresh')}">${ic('refresh')}</button><button class="icon-btn" data-act="logout" aria-label="${tr('로그아웃','Log out')}">${ic('logout')}</button></div></div>
   <div class="row" style="justify-content:flex-end">${langSw()}</div>
@@ -355,8 +376,10 @@ function homeView(){
   <div class="money m"><span><b style="font-size:15px">${tr(`${month}월 수당`,`${MON[month-1]} pay`)}</b><small>${tr(`${month}월 1일 ~ 말일 · 완료 ${s.month_done}대`,`${MON[month-1]} 1 – end · ${s.month_done} done`)}</small></span><b>${won(s.month_done*PAY)}</b></div>
   <div class="money t"><span style="font-weight:700">${S.day===keyOf(new Date())?tr('오늘 수당','Today\'s pay'):tr('이날 수당','Pay this day')}</span><b>${won(s.today_done*PAY)}</b></div>
   ${noticeCard(list)}
-  ${apts.length>2?`<div class="chips" role="group" aria-label="${tr('아파트 선택','Apartment')}">${apts.map(a=>`<button class="chip" aria-pressed="${S.apt===a}" data-act="apt" data-a="${esc(a)}">${a==='전체'?tr('전체','All'):esc(a)}</button>`).join('')}</div>`:''}
-  ${list.length?groups.map(g=>`<div class="apt-h">${esc(g)}</div>${list.filter(j=>((j.customers||{}).complex||'기타')===g).map(jobCard).join('')}`).join(''):`<div class="empty">${tr('이 날 배정된 세차가 없어요.','No cars assigned for this day.')}<p class="note" style="margin-top:8px">${tr('관리자 모드 › 고객 세차 설정에서 정기권·지정 요일·담당 현장직원이 모두 입력된 고객만, 지정 요일 날짜에 자동으로 보여요. 월 2회 고객은 격주로 보여요.','Cars appear here automatically on their scheduled day once the office assigns them to you.')}</p></div>`}
+  ${S.jobs.length?`<div class="find"><input type="search" id="q" value="${esc(S.q)}" placeholder="${tr('차량번호 · 이름 · 동호수 검색 (예: 1234)','Search plate · name · unit (e.g. 1234)')}" aria-label="${tr('차량 검색','Search cars')}" autocomplete="off" enterkeyhint="search">${S.q?`<button type="button" class="link" data-act="q-clear">${tr('지우기','Clear')}</button>`:''}</div>`:''}
+  ${apts.length>2?`<div class="chips" role="group" aria-label="${tr('아파트 선택','Apartment')}">${apts.map(a=>`<button class="chip" aria-pressed="${S.apt===a}" data-act="apt" data-a="${esc(a)}">${a==='전체'?tr('전체','All'):esc(a)} <small>${aptCnt(a)}</small></button>`).join('')}</div>`:''}
+  ${q&&!list.length?`<div class="empty">${tr(`'${esc(S.q)}'에 맞는 차량이 없어요.`,`No car matches '${esc(S.q)}'.`)}${S.apt!=='전체'?`<p class="note" style="margin-top:8px"><button class="link" data-act="apt" data-a="전체">${tr('전체 아파트에서 찾기','Search all apartments')}</button></p>`:''}</div>`:''}
+  ${list.length?groups.map(g=>`<div class="apt-h">${esc(g)} <small>${aptCnt(g)}</small></div>${list.filter(j=>((j.customers||{}).complex||'기타')===g).map(jobCard).join('')}`).join(''):q?'':`<div class="empty">${tr('이 날 배정된 세차가 없어요.','No cars assigned for this day.')}<p class="note" style="margin-top:8px">${tr('관리자 모드 › 고객 세차 설정에서 정기권·지정 요일·담당 현장직원이 모두 입력된 고객만, 지정 요일 날짜에 자동으로 보여요. 월 2회 고객은 격주로 보여요.','Cars appear here automatically on their scheduled day once the office assigns them to you.')}</p></div>`}
   ${(()=>{const n=bulkTargets().length; return n?`<button class="btn full bulk-bar" data-act="bulk-done" ${S.busy?'disabled':''}>${tr(`선택한 ${n}대 완료`,`Mark ${n} selected as done`)}<span class="arr">${ic('check')}</span></button>`:'';})()}`;
 }
 function noticeCard(list){
@@ -428,8 +451,9 @@ function render(){
   scr.innerHTML=!S.session?loginView():(!S.me||S.me.status!=='승인')?blockedView():homeView();
   if(window.AppNav&&!AppNav.getToken) AppNav.getToken=async()=>{ const {data}=await db.auth.getSession(); return data&&data.session?data.session.access_token:null; };
   if(window.AppNav) AppNav.set('field', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
-  if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName))el.focus({preventScroll:true});}
+  if(fid){const el=document.getElementById(fid);if(el&&/INPUT|TEXTAREA/.test(el.tagName)){el.focus({preventScroll:true}); if(fid==='q'){ try{ const n=el.value.length; el.setSelectionRange(n,n); }catch(_){} }}}
   const L=$('#layer'),d=S.dialog;
+  if(S.cpv&&!d){ L.innerHTML=`<div class="cpv" data-act="cp-close" role="dialog" aria-modal="true" aria-label="${tr('차량 정면 사진','Car front photo')}"><img src="${S.cpv}" alt=""><button class="btn2" data-act="cp-close">${tr('닫기','Close')}</button></div>`; return; }
   L.innerHTML=d?`<div class="scrim" data-act="close"><div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dg" data-stop><h2 class="h" id="dg">${esc(d.title)}</h2><p class="sub">${esc(d.body)}</p>${d.list?`<ul class="dg-list">${d.list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}<div class="acts"><button class="btn2" data-act="close">${tr('취소','Cancel')}</button><button class="btn plain" id="dg-ok" data-act="confirm" ${S.busy?'disabled':''}>${S.busy?tr('처리 중...','Working...'):esc(d.ok||tr('확인','OK'))}</button></div></div></div>`:S.rsn?rsnSheet():memoSheet();
   if(d) setTimeout(()=>$('#dg-ok')&&$('#dg-ok').focus(),30);
 }
@@ -454,7 +478,10 @@ document.addEventListener('click',async e=>{
     case 'pw-eye': togglePw(t); break;
     case 'day': {const [y,m,d]=S.day.split('-').map(Number);const dt=new Date(y,m-1,d+Number(t.dataset.d));S.day=keyOf(dt);S.sel=[];await loadAll();break;}
     case 'today': S.day=keyOf(new Date()); S.sel=[]; await loadAll(); break;
-    case 'apt': S.apt=t.dataset.a; render(); break;
+    case 'apt': S.apt=t.dataset.a; try{ localStorage.setItem('ah-field-apt',S.apt); }catch(_){} render(); break;
+    case 'q-clear': S.q=''; render(); setTimeout(()=>{ const el=$('#q'); if(el) el.focus(); },20); break;
+    case 'cp-view': { const p=S.cphoto[Number(t.dataset.c)]; if(p&&p.url){ S.cpv=p.url; render(); } break; }
+    case 'cp-close': S.cpv=null; render(); break;
     case 'close': if(!S.busy){S.dialog=null;render();} break;
     case 'memo': S.memo={jobId:id,body:'',files:[],prog:''}; render(); setTimeout(()=>{const el=$('#memo-body'); if(el) el.focus();},40); break;
     case 'memo-close': if(!S.busy&&(e.target===t||t.tagName==='BUTTON')){ if(S.memo) S.memo.files.forEach(f=>URL.revokeObjectURL(f.url)); S.memo=null; render(); } break;
@@ -462,7 +489,11 @@ document.addEventListener('click',async e=>{
     case 'memo-send': await sendMemo(); break;
     case 'part': { if(!j) break; const part=t.dataset.part, st=t.dataset.st, car=(j.customers||{}).car_number||'', lab=part==='ext'?tr('외부세차','exterior wash'):tr('실내세차','interior wash');
       if(st==='미완료'){ S.rsn={jobId:id,part,v:'',etc:''}; render(); break; }
-      if(st==='대기'){ await setPart(id,part,'대기','',tr('대기로 되돌렸어요.','Changed back to waiting.')); break; }
+      if(st==='대기'){ const was=part==='ext'?(j.status==='완료'?'완료':'미완료'):(j.interior_done?'완료':'미완료');
+        S.dialog={title:tr(`${lab} ${was}를 되돌릴까요?`,`Undo "${was==='완료'?'done':'not done'}" for ${lab}?`),
+          body:was==='완료'?tr(`${car} ${lab}를 다시 '대기'로 바꿔요. 고객에게 이미 간 완료 알림은 취소되지 않아요.${part==='ext'?' 수당에서도 빠져요.':''}`,`${car} goes back to waiting. The done notice already sent to the customer is not cancelled.${part==='ext'?' It is removed from your pay.':''}`)
+                           :tr(`${car} ${lab}를 다시 '대기'로 바꿔요.`,`${car} goes back to waiting.`),
+          ok:tr('되돌리기','Undo'),run:()=>setPart(id,part,'대기','',tr('대기로 되돌렸어요.','Changed back to waiting.'))}; render(); break; }
       S.dialog={title:tr(`${lab} 완료 알림을 보낼까요?`,`Send "${lab} done" to the customer?`),body:tr(`${car} ${lab}를 완료로 처리하고 고객 앱에 '${lab}가 완료되었어요' 알림을 보내요.`,`Marks ${car} ${lab} as done and notifies the customer.`),ok:tr('알림 보내기','Send'),
         run:()=>setPart(id,part,'완료','',part==='ext'?tr('외부세차 완료 알림을 보냈어요. +','Exterior done notice sent. +')+won(PAY):tr('실내세차 완료 알림을 보냈어요.','Interior done notice sent.'))}; render(); break; }
     case 'rsn-pick': if(S.rsn&&!S.busy){ S.rsn.v=t.dataset.v; render(); if(S.rsn.v==='기타') setTimeout(()=>{const el=$('#rsn-etc'); if(el) el.focus();},30); } break;
@@ -479,7 +510,7 @@ document.addEventListener('click',async e=>{
         list:list.map(j=>(j.customers||{}).car_number||tr('차량번호 없음','No plate')),ok:tr('확인','OK'),run:()=>bulkDone(list)}; render(); break; }
     case 'undo': await upd(id,{status:'대기'},tr('다시 대기로 바꿨어요.','Changed back to waiting.')); break;
     case 'confirm': if(S.dialog&&!S.busy){ S.busy=true; render(); await S.dialog.run(); } break;
-    case 'sel-all': {const ids=S.jobs.filter(j=>S.apt==='전체'||((j.customers||{}).complex||'기타')===S.apt).map(j=>j.customer_id);const all=ids.every(x=>S.sel.includes(x));S.sel=all?S.sel.filter(x=>!ids.includes(x)):[...new Set([...S.sel,...ids])];render();break;}
+    case 'sel-all': {const q=normQ(S.q), ids=S.jobs.filter(j=>(S.apt==='전체'||aptOf(j)===S.apt)&&jobMatch(j,q)).map(j=>j.customer_id);const all=ids.every(x=>S.sel.includes(x));S.sel=all?S.sel.filter(x=>!ids.includes(x)):[...new Set([...S.sel,...ids])];render();break;}
     case 'notice': {
       const body=S.notice.trim(); if(!body||!S.sel.length) break;
       S.busy=true; render();
@@ -495,13 +526,21 @@ document.addEventListener('change',async e=>{
   if(t.id==='day'&&t.value){ S.day=t.value; S.sel=[]; await loadAll(); return; }
   if(t.dataset.sel){ const id=Number(t.dataset.sel); S.sel=t.checked?[...new Set([...S.sel,id])]:S.sel.filter(x=>x!==id); render(); return; }
   if(t.dataset.int){ await upd(Number(t.dataset.int),{interior_done:t.checked},null); }
+  if(t.dataset.cpup&&t.files&&t.files[0]){ const cid=Number(t.dataset.cpup), f=t.files[0]; S.cpBusy=cid; render();
+    try{ const {blob,type}=await shrinkImage(f), path=`${cid}/${S.me.id}-${Date.now()}.jpg`;
+      const up=await db.storage.from('car-photos').upload(path,blob,{contentType:type,upsert:false}); if(up.error) throw up.error;
+      const r=await db.rpc('set_car_photo',{p_customer_id:cid,p_path:path}); if(r.error){ db.storage.from('car-photos').remove([path]).catch(()=>{}); throw r.error; }
+      if(r.data) db.storage.from('car-photos').remove([r.data]).catch(()=>{});
+      toast(tr('차량 사진을 저장했어요.','Car photo saved.')); }
+    catch(err){ toast(/bucket|not found/i.test(err.message||'')?tr('사진 저장소가 아직 준비되지 않았어요. 관리자에게 알려 주세요.','Photo storage is not ready. Please tell the manager.'):friendly(err),true); }
+    S.cpBusy=null; await loadAll(); return; }
   if(t.id==='memo-file'&&S.memo){
     const room=MAX_PH-S.memo.files.length, list=[...t.files].filter(f=>/^image\//.test(f.type)||/\.(heic|heif|jpe?g|png|webp)$/i.test(f.name));
     if(list.length>room) toast(tr(`사진은 ${MAX_PH}장까지 넣을 수 있어요.`,`You can add up to ${MAX_PH} photos.`),true);
     list.slice(0,room).forEach(f=>S.memo.files.push({file:f,url:URL.createObjectURL(f)})); render();
   }
 });
-document.addEventListener('input',e=>{ if(e.target.id==='rsn-etc'&&S.rsn){ S.rsn.etc=e.target.value; return; } if(e.target.id==='memo-body'&&S.memo){ S.memo.body=e.target.value; const b=document.querySelector('[data-act="memo-send"]'); if(b) b.disabled=S.busy||(!S.memo.body.trim()&&!S.memo.files.length); return; } if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nt-send'); if(b) b.disabled=!(S.sel.length&&S.notice.trim()); } });
+document.addEventListener('input',e=>{ if(e.target.id==='q'){ S.q=e.target.value; render(); return; } if(e.target.id==='rsn-etc'&&S.rsn){ S.rsn.etc=e.target.value; return; } if(e.target.id==='memo-body'&&S.memo){ S.memo.body=e.target.value; const b=document.querySelector('[data-act="memo-send"]'); if(b) b.disabled=S.busy||(!S.memo.body.trim()&&!S.memo.files.length); return; } if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nt-send'); if(b) b.disabled=!(S.sel.length&&S.notice.trim()); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} else if(e.key==='Escape'&&S.memo&&!S.busy){S.memo=null;render();} });
 document.addEventListener('submit',async e=>{
   if(e.target.id!=='login') return; e.preventDefault();
@@ -523,7 +562,7 @@ document.addEventListener('submit',async e=>{
   S.session=data.session; S.ready=true;
   if(S.session) await loadAll(); else render();
   db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; S.jobs=[]; render(); return; } if(!was){ S.err=''; await loadAll(); } });
-  setInterval(()=>{ const ae=document.activeElement; if(S.session&&S.me&&!S.dialog&&!S.memo&&!S.rsn&&!(ae&&/INPUT|TEXTAREA/.test(ae.tagName))&&document.visibilityState==='visible') loadAll(); },60000);
+  setInterval(()=>{ const ae=document.activeElement; if(S.session&&S.me&&!S.dialog&&!S.memo&&!S.rsn&&!S.cpv&&!S.cpBusy&&!(ae&&/INPUT|TEXTAREA/.test(ae.tagName))&&document.visibilityState==='visible') loadAll(); },60000);
 })();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}</script>
