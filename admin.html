@@ -523,6 +523,7 @@ async function loadTab(){
       const base='id,customer_id,wash_date,staff_id,sort_order,status,interior,interior_done,moved_from,done_at,customers(name,phone,complex,unit,car_number,car_model,car_color,wash_plan)';
       const b53=base+',interior_staff_id,skip_reason,interior_skip,interior_reason,interior_done_at';
       try{ S.carry=(await q(db.rpc('get_wash_carry'))||[])[0]||null; }catch(_){ S.carry=undefined; }   // 57 SQL 전이면 undefined
+      try{ S.cutoff=await q(db.rpc('get_sameday_cutoff')); }catch(_){ S.cutoff=null; }   // 고객 당일 변경 마감 시간 (64 SQL)
       const sel53=S.carry!==undefined?b53+',carried':b53, jq=c=>q(db.from('wash_jobs').select(c).eq('wash_date',S.jobDay).order('staff_id').order('sort_order'));
       try{ try{ S.jobs=await jq(sel53+',svc_kind,svc_reason')||[]; }catch(_){ S.jobs=await jq(sel53)||[]; } S.jobs53=true; }   // 60 SQL 전이면 서비스 · AS 칸 없이
       catch(_){ S.jobs=await q(db.from('wash_jobs').select(base).eq('wash_date',S.jobDay).order('staff_id').order('sort_order'))||[]; S.jobs53=false; } }
@@ -1085,6 +1086,7 @@ function jobsView(){
   <div class="row"><button class="btn2" data-act="jday" data-d="-1">이전</button><input type="date" class="inp" id="jday" value="${S.jobDay}" aria-label="날짜"><button class="btn2" data-act="jday" data-d="1">다음</button>
     <span class="grow"></span><button class="btn gold" data-act="gen">${kdate(S.jobDay)} 일정 만들기</button></div>
   ${S.carry?`<div class="carry-box"><label class="auto"><input type="checkbox" id="carryOn" ${S.carry.is_on?'checked':''}><span><b>못 한 차량 다음 근무일로 자동 넘기기</b></span></label><p class="note">대기로 남았거나 현장 사정(차량 없음 · 차량 잠김 · 우천 · 시간 부족)으로 미완료한 차량은 다음 날 낮 12시가 지나면 그 아파트의 다음 근무일로 옮겨져요. 패스(수리 · 여행 · 차량변경) · 고객 요청 취소 · 기타 사유는 넘기지 않아요. 넘어온 차량은 '↪ 못 한 차량'으로 보여요.${S.carry.is_on?'':' <b style="color:var(--red)">지금은 꺼져 있어요.</b>'}</p></div>`:''}
+  ${S.cutoff?`<div class="carry-box cut-box"><div class="row" style="gap:8px;flex-wrap:wrap"><b>⏰ 고객 당일 일정 변경 마감</b><input type="time" class="inp" id="cutTime" value="${esc(S.cutoff)}" style="width:130px" aria-label="당일 변경 마감 시간"><button class="btn2 sm" data-act="cutSave">저장</button></div><p class="note">세차 당일, 이 시간 전에 고객이 앱에서 바꿀 날짜를 고르면 세차 일정에 바로 반영되고 관리자 · 현장 담당자에게 🚨 긴급 알림이 가요. 시간이 지나면 고객 앱에 '담당자에게 연락해 주세요'라고 안내해요.</p></div>`:''}
   <div class="summary"><div style="background:var(--gold-soft)"><b>${c(ext,j=>jExtSt(j)==='대기')} · ${c(ints,j=>jIntSt(j)==='대기')}</b><span>대기 (외부 · 실내)</span></div><div style="background:var(--ok)"><b>${c(ext,j=>jExtSt(j)==='완료')} · ${c(ints,j=>jIntSt(j)==='완료')}</b><span>완료 (외부 · 실내)</span></div><div style="background:var(--skip)"><b>${c(ext,j=>jExtSt(j)==='미완료')} · ${c(ints,j=>jIntSt(j)==='미완료')}</b><span>미완료 (외부 · 실내)</span></div><div style="background:var(--card);border:1px solid var(--line)"><b>${list.length}${list.length<all.length?` / ${all.length}`:''}</b><span>차량${c(list,j=>j.carried)?` · ↪ 넘어온 차량 ${c(list,j=>j.carried)}`:''}</span></div></div>
   <div class="card"><div class="row"><b class="grow">차량 추가</b><select class="inp" id="add-cust" style="min-width:260px" aria-label="추가할 고객"><option value="">고객 고르기</option>${S.customers.filter(c=>inScope(c.complex)).map(c=>`<option value="${c.id}">${esc(c.complex)} ${esc(c.unit||'')} · ${esc(c.car_number||c.name)}</option>`).join('')}</select><button class="btn sm" data-act="add-job">추가</button></div></div>
   ${S.jobs53===false?'<p class="note" style="color:var(--red)">⚠ 53번 SQL을 실행하면 외부 · 실내 직원 따로 배정 · 상태 · 사유를 쓸 수 있어요.</p>':''}
@@ -2420,6 +2422,8 @@ document.addEventListener('click',async e=>{
     case 'memoEdit': S.memoEdit=id; render(); setTimeout(()=>{const m=$('#memo-'+id); if(m){m.focus(); m.setSelectionRange(m.value.length,m.value.length);}},30); break;
     case 'memoCancel': S.memoEdit=null; render(); break;
     case 'replyEdit': S.replyEdit=id; S.replyDraft=undefined; render(); setTimeout(()=>{const m=$('#reply-'+id); if(m){m.focus(); m.setSelectionRange(m.value.length,m.value.length);}},30); break;
+    case 'cutSave': { const v=(($('#cutTime')||{}).value||'').trim(); if(!/^\d{2}:\d{2}/.test(v)){ toast('시간을 골라 주세요.',true); break; }
+      try{ S.cutoff=await q(db.rpc('set_sameday_cutoff',{p_time:v})); toast(`당일 변경 마감 시간을 ${S.cutoff}로 바꿨어요.`); }catch(err){ toast(friendly(err),true); } render(); break; }
     case 'replyCancel': S.replyEdit=null; S.replyDraft=undefined; render(); break;
     case 'replyQuick': { const m=$('#reply-'+id), cur=(m&&m.value||'').trim(); S.replyDraft=cur?cur+' '+t.dataset.v:t.dataset.v; render(); setTimeout(()=>{const x=$('#reply-'+id); if(x){x.focus(); x.setSelectionRange(x.value.length,x.value.length);}},30); break; }
     case 'replySend': {
