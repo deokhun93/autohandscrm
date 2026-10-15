@@ -1198,10 +1198,9 @@ function intPick(cid){ const plan=((S.cint||{})[cid]||{}).interior_plan||'', d=(
   return `<div class="int-pick"><label class="auto"><input type="checkbox" data-intp="${cid}" ${on?'checked':''}><span>실내포함</span></label><select data-intn="${cid}" aria-label="실내 횟수" ${on?'':'hidden'}>${[1,2,3,4,5,6,7,8].map(k=>`<option value="${k}" ${n===String(k)?'selected':''}>월 ${k}회</option>`).join('')}<option value="every" ${n==='every'?'selected':''}>매회</option></select>${!on&&plan==='service'?'<small class="by">요청 서비스</small>':''}</div>`; }
 const intCode=(on,n)=>!on?'request':n==='every'?'every':Number(n)>1?'m'+n:'monthly';
 /* 고객관리 › 세차 설정 — 정기권 · 요일 · 담당 현장직원 · 차급을 한 줄씩 바로 고치기 (예전 '고객 세차 설정' 탭을 고객관리로 합침) */
-const pzWhy=c=>{ const st=(S.cstat||{})[c.id]||{}; return st.wash_status==='해지'&&st.pause_reason?`<br><small class="by">사유: ${esc(st.pause_reason)}</small>`:''; };
 function custSetTable(list,empty){ const fs=fieldStaff();
   return list.length?`<div class="tbl cm-tbl"><table><thead><tr><th>상태</th><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권 · 실내포함</th><th>지정 요일</th><th>차종</th><th>차급</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
-    ${list.map(c=>{const st=cmState(c); return `<tr class="cm-row ${st.cls}" data-cid="${c.id}"><td class="nowrap"><span class="pill ${st.pill||'st-'+st.k}">${esc(st.label)}</span>${pzWhy(c)}</td><td><button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button></td><td><input data-f="complex" value="${esc(c.complex||'')}" placeholder="예: 범어파크뷰" ${c.complex?'':'class="need"'}></td><td><input data-f="unit" value="${esc(c.unit||'')}" placeholder="예: 103동 1201호" style="max-width:120px"></td><td>${esc(c.car_number||'-')}</td>
+    ${list.map(c=>{const st=cmState(c); return `<tr class="cm-row ${st.cls}" data-cid="${c.id}"><td class="nowrap"><span class="pill ${st.pill||'st-'+st.k}">${esc(st.label)}</span></td><td><button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button></td><td><input data-f="complex" value="${esc(c.complex||'')}" placeholder="예: 범어파크뷰" ${c.complex?'':'class="need"'}></td><td><input data-f="unit" value="${esc(c.unit||'')}" placeholder="예: 103동 1201호" style="max-width:120px"></td><td>${esc(c.car_number||'-')}</td>
       <td><select data-f="wash_plan" data-rowplan="1">${planOpts(c.wash_plan)}</select>${S.cintOk?intPick(c.id):''}</td>
       <td class="wd-cell">${wdCell(c.wash_plan,c)}</td>
       <td><input data-f="car_model" value="${esc(c.car_model||'')}" placeholder="예: 아반떼"></td>
@@ -1218,6 +1217,7 @@ function pzKind(st){ if(st.pause_kind) return st.pause_kind; if(!st.pause_until)
   const from=st.status_changed_at?String(st.status_changed_at).slice(0,10):keyOf(new Date());
   return (new Date(st.pause_until+'T00:00:00')-new Date(from+'T00:00:00'))/864e5>=30?'정지':'일시정지'; }
 const PZ_WHY=['수리','여행','차량변경','기타'];
+const CX_WHY=['이사','차량 처분','비용','불만족','기타'];
 /* 아파트 여러 개 선택 상자 — key: S[key]에 고른 아파트 배열을 저장 (비면 전체) */
 function aptMulti(key,apts,label){ return multiPick(key,apts.map(a=>[a,a]),{icon:'🏢',all:'아파트 전체',many:n=>`아파트 ${n}곳`,aria:label||'아파트 고르기',empty:'아파트가 없어요.'}); }
 /* 여러 개 고르기 상자 (아파트 · 정기권 · 요일 · 담당직원 같이 씀) — opts: [[값, 이름], ...] · 고른 값은 S[key]에 글자로 저장 (비면 전체) */
@@ -1237,7 +1237,7 @@ async function loadNotes(cid){ const [l,f]=await Promise.all([q(db.rpc('list_cus
   S.notes[cid]=l||[]; S.nsOk=!f.error; S.noteStaff=S.noteStaff||{}; S.noteStaff[cid]=(f.data||[]).map(x=>Number(typeof x==='object'?Object.values(x)[0]:x)); }   // 56 SQL 전이면 '직원앱에 보이기'를 숨겨요
 function cmState(c){
   const st=S.cstat[c.id]||{wash_status:'세차중'};
-  if(st.wash_status==='해지') return {k:'cancel',label:'해지',cls:'is-cancel'};
+  if(st.wash_status==='해지') return {k:'cancel',label:`해지${st.pause_reason?' · '+st.pause_reason:''}`,cls:'is-cancel'};
   if(st.wash_status==='일시정지'){
     const days=st.pause_until?Math.round((new Date(st.pause_until+'T00:00:00')-new Date(keyOf(new Date())+'T00:00:00'))/86400000):null;
     const md=st.pause_until?st.pause_until.slice(5).replace('-','/').replace(/^0/,''):'';
@@ -1302,7 +1302,8 @@ const CUH=['아파트','동호수','차량번호','고객','연락처','차종',
 const cuMap=()=>({...HMAP,고객입금자명:'name',차급:'car_class',차량등급:'car_class',재개일:'pause_until',재개일자:'pause_until',세차요금:'fee',외부요금:'fee',실내:'interior_plan',실내세차:'interior_plan',실내방식:'interior_plan',실내요금:'interior_fee',실내금액:'interior_fee'});
 function custFormHtml(){ const f=S.cuform||{}, fs=fieldStaff(), isNew=!f.id;
   const inp=([k,l,ph])=>`<label class="field"><span>${l}</span><input class="inp" data-cu="${k}" value="${esc(f[k]??'')}" placeholder="${esc(ph)}" ${k==='phone'?'inputmode="tel"':''}></label>`;
-  return `<div class="cform">${CUF.map(inp).join('')}
+  const cu=!isNew&&S.customers.find(x=>x.id===f.id), st=cu&&S.cstat&&S.cstat[f.id]?cmState(cu):null;
+  return `${st?`<div class="cm-box cu-st" style="margin:0 0 10px"><b style="font-size:14px">지금 상태</b> <span class="pill ${st.pill||'st-'+st.k}">${esc(st.label)}</span>${S.cstat[f.id].status_changed_at?` <small class="by">${esc(S.cstat[f.id].changed_name||'')} · ${when(S.cstat[f.id].status_changed_at)} 바꿈</small>`:''}<p class="note" style="margin:6px 0 0">상태는 고객 목록에서 체크한 뒤 위의 [세차중으로 · 일시정지 · 정지 · 해지] 버튼으로 바꿔요.</p></div>`:''}<div class="cform">${CUF.map(inp).join('')}
     <label class="field"><span>차급 (실내세차 요금)</span><select class="inp" data-cu="car_class"><option value="">자동 (차종으로)</option>${CLASSES.map(k=>`<option value="${k}" ${f.car_class===k?'selected':''}>${k}${k==='SUV'?'':' (세단)'}</option>`).join('')}</select></label>
     <label class="field"><span>정기권</span><select class="inp" data-cu="wash_plan">${planOpts(f.wash_plan)}</select></label>
     ${PLAN_DAYS[f.wash_plan]?`<div class="field"><span>세차 요일 (매주 ${PLAN_DAYS[f.wash_plan]}개 · 지금 ${(f.wash_days||[]).length}개)</span>${wdChecks(f.wash_days,'data-cuday')}</div>`
@@ -1368,7 +1369,7 @@ const CM_COLS=[
   ['cls','차급',c=>{const r=S.cls&&S.cls[c.id]; return `<td class="nowrap">${esc((r&&r.car_class)||'미분류')}</td>`;},0],
   ['login','앱 아이디',c=>{const L=(S.logins||{})[c.id]; return `<td class="nowrap">${L?esc(L.login_id)+(L.pw_initial?' <small class="by">1234</small>':''):'-'}</td>`;},0],
   ['resume','재개일',c=>{const st=S.cstat[c.id]||{}; return `<td class="nowrap">${st.pause_until?ymd(st.pause_until):st.wash_status==='일시정지'?'미정':'-'}</td>`;},0],
-  ['pzwhy','쉬는 사유',c=>{const st=S.cstat[c.id]||{}; return `<td>${st.wash_status==='일시정지'&&st.pause_reason?esc(st.pause_reason):'-'}</td>`;},0],
+  ['pzwhy','쉬는 · 해지 사유',c=>{const st=S.cstat[c.id]||{}; return `<td>${['일시정지','해지'].includes(st.wash_status)&&st.pause_reason?esc(st.pause_reason):'-'}</td>`;},0],
 ];
 function cmgrView(){
   const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
@@ -2268,7 +2269,15 @@ document.addEventListener('click',async e=>{
     case 'cmSet': { const ids=[...S.cmSel], st=t.dataset.s; if(!ids.length) break;
       const body=st==='이관중'?'이관중으로 표시만 해요. 세차 일정은 그대로 만들어지고, 그 차량 메모에 기록이 남아요.\n이관이 끝나면 [세차중으로]를 눌러 표시를 풀어 주세요.':st==='해지'?'해지하면 정기세차 일정이 더 이상 만들어지지 않고, 오늘 이후 잡혀 있던 대기 일정도 지워져요. 목록에서는 회색으로 보여요.\n나중에 [세차중으로]를 누르면 다시 일정이 만들어져요.'
         :'일시정지·해지·이관중을 풀고 다시 정기세차 일정이 만들어지게 해요.';
-      ask(`선택한 ${ids.length}대를 ${st==='해지'?'해지':st==='이관중'?'이관중으로':'세차중으로'} 처리할까요?`,body,'확인',()=>act(async()=>{ const n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:st,p_resume:null})); S.cmSel=[]; toast(`${n||0}대를 ${st} 처리했어요.`); },null)); break; }
+      if(st==='해지'){ S.pz={why:'',memo:''};
+        const build=()=>{ const z=S.pz; return `<div class="field"><span style="font-weight:700;font-size:13px">해지 사유</span><div class="pz-reasons">${CX_WHY.map(w=>`<label class="auto"><input type="radio" name="cxWhy" data-pz="why" value="${w}" ${z.why===w?'checked':''}><span>${w}</span></label>`).join('')}</div>
+          <input class="inp" data-pz="memo" maxlength="150" value="${esc(z.memo)}" placeholder="메모 (선택) 예: 11월 말 이사" style="margin-top:6px"></div>`; };
+        ask(`선택한 ${ids.length}대를 해지할까요?`,body,'확인',()=>act(async()=>{ const z=S.pz, why=[z.why,z.memo.trim()].filter(Boolean).join(' · ');
+          if(!why){ toast('해지 사유를 골라 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
+          let n; try{ n=await q(db.rpc('set_customer_cancel',{p_ids:ids,p_reason:why})); }
+          catch(e){ if(!/set_customer_cancel|function|schema cache/i.test(String(e&&e.message||e))) throw e; n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:'해지',p_resume:null})); toast('사유를 남기려면 61 SQL을 먼저 실행해 주세요.',true); }
+          S.cmSel=[]; toast(`${n||0}대를 해지했어요 · 사유: ${why}`); },null),build()); S.dialog.rebuild=build; break; }
+      ask(`선택한 ${ids.length}대를 ${st==='이관중'?'이관중으로':'세차중으로'} 처리할까요?`,body,'확인',()=>act(async()=>{ const n=await q(db.rpc('set_customer_wash_status',{p_ids:ids,p_status:st,p_resume:null})); S.cmSel=[]; toast(`${n||0}대를 ${st} 처리했어요.`); },null)); break; }
     case 'cmPause': { const ids=[...S.cmSel]; if(!ids.length) break;
       const kind=t.dataset.k||'일시정지', tmr=new Date(); tmr.setDate(tmr.getDate()+1); const min=keyOf(tmr);
       const d0=new Date(); d0.setDate(d0.getDate()+(kind==='정지'?31:7));
