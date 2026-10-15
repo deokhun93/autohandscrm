@@ -96,6 +96,7 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .pw{position:relative}.pw input{padding-right:48px;width:100%}
 .pw-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:42px;height:42px;display:grid;place-items:center;border:0;background:none;color:#6B7280;border-radius:8px;cursor:pointer}
 .auto{display:flex;gap:10px;align-items:center;font-size:14px;cursor:pointer;user-select:none}.auto input{width:20px;height:20px;accent-color:#0C1422;margin:0;flex:none}
+.cn-item{display:flex;flex-direction:column;gap:3px}.cn-rep{margin-left:10px;color:#5A4A10;font-size:12.5px}.cn-rep small{color:#8A7A40}.cn-btn{align-self:flex-start;font-size:12px;padding:0}.cn-form{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.cn-form .inp{flex:1;min-width:160px;min-height:36px}
 .cn-line{margin:0;display:flex;flex-direction:column;gap:4px;font-size:13px;background:#FFF6DA;border:1px solid #F0D98A;border-radius:10px;padding:8px 10px;color:#4A3B00}.cn-line b{font-size:12px}.cn-line span.imp{font-weight:800}
 .memo-line{margin:0;display:flex;flex-direction:column;gap:3px;font-size:12.5px;background:#EEF2F8;border-radius:10px;padding:8px 10px;color:var(--text)}
 .memo-line .st{font-size:11px;font-weight:700;color:var(--sub)}.memo-line .st b{color:#1F5136}.memo-line .rp{color:#1D3A6E;font-weight:600}
@@ -234,7 +235,7 @@ async function loadAll(){
     S.jobs=jobs.data||[]; S.sum=(sum.data&&sum.data[0])||null; S.reqs=reqs.error?[]:(reqs.data||[]);
     try{ const r=await db.rpc('list_my_field_reports',{p_date:S.day}); S.reps=r.error?[]:(r.data||[]); }catch(_){ S.reps=[]; }
     // 관리자가 '현장직원에게도 보이기'로 표시한 고객 메모 (차주 요청사항 등 · 56 SQL 전이면 건너뜀)
-    try{ const ids=[...new Set(S.jobs.map(j=>j.customer_id))]; const r=ids.length?await db.rpc('staff_car_notes',{p_customer_ids:ids}):{data:[]}; S.cnotes={}; (r.error?[]:(r.data||[])).forEach(n=>(S.cnotes[n.customer_id]=S.cnotes[n.customer_id]||[]).push(n)); }catch(_){ S.cnotes={}; }
+    await loadCarNotes();
     // 차량 정면 사진 (57 SQL 전이면 건너뜀)
     try{ const ids=[...new Set(S.jobs.map(j=>j.customer_id))]; const r=ids.length?await db.rpc('list_car_photos',{p_customer_ids:ids}):{data:[]}; S.cpOk=!r.error; S.cphoto={};
       const rows=r.error?[]:(r.data||[]), need=rows.map(x=>x.path).filter(p=>!(S.purl||{})[p]); S.purl=S.purl||{};
@@ -270,7 +271,12 @@ function carPhoto(j){ if(!S.cpOk) return ''; const p=S.cphoto[j.customer_id];
   return `<label class="cp-add">${S.cpBusy===j.customer_id?tr('올리는 중...','Uploading...'):`📷 ${tr('차량 정면 사진 찍어 올리기','Take a front photo of the car')}`}<input type="file" accept="image/*" capture="environment" data-cpup="${j.customer_id}" hidden ${S.cpBusy?'disabled':''}></label>`; }
 // 고객 메모 (관리자가 직원에게 보이게 한 것) — 차주 요청사항 등
 function carNotes(j){ const L=(S.cnotes||{})[j.customer_id]||[]; if(!L.length) return '';
-  return `<div class="cn-line"><b>📌 ${tr('차주 요청 · 메모','Owner requests · notes')}</b>${L.map(n=>`<span class="${n.important?'imp':''}">${n.important?'⭐ ':''}${esc(n.body)} ${LANG==='en'?trLink(n.body,'en'):''}</span>`).join('')}</div>`; }
+  const top=L.filter(n=>!n.reply_to), sub=id=>L.filter(n=>n.reply_to===id).sort((a,b)=>a.created_at<b.created_at?-1:1);
+  return `<div class="cn-line"><b>📌 ${tr('차주 요청 · 메모','Owner requests · notes')}</b>${top.map(n=>`<div class="cn-item"><span class="${n.important?'imp':''}">${n.important?'⭐ ':''}${esc(n.body)} ${LANG==='en'?trLink(n.body,'en'):''}</span>
+    ${sub(n.id).map(r=>`<span class="cn-rep">↳ ${esc(r.body)} <small>${esc(r.author||'')}</small></span>`).join('')}
+    ${S.cnReply===n.id?`<span class="cn-form"><input class="inp" id="cn-reply" maxlength="500" value="${esc(S.cnDraft||'')}" placeholder="${tr('답변 (관리자에게 보여요) 예: 확인했어요','Reply (admins will see it) e.g. Got it')}"><button type="button" class="btn sm" data-act="cn-send" data-n="${n.id}" ${S.busy?'disabled':''}>${tr('보내기','Send')}</button><button type="button" class="link" data-act="cn-cancel">${tr('취소','Cancel')}</button></span>`
+      :`<button type="button" class="link cn-btn" data-act="cn-open" data-n="${n.id}">↩ ${tr('답변','Reply')}</button>`}</div>`).join('')}</div>`; }
+async function loadCarNotes(){ try{ const ids=[...new Set(S.jobs.map(j=>j.customer_id))]; const r=ids.length?await db.rpc('staff_car_notes',{p_customer_ids:ids}):{data:[]}; S.cnotes={}; (r.error?[]:(r.data||[])).forEach(n=>(S.cnotes[n.customer_id]=S.cnotes[n.customer_id]||[]).push(n)); }catch(_){ S.cnotes={}; } }
 /* ---------- 외부 · 실내 따로 (SQL 53) ---------- */
 const RSN=[['차량 없음','Car not there'],['차량 잠김','Car locked'],['고객 요청 취소','Customer cancelled'],['우천','Rain'],['시간 부족','Not enough time'],['기타','Other']];
 const rsnTr=v=>{ const r=RSN.find(x=>x[0]===v); return r?tr(r[0],r[1]):v; };
@@ -472,6 +478,13 @@ document.addEventListener('click',async e=>{
   switch(a){
     case 'logout': await db.auth.signOut(); break;
     case 'lang': setLang(t.dataset.l); break;
+    case 'cn-open': S.cnReply=Number(t.dataset.n); S.cnDraft=''; render(); setTimeout(()=>{const x=$('#cn-reply'); if(x) x.focus();},30); break;
+    case 'cn-cancel': S.cnReply=null; S.cnDraft=''; render(); break;
+    case 'cn-send': { const v=(($('#cn-reply')||{}).value||'').trim(); if(!v){ toast(tr('답변을 적어 주세요.','Please write a reply.'),true); break; }
+      S.busy=true; render();
+      try{ const r=await db.rpc('staff_reply_note',{p_note_id:Number(t.dataset.n),p_body:v}); if(r.error) throw r.error; S.cnReply=null; S.cnDraft=''; await loadCarNotes(); toast(tr('답변을 남겼어요.','Reply saved.')); }
+      catch(err){ toast(friendly(err),true); }
+      S.busy=false; render(); break; }
     case 'tr-notice': { const v=($('#notice')||{}).value||''; if(!v.trim()){ toast('Write your message first.',true); break; } window.open(papago(v,'ko'),'_blank','noopener'); break; }
     case 'reload': await loadAll(); toast(tr('새로 불러왔어요.','Refreshed.')); break;
     case 'push-on': await enablePush(); break;
@@ -540,7 +553,7 @@ document.addEventListener('change',async e=>{
     list.slice(0,room).forEach(f=>S.memo.files.push({file:f,url:URL.createObjectURL(f)})); render();
   }
 });
-document.addEventListener('input',e=>{ if(e.target.id==='q'){ S.q=e.target.value; render(); return; } if(e.target.id==='rsn-etc'&&S.rsn){ S.rsn.etc=e.target.value; return; } if(e.target.id==='memo-body'&&S.memo){ S.memo.body=e.target.value; const b=document.querySelector('[data-act="memo-send"]'); if(b) b.disabled=S.busy||(!S.memo.body.trim()&&!S.memo.files.length); return; } if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nt-send'); if(b) b.disabled=!(S.sel.length&&S.notice.trim()); } });
+document.addEventListener('input',e=>{ if(e.target.id==='cn-reply'){ S.cnDraft=e.target.value; return; } if(e.target.id==='q'){ S.q=e.target.value; render(); return; } if(e.target.id==='rsn-etc'&&S.rsn){ S.rsn.etc=e.target.value; return; } if(e.target.id==='memo-body'&&S.memo){ S.memo.body=e.target.value; const b=document.querySelector('[data-act="memo-send"]'); if(b) b.disabled=S.busy||(!S.memo.body.trim()&&!S.memo.files.length); return; } if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nt-send'); if(b) b.disabled=!(S.sel.length&&S.notice.trim()); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} else if(e.key==='Escape'&&S.memo&&!S.busy){S.memo=null;render();} });
 document.addEventListener('submit',async e=>{
   if(e.target.id!=='login') return; e.preventDefault();
