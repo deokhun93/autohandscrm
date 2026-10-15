@@ -1833,8 +1833,8 @@ let xljsLoading=null;
 function loadExcelJS(){ if(window.ExcelJS) return Promise.resolve(window.ExcelJS); if(xljsLoading) return xljsLoading;
   xljsLoading=new Promise((ok,no)=>{ const sc=document.createElement('script'); sc.src='https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'; sc.onload=()=>ok(window.ExcelJS); sc.onerror=()=>{xljsLoading=null;no(new Error('엑셀 기능을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.'));}; document.head.appendChild(sc); });
   return xljsLoading; }
-// 칸 = 세차하는 밤의 요일 (0=일요일 밤 → '월 (일밤)'). 토요일 밤 차량이 있을 때만 '일 (토밤)' 칸을 붙여요.
-const SC_BLOCKS=[['월 (일밤)',0],['화 (월밤)',1],['수 (화밤)',2],['목 (수밤)',3],['금 (목밤)',4],['토 (금밤)',5],['일 (토밤)',6]];
+// 칸 = 세차하는 밤의 요일 (0=일요일 밤 → '월'). 칸 이름은 요일만 써요 (10번). 토요일 밤 차량이 있을 때만 '일' 칸을 붙여요.
+const SC_BLOCKS=[['월',0],['화',1],['수',2],['목',3],['금',4],['토',5],['일',6]];
 const SC_DAY='월화수목금토일';   // 밤 요일 w → 칸 이름 첫 글자
 const SC_W=[2.5,8.1,12.5,9.2,4.9,4.4,7,7,7,7,7,6,7.1];   // 번호 · 차번호 · 차종 · 요일 · 동 · 색상 · 날짜 5칸 · 내부 · 특이사항
 async function rdScheduleExport(){
@@ -1847,11 +1847,13 @@ async function rdScheduleExport(){
     if(r.error) r=await db.from('customers').select('id,car_color,wash_weekday,pause_until').in('id',part);
     (r.data||[]).forEach(c=>info[c.id]=c); }
   const dOf=k=>{ const [y,m,d]=k.split('-').map(Number); return new Date(y,m-1,d); };
-  const cars=base.map(r=>{ const c=info[r.customer_id]||{}, jobs=((S.mjobs||{})[r.customer_id]||[]).filter(j=>!j.interior_only&&!j.svc_kind), wds=new Set();
-    jobs.forEach(j=>wds.add(dOf(j.wash_date).getDay()));
+  // 부재 등으로 다른 날 한 차량은 원래 날짜 칸에 실제로 한 날짜를 적어요 (10번) — moved_from이 이번 달이면 그 날짜 칸
+  const mk=`${Y}-${pad(M+1)}`, slotK=j=>j.moved_from&&String(j.moved_from).slice(0,7)===mk?String(j.moved_from).slice(0,10):j.wash_date, md_=k=>{ const d=dOf(k); return `${d.getMonth()+1}/${d.getDate()}`; };
+  const cars=base.map(r=>{ const c=info[r.customer_id]||{}, all=((S.mjobs||{})[r.customer_id]||[]).filter(j=>!j.svc_kind), jobs=all.filter(j=>!j.interior_only), wds=new Set();
+    jobs.forEach(j=>wds.add(dOf(slotK(j)).getDay()));
     if(!jobs.length) ((c.wash_days&&c.wash_days.length)?c.wash_days:(c.wash_weekday!=null?[c.wash_weekday]:[])).forEach(w=>wds.add(Number(w)));
     const st=r.wash_status&&r.wash_status!=='세차중'?r.wash_status+(r.wash_status==='일시정지'&&c.pause_until?` ~${Number(c.pause_until.slice(5,7))}/${Number(c.pause_until.slice(8,10))}`:''):'';
-    return {r,c,jobs,wds:[...wds].sort(),st}; });
+    return {r,c,jobs,ints:all.filter(j=>j.interior),wds:[...wds].sort(),st}; });
   const wb=new E.Workbook(), used=new Set(), F='맑은 고딕';
   const fill=a=>({type:'pattern',pattern:'solid',fgColor:{argb:a}}), th={style:'thin'}, md2={style:'medium'}, C={horizontal:'center',vertical:'center',wrapText:true};
   const groups={}; cars.forEach(x=>{ const a=x.r.complex||'기타'; (groups[a]=groups[a]||[]).push(x); });
@@ -1870,26 +1872,30 @@ async function rdScheduleExport(){
       const heads=['','차번호','차종','요일','동','색상',...[0,1,2,3,4].map(i=>dates[i]||''),'내부','특이\n사항'];
       heads.forEach((h,i)=>{ const x=ws.getCell(r0+1,c0+i); if(h!=='') x.value=h; x.alignment=C; x.font={name:F,size:i===12?6:i===11?12:10,bold:true};
         x.border={left:i===0?md2:th,right:i===12?md2:th,top:th,bottom:th}; if(i>=10) x.fill=fill('FFF2F2F2'); });
-      ws.mergeCells(r0+2,c0+1,r0+2,c0+12);
-      for(let i=0;i<13;i++){ const x=ws.getCell(r0+2,c0+i); x.fill=fill(i?'FF002060':'FFFFFFFF'); x.border={left:i===0?md2:th,right:i===12?md2:th,top:th,bottom:th}; }
-      const staff=[...new Set(cs.flatMap(x=>{ const s=x.jobs.filter(j=>dOf(j.wash_date).getDay()===w).map(j=>j.staff_name).filter(Boolean); return s.length?s:(x.r.staff_name?[x.r.staff_name]:[]); }))];
-      Object.assign(ws.getCell(r0+2,c0+1),{value:staff.length?'담당 '+staff.join(', '):null,font:{name:F,size:14,bold:true,color:{argb:'FFFFFFFF'}},alignment:C});
-      for(let k=0;k<rows;k++){ const rr=r0+3+k, x=cs[k];
+      // 담당 직원은 파란 줄 대신 요일 칸 이름 옆에 써요 (10번: 파란 줄 삭제)
+      const staff=[...new Set(cs.flatMap(x=>{ const s=x.jobs.filter(j=>dOf(slotK(j)).getDay()===w).map(j=>j.staff_name).filter(Boolean); return s.length?s:(x.r.staff_name?[x.r.staff_name]:[]); }))];
+      if(staff.length) ws.getCell(r0,c0).value=`${label}   ·   담당 ${staff.join(', ')}`;
+      for(let k=0;k<rows;k++){ const rr=r0+2+k, x=cs[k];
         let vals=[k+1,'','','','','','','','','','','',''];
-        if(x){ const wj=x.jobs.filter(j=>dOf(j.wash_date).getDay()===w), byDay={}; wj.forEach(j=>byDay[dOf(j.wash_date).getDate()]=j);
-          const mark=d=>{ const j=byDay[d]; return !j?'':j.status==='완료'?'○':j.status==='미작업'?'X':''; };
+        if(x){ const wj=x.jobs.filter(j=>dOf(slotK(j)).getDay()===w), byDay={}; wj.forEach(j=>byDay[dOf(slotK(j)).getDate()]=j);
+          const moved=j=>slotK(j)!==j.wash_date;
+          const mark=d=>{ const j=byDay[d]; return !j?'':j.status==='완료'?(moved(j)?md_(j.wash_date):'○'):j.status==='미작업'?'X':moved(j)?'→'+md_(j.wash_date):''; };
+          // 실내: 끝난 날짜를 적고, 아직이면 '예정' (실내만 하는 날은 그 차량의 첫 요일 칸에)
+          const iw=x.ints.filter(j=>j.interior_only?w===x.wds[0]:dOf(slotK(j)).getDay()===w);
+          const idone=iw.filter(j=>j.interior_done).map(j=>md_(j.wash_date)), inside=idone.length?idone.join('\n'):iw.length?'예정':'';
           const dong=String(x.r.unit||'').match(/^\s*(\d+)/);
           vals=[k+1,x.r.car_number||'',x.r.car_model||'',x.wds.map(v=>SC_DAY[v]).join('·'),dong?dong[1]:(x.r.unit||''),x.c.car_color||'',
-            ...[0,1,2,3,4].map(i=>dates[i]?mark(dates[i]):''),wj.some(j=>j.interior)?'○':'',x.st]; }
+            ...[0,1,2,3,4].map(i=>dates[i]?mark(dates[i]):''),inside,x.st]; }
         vals.forEach((v,i)=>{ const c=ws.getCell(rr,c0+i); if(v!=='') c.value=v; c.alignment=C; c.fill=fill(i===10?'FFF2F2F2':'FFFFFFFF');
           c.border={left:i===0?md2:th,right:i===12?md2:th,top:th,bottom:k===rows-1?md2:th};
-          c.font={name:F,bold:true,size:i===0?8:i===1?12:i>=6&&i<=10?14:i===12?8:10,color:{argb:v==='○'&&i<=10?'FFFF0000':'FF000000'}}; });
+          const dt=i>=6&&i<=11&&/\d\/\d/.test(String(v));   // 날짜 글자는 작게 · 파란색
+          c.font={name:F,bold:true,size:i===0?8:i===1?12:dt?(i===11?9:11):i>=6&&i<=10?14:i===12?8:10,color:{argb:v==='○'&&i<=10?'FFFF0000':dt?'FF1F4E9E':'FF000000'}}; });
         ws.getRow(rr).height=36; }
-      return r0+3+rows; };
+      return r0+2+rows; };
     let r=4, endRow=r;
     for(let g=0;g<blocks.length;g+=3){ const row=blocks.slice(g,g+3), n=Math.max(10,...row.map(([,w])=>inBlk(w).length));
       row.forEach(([lab,w],b)=>{ endRow=block(r,1+b*14,lab,w,n); });
-      ws.getRow(r).height=22; ws.getRow(r+1).height=30; ws.getRow(r+2).height=26;
+      ws.getRow(r).height=22; ws.getRow(r+1).height=30;
       if(g+3<blocks.length){ for(let c=1;c<=41;c++) ws.getCell(endRow,c).fill=fill('FFFFFF00'); ws.getRow(endRow).height=7.5; r=endRow+1; } }
     ws.pageSetup={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:1,printArea:`A2:AO${endRow-1}`,horizontalCentered:true}; }
   const buf=await wb.xlsx.writeBuffer(), a=document.createElement('a');
