@@ -588,7 +588,7 @@ function todayView(){
     </div>
     <div class="row" style="margin-top:10px"><span class="grow"></span>${f.id?`<button class="btn2" data-act="ntCancel">고치기 취소</button>`:''}<button class="btn" data-act="ntSave">${f.id?'고친 내용 저장':'공지 올리기 · 알림 보내기'}</button></div></section>`;
   const list=S.notices;
-  return `<div class="row"><div class="grow"><h1 class="h">오늘</h1><p class="sub">전 직원에게 보내는 오늘의 공지와, 내가 챙길 오늘의 할 일이에요.</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">오늘</h1><p class="sub">전 직원에게 보내는 오늘의 공지와, 내가 챙길 오늘의 할 일이에요.</p></div><button class="btn2 sm" data-act="xlToday">📤 엑셀로 받기</button></div>
   <div class="sec-h"><h2>📢 오늘의 공지</h2><span class="sub">직원이 [확인했어요]를 누르면 누가 읽었는지 보여요.</span></div>
   <div class="chips">${[['now','지금 보이는 공지'],['next','예정'],['past','지난 공지'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.ntScope===k}" data-act="ntScope" data-f="${k}">${l}</button>`).join('')}</div>
   ${!list?'<div class="empty">불러오는 중...</div>':list.length?`<div class="fr-list">${list.map(n=>`<article class="nt-item${n.important?' imp':''}">
@@ -608,8 +608,9 @@ function tdBlank(){ return {id:null,title:'',memo:'',priority:3,assignee:'',due:
 function tdDue(t){ if(!t.due_date) return '기한 없음'; const today=keyOf(new Date()); if(t.done_at) return kdate(t.due_date)+' 마감';
   if(t.due_date<today){ const d=Math.round((new Date(today)-new Date(t.due_date))/864e5); return `<span class="late-t">지연 ${d}일 (${kdate(t.due_date)} 마감)</span>`; }
   return t.due_date===today?'<b>오늘 마감</b>':kdate(t.due_date)+' 마감'; }
+const myTodos=()=>S.todos&&S.todos.filter(t=>!t.assignee||t.assignee===S.me.id);   // 내 할 일 (예전 공용 할 일 포함)
 function todoSection(){
-  const f=S.tdForm||(S.tdForm=tdBlank()), list=S.todos&&S.todos.filter(t=>!t.assignee||t.assignee===S.me.id);   // 내 할 일 (예전 공용 할 일 포함)
+  const f=S.tdForm||(S.tdForm=tdBlank()), list=myTodos();
   const open=(list||[]).filter(t=>!t.done_at).length;
   return `<div class="sec-h"><h2>✅ 오늘의 할 일</h2><span class="sub">${list?`남은 할 일 ${open}개`:''}</span></div>
   <section class="card"><div class="td-add">
@@ -831,9 +832,11 @@ function lNum(n,kind,f,cls){ if(!n) return `<span class="sub">0대</span>`;
 // 실시간 현황에 쓰는 일정: 내 담당 아파트 + 위에서 고른 아파트 · 담당직원 (8번)
 const lStaffOk=j=>!S.lStaff||(S.lStaff==='-'?!ljStaff(j):ljStaff(j)===S.lStaff||(j.interior&&ljIStaff(j)===S.lStaff));
 const lScope=()=>(S.ljobs||[]).filter(j=>inScope(ljApt(j))&&(!S.lApt||ljApt(j)===S.lApt)&&lStaffOk(j));
+function lListRows(){ const L=S.liveList||{};
+  return lScope().filter(j=>!ljIO(j)&&(L.k==='done'?ljExt(j)==='done':ljExt(j)!=='done')&&(!L.a||ljApt(j)===L.a)&&(!L.sset||ljStaff(j)===L.s))
+    .sort((a,b)=>ljApt(a).localeCompare(ljApt(b),'ko')||(a.wash_date<b.wash_date?-1:a.wash_date>b.wash_date?1:0)||String((a.customers||{}).unit||'').localeCompare(String((b.customers||{}).unit||''),'ko',{numeric:true})); }
 function lListHtml(){ const L=S.liveList; if(!L) return '';
-  const rows=lScope().filter(j=>!ljIO(j)&&(L.k==='done'?ljExt(j)==='done':ljExt(j)!=='done')&&(!L.a||ljApt(j)===L.a)&&(!L.sset||ljStaff(j)===L.s))
-    .sort((a,b)=>ljApt(a).localeCompare(ljApt(b),'ko')||(a.wash_date<b.wash_date?-1:a.wash_date>b.wash_date?1:0)||String((a.customers||{}).unit||'').localeCompare(String((b.customers||{}).unit||''),'ko',{numeric:true}));
+  const rows=lListRows();
   const nApt={}; rows.forEach(j=>nApt[ljApt(j)]=(nApt[ljApt(j)]||0)+1); let prev=null;   // 아파트별로 묶어서 (8번)
   const multi=lFrom()!==lTo(), who=L.sset?(L.s?staffName(L.s):'미배정'):'';
   return `<section class="card l-list" id="lList"><div class="row"><h2 class="h grow">${L.k==='done'?'완료한 차량':'미완료 차량'} ${rows.length}대${L.a?` · ${esc(L.a)}`:''}${who?` · ${esc(who)}`:''}</h2><button class="btn2 sm" data-act="lListClose">닫기</button></div>
@@ -850,7 +853,7 @@ function liveView(){
     ${S.lApt||S.lStaff?'<button class="link" data-act="lPickClear">전체 보기</button>':''}</div>`:'';
   const head=`<div class="row"><div class="grow"><h1 class="h">실시간 세차 현황</h1><p class="sub">기간을 고르면 그 기간 배정 · 완료 · 미완료 대수를 합쳐서 보여줘요. 완료 · 미완료 숫자를 누르면 차량 목록이 나와요. 오늘을 보고 있으면 30초마다 자동으로 새로 고쳐요.${S.liveAt?` · 마지막 갱신 ${String(S.liveAt.getHours()).padStart(2,'0')}:${String(S.liveAt.getMinutes()).padStart(2,'0')}:${String(S.liveAt.getSeconds()).padStart(2,'0')}`:''}</p></div></div>
   <div class="row l-range"><div class="chips">${LP.map(([k,l])=>{const [a,b]=lPreset(k); return `<button class="chip" aria-pressed="${a===f&&b===to}" data-act="lPreset" data-k="${k}">${l}</button>`;}).join('')}</div>
-    <span class="grow"></span>${one?'<button class="btn2" data-act="lday" data-d="-1">이전</button>':''}<input type="date" class="inp" id="lfrom" value="${f}" aria-label="시작 날짜"><span class="sub">~</span><input type="date" class="inp" id="lto" value="${to}" aria-label="끝 날짜">${one?'<button class="btn2" data-act="lday" data-d="1">다음</button>':''}<button class="btn2" data-act="lreload">${ic('refresh',14)}새로고침</button></div>${picks}`;
+    <span class="grow"></span>${one?'<button class="btn2" data-act="lday" data-d="-1">이전</button>':''}<input type="date" class="inp" id="lfrom" value="${f}" aria-label="시작 날짜"><span class="sub">~</span><input type="date" class="inp" id="lto" value="${to}" aria-label="끝 날짜">${one?'<button class="btn2" data-act="lday" data-d="1">다음</button>':''}<button class="btn2" data-act="lreload">${ic('refresh',14)}새로고침</button><button class="btn2 sm" data-act="xlLive">📤 엑셀로 받기</button></div>${picks}`;
   if(!jobs) return head+'<div class="empty">불러오는 중...</div>';
   if(!jobs.length) return head+`<div class="empty">${one?kdate(f):`${kdate(f)} ~ ${kdate(to)}`}에 ${S.lApt||S.lStaff?'고른 조건에 맞는':'배정된'} 세차가 없어요.</div>`;
   const T=lStat(jobs), apts=[...new Set(jobs.map(ljApt))].sort((a,b)=>a.localeCompare(b,'ko'));
@@ -913,12 +916,13 @@ function photoViewer(){
   return `<div class="pv" data-act="pvClose"><img src="${src}" alt="현장 사진 ${v.i+1}" data-stop>
     <div class="pvb" data-stop>${v.list.length>1?`<button data-act="pvMove" data-d="-1">◀ 이전</button><span style="color:#fff;align-self:center">${v.i+1} / ${v.list.length}</span><button data-act="pvMove" data-d="1">다음 ▶</button>`:''}<a href="${src}" target="_blank" rel="noopener">원본 열기</a><button data-act="pvClose">닫기</button></div></div>`;
 }
+const frList=()=>S.frows&&S.frows.filter(r=>inScope(r.complex));
 function fieldView(){
-  const rows=S.frows&&S.frows.filter(r=>inScope(r.complex)), n=S.frSel.length, admins=S.staff.filter(s=>['admin','master'].includes(s.role));
+  const rows=frList(), n=S.frSel.length, admins=S.staff.filter(s=>['admin','master'].includes(s.role));
   const ids=(rows||[]).map(r=>r.id), allSel=ids.length&&ids.every(x=>S.frSel.includes(x));
   const head=`<div class="row"><div class="grow"><h1 class="h">현장전달</h1><p class="sub">현장직원이 직원웹에서 배정 차량에 남긴 특이사항 메모 · 사진이에요. 메모가 오면 그 직원의 담당 관리자 휴대폰으로 알림이 가요.</p></div></div>
   <div class="row"><div class="chips">${[['open','처리 전'],['new','미확인'],['done','처리완료'],['all','전체']].map(([k,l])=>`<button class="chip" aria-pressed="${S.frState===k}" data-act="frState" data-f="${k}">${l}${k==='new'&&S.cntFieldAll?` <b>${S.cntFieldAll}</b>`:''}</button>`).join('')}</div>
-    <label class="auto"><input type="checkbox" id="frMine" ${S.frMine?'checked':''}><span>내 담당만 보기${S.cntField?` (미확인 ${S.cntField})`:''}</span></label></div>
+    <label class="auto"><input type="checkbox" id="frMine" ${S.frMine?'checked':''}><span>내 담당만 보기${S.cntField?` (미확인 ${S.cntField})`:''}</span></label><span class="grow"></span><button class="btn2 sm" data-act="xlField">📤 엑셀로 받기</button></div>
   <div class="selbar"><label class="row" style="gap:6px"><input type="checkbox" data-act="frSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''}><b class="sub" style="color:var(--text)">${n?`${n}건 선택됨`:'전체 선택'}</b></label><span class="grow"></span>
     <button class="btn2 sm" data-act="frBulk" data-f="read" ${n?'':'disabled'}>확인함</button><button class="btn2 sm" data-act="frBulk" data-f="done" ${n?'':'disabled'}>처리완료</button><button class="btn sm danger" data-act="frDel" ${n?'':'disabled'}>🗑 삭제</button></div>`;
   const mgr=`<details class="card" id="mgrBox" ${(S.mgrOpen===undefined?(S.fmgr.length&&!S.fmgr.some(m=>m.manager_id)):S.mgrOpen)?'open':''}><summary style="cursor:pointer;font-weight:800">현장직원별 담당 관리자 설정 <span class="sub">(${S.fmgr.filter(m=>m.manager_id).length}/${S.fmgr.length}명 지정)</span></summary>
@@ -941,12 +945,13 @@ function fieldView(){
 
 /* ---------- 탭: 고객 요청 ---------- */
 const byName=(name,ts)=>name||ts?`<small class="by">${esc(name||'')}${ts?' · '+when(ts):''}</small>`:'';
+const REQ_TY={all:()=>true,msg:r=>r.req_type==='msg',interior:r=>r.req_type==='interior',schedule:r=>r.req_type==='schedule'};
+const reqList=()=>S.reqs.filter(r=>inScope(r.complex)&&(REQ_TY[S.reqType]||REQ_TY.all)(r));
 function reqView(){
-  const TY={all:()=>true,msg:r=>r.req_type==='msg',interior:r=>r.req_type==='interior',schedule:r=>r.req_type==='schedule'};
-  const list=S.reqs.filter(r=>inScope(r.complex)&&(TY[S.reqType]||TY.all)(r));
+  const list=reqList();
   const apts=[...new Set([...complexes(),...S.reqs.map(r=>r.complex)].filter(Boolean))].filter(a=>inScope(a)).sort((x,y)=>x.localeCompare(y,'ko'));
   const nUrgent=S.reqs.filter(r=>r.urgent&&!r.done_at).length;
-  return `<div class="row"><div class="grow"><h1 class="h">고객 요청</h1><p class="sub">고객 앱에서 들어온 메시지 · 실내세차 신청 · 일정 변경요청 — 긴급 표시, 확인·메모, 완료 체크</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">고객 요청</h1><p class="sub">고객 앱에서 들어온 메시지 · 실내세차 신청 · 일정 변경요청 — 긴급 표시, 확인·메모, 완료 체크</p></div><button class="btn2 sm" data-act="xlReq">📤 엑셀로 받기</button></div>
   <div class="chips">${[['open','진행 중'],['urgent','긴급'],['done','완료'],['all','전체'],['trash','🗑 휴지통']].map(([k,l])=>`<button class="chip${k==='urgent'?' chip-red':''}${k==='trash'?' chip-trash':''}" aria-pressed="${S.reqF===k}" data-act="reqF" data-f="${k}">${l}${k==='open'&&S.cntReq?` <b>${S.cntReq}</b>`:''}${k==='trash'&&S.cntTrash?` <b>${S.cntTrash}</b>`:''}</button>`).join('')}</div>
   ${S.reqF==='trash'?trashView():reqListView(list,apts,nUrgent)}`;
 }
@@ -1020,7 +1025,7 @@ function reqCard(r){
 /* ---------- 탭: 가입 승인 ---------- */
 function accView(){
   return `<div class="row"><div class="grow"><h1 class="h">고객 가입 승인</h1><p class="sub">고객 앱에 가입한 고객을 계약 정보와 연결해요. 승인하면 고객에게 '가입이 승인되었어요' 알림이 가요.</p></div>
-    <button class="chip" aria-pressed="${!S.accAll}" data-act="accAll" data-v="0">승인 대기</button><button class="chip" aria-pressed="${S.accAll}" data-act="accAll" data-v="1">전체</button></div>
+    <button class="chip" aria-pressed="${!S.accAll}" data-act="accAll" data-v="0">승인 대기</button><button class="chip" aria-pressed="${S.accAll}" data-act="accAll" data-v="1">전체</button><button class="btn2 sm" data-act="xlAcc">📤 엑셀로 받기</button></div>
   ${S.accs.length?`<div class="grid">${S.accs.map(a=>{
     const cand=a.candidate_customer_id;
     return `<article class="card"><div class="row"><b class="grow">${esc(a.name)} <span class="sub">(${esc(a.login_id)})</span></b><span class="pill ${a.account_status==='대기'?'p-new':a.account_status==='거절'?'p-hold':'p-ok'}">${esc(a.account_status)}</span></div>
@@ -1087,8 +1092,9 @@ function jfPanel(rows){ const f=jfLoad(), nOn=JF_GROUPS.reduce((a,[k])=>a+f[k].l
       return `<div class="cf-row"><b class="cf-l">${l}</b><div class="cf-opts">${ks.map(x=>`<label class="cf-chip${f[k].includes(x)?' on':''}"><input type="checkbox" data-jf-k="${k}" data-jf-v="${esc(x)}" ${f[k].includes(x)?'checked':''}><span>${esc(x)} <small>${opts[k][x]||0}</small></span></label>`).join('')||'<span class="sub">-</span>'}</div></div>`; }).join('')+'<p class="note" style="margin:4px 0 0">같은 줄에서 여러 개 고르면 그중 하나라도 맞는 차량, 다른 줄끼리는 모두 맞는 차량만 보여요. 담당자 = 아파트 담당 총무(관리자).</p>':''}</div>`; }
 function rsnHtml(){ const r=S.rsn||{}; return `<div class="cf-opts" style="margin-top:6px">${RSN.map(x=>`<button type="button" class="cf-chip${r.v===x?' on':''}" data-act="rsnPick" data-v="${esc(x)}" aria-pressed="${r.v===x}">${esc(x)}</button>`).join('')}</div>
   ${r.v==='기타'?`<label class="field" style="margin-top:8px"><span>사유 직접 적기</span><input class="inp" id="rsnEtc" maxlength="200" value="${esc(r.etc||'')}" placeholder="예: 지하주차장 공사로 진입 불가"></label>`:''}`; }
+const jobsAll=()=>S.jobs.filter(j=>inScope((j.customers||{}).complex));
 function jobsView(){
-  const all=S.jobs.filter(j=>inScope((j.customers||{}).complex)), list=all.filter(jfPass), cols=colsOn('jobs');
+  const all=jobsAll(), list=all.filter(jfPass), cols=colsOn('jobs');
   const ext=list.filter(j=>!jIO(j)), ints=list.filter(j=>j.interior);
   const c=(a,f)=>a.filter(f).length;
   return `<div class="row"><div class="grow"><h1 class="h">세차 일정</h1><p class="sub">날짜를 고르면 지정 요일 고객이 자동으로 들어가요. 외부세차 · 실내세차 직원을 따로 정할 수 있고(실내 직원을 비우면 외부 직원이 실내도 해요), 외부 · 실내 상태도 따로 바꿀 수 있어요. 미완료는 사유를 골라요. 여기서 바꾼 상태는 고객에게 알림을 보내지 않아요.</p></div></div>
@@ -1100,7 +1106,7 @@ function jobsView(){
   <div class="card"><div class="row"><b class="grow">차량 추가</b><select class="inp" id="add-cust" style="min-width:260px" aria-label="추가할 고객"><option value="">고객 고르기</option>${S.customers.filter(c=>inScope(c.complex)).map(c=>`<option value="${c.id}">${esc(c.complex)} ${esc(c.unit||'')} · ${esc(c.car_number||c.name)}</option>`).join('')}</select><button class="btn sm" data-act="add-job">추가</button></div></div>
   ${S.jobs53===false?'<p class="note" style="color:var(--red)">⚠ 53번 SQL을 실행하면 외부 · 실내 직원 따로 배정 · 상태 · 사유를 쓸 수 있어요.</p>':''}
   ${jfPanel(all)}
-  <div class="selbar"><b class="sub" style="color:var(--text)">${list.length}대</b><span class="grow"></span>${colBtn('jobs')}</div>
+  <div class="selbar"><b class="sub" style="color:var(--text)">${list.length}대</b><span class="grow"></span><button class="btn2 sm" data-act="xlJobs">📤 엑셀로 받기</button>${colBtn('jobs')}</div>
   ${list.length?`<div class="tbl cm-tbl"><table><thead><tr>${cols.map(c=>`<th>${esc(colLabel('jobs',c[0]))}</th>`).join('')}</tr></thead><tbody>
     ${list.map(j=>`<tr>${cols.map(c=>c[2](j)).join('')}</tr>`).join('')}
   </tbody></table></div>`:all.length?'<div class="empty">분류 조건에 맞는 차량이 없어요.</div>':`<div class="empty">이 날 일정이 없어요. 위의 '일정 만들기'를 눌러 보세요.<br><span class="note">고객관리 › 세차 설정에서 정기권·지정 요일·담당 직원이 입력된 고객만 자동으로 들어가요.</span></div>`}`;
@@ -1179,16 +1185,18 @@ function resAddHtml(){
     <label class="field"><span style="font-weight:700;font-size:13px">현장직원</span><select class="inp" id="resStaff"><option value="">고객 담당 직원 그대로</option>${fs.map(f=>`<option value="${f.id}" ${S.resStaff===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select></label>
     <label class="auto"><input type="checkbox" id="resNotify" ${S.resNotify?'checked':''}><span>고객에게 '실내세차 예약이 완료되었어요' 알림 보내기</span></label></div>`;
 }
-function intReqPanel(){
-  const all=S.intReqs.filter(r=>irPass(r)&&inScope(r.complex||S.slotApt)), fs=fieldStaff(), ALL=S.slotApt==='__all__';
-  const isDone=r=>r.status==='승인'&&r.interior_done;
+const irIsDone=r=>r.status==='승인'&&r.interior_done;
+function intList(){ const all=S.intReqs.filter(r=>irPass(r)&&inScope(r.complex||S.slotApt)), isDone=irIsDone;
   // 배정 대기가 없으면 처음엔 [예약 확정]을 보여줘요 (기존 예약이 안 보이는 것처럼 느껴지지 않게)
   if(S.intView==='all'&&!S.intViewPicked&&!all.some(r=>r.status!=='승인')&&all.some(r=>r.status==='승인'&&!isDone(r))) S.intView='done';
   const list=S.intView==='day'&&S.slotDay?all.filter(r=>r.target_date===S.slotDay):S.intView==='done'?all.filter(r=>r.status==='승인'&&!isDone(r)):S.intView==='fin'?all.filter(isDone).sort((a,b)=>a.target_date<b.target_date?1:-1):all.filter(r=>r.status!=='승인');
+  return {all,list}; }
+function intReqPanel(){
+  const {all,list}=intList(), fs=fieldStaff(), ALL=S.slotApt==='__all__', isDone=irIsDone;
   const ids=list.filter(r=>r.source!=='round').map(r=>r.id), n=S.intSel.length, allSel=ids.length&&ids.every(x=>S.intSel.includes(x));
   const selRows=all.filter(r=>S.intSel.includes(r.id)), anyNew=selRows.some(r=>r.status!=='승인');
   const tgt=S.intDate&&S.slots.find(x=>x.slot_date===S.intDate);
-  return `<div class="card"><div class="row"><div class="grow"><h2 class="h">실내세차 신청 고객 · ${ALL?'전체 아파트':esc(S.slotApt)}${S.intStaffF?` · ${esc(S.intStaffF==='none'?'미배정':staffName(S.intStaffF))}`:''}</h2><p class="sub">체크 → 날짜·현장직원 지정 → [배정 완료]를 누르면 예약이 확정되고, 직원웹 그 날짜 일정에 실내세차로 들어가고, 고객에게 '실내세차 예약이 완료되었어요' 알림이 가요.</p></div></div>
+  return `<div class="card"><div class="row"><div class="grow"><h2 class="h">실내세차 신청 고객 · ${ALL?'전체 아파트':esc(S.slotApt)}${S.intStaffF?` · ${esc(S.intStaffF==='none'?'미배정':staffName(S.intStaffF))}`:''}</h2><p class="sub">체크 → 날짜·현장직원 지정 → [배정 완료]를 누르면 예약이 확정되고, 직원웹 그 날짜 일정에 실내세차로 들어가고, 고객에게 '실내세차 예약이 완료되었어요' 알림이 가요.</p></div><button class="btn2 sm" data-act="xlSlots">📤 엑셀로 받기</button></div>
     <div class="mini-tabs">${[['all',`배정 대기 ${all.filter(r=>r.status!=='승인').length}`],['done',`예약 확정 ${all.filter(r=>r.status==='승인'&&!isDone(r)).length}`],['fin',`완료 ${all.filter(isDone).length}`],['day',S.slotDay?`${kdate(S.slotDay)} 신청`:'선택한 날짜']].map(([k,l])=>`<button class="mtab" aria-selected="${S.intView===k}" data-act="intView" data-f="${k}" ${k==='day'&&!S.slotDay?'disabled':''}>${l}</button>`).join('')}</div>
     ${list.length?`<div class="tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="intSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="전체 선택"></th><th>희망일</th><th>상태</th>${ALL?'<th>아파트</th>':''}<th>동·호수</th><th>차량번호</th><th>고객</th><th>연락처</th><th>차종·색상</th><th>실내세차 금액</th><th>현장직원</th><th>신청 시각</th></tr></thead><tbody>
       ${list.map(r=>`<tr class="${S.intSel.includes(r.id)?'picked':''}${r.source==='round'?' int-round':''}"><td class="ck">${r.source==='round'?`<button class="link" data-act="intRoundCal" data-id="${r.customer_id}" data-d="${r.target_date}" title="회차 달력에서 바꿔요">📅</button>`:`<input type="checkbox" data-intsel="${r.id}" ${S.intSel.includes(r.id)?'checked':''} aria-label="${esc(r.car_number||'')} 선택">`}</td>
@@ -2075,6 +2083,60 @@ async function collExport(tpl){
 
 const fullWhen=ts=>{const d=new Date(ts);return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;};
 
+/* ---------- 모든 메뉴 엑셀로 받기 (6단계) — 지금 화면에 보이는 목록 그대로 ---------- */
+const xlDay=()=>{const d=new Date();return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;};
+const xlWhen=ts=>ts?fullWhen(ts):'';
+const xlW=v=>[...String(v??'')].reduce((a,ch)=>a+(ch.charCodeAt(0)>255?2:1),0);
+// sheets = [[시트 이름, 줄 목록], ...] · 빈 시트는 빼요
+// cnt: 알림에 보일 건수 (요약 시트가 있는 탭은 목록 줄 수만)
+async function xlSave(name,sheets,cnt){
+  try{ const use=sheets.filter(([,r])=>r&&r.length), n=use.reduce((a,[,r])=>a+r.length,0);
+    if(!n){ toast('엑셀로 받을 내용이 없어요.',true); return; }
+    const X=await loadXLSX(), wb=X.utils.book_new();
+    use.forEach(([sn,rows])=>{ const ws=X.utils.json_to_sheet(rows), hs=Object.keys(rows[0]);
+      ws['!cols']=hs.map(h=>({wch:Math.min(50,Math.max(8,xlW(h)+2,...rows.slice(0,300).map(r=>xlW(r[h])+2)))}));
+      X.utils.book_append_sheet(wb,ws,sn.slice(0,31)); });
+    X.writeFile(wb,`오토핸즈_${name}_${xlDay()}.xlsx`);
+    toast(`${cnt??n}건을 엑셀로 받았어요.`); }catch(e){ toast(friendly(e),true); } }
+function xlToday(){
+  const nt=(S.notices||[]).map(n=>({대상:n.target==='pick'?(n.recipient_names||'직접 고름'):(NT_TG[n.target]||'전 직원'),중요:n.important?'중요':'',제목:n.title||'',내용:n.body||'',시작일:n.start_date||'',끝나는날:n.end_date||n.start_date||'',읽음:n.read_count??'',대상인원:n.target_count??'','읽은 사람':n.readers||'','아직 안 읽음':n.unread||'',쓴사람:n.author||'',올린시각:xlWhen(n.created_at)}));
+  const today=keyOf(new Date());
+  const td=(myTodos()||[]).map(t=>({우선순위:PR[t.priority]||'',할일:t.title||'',메모:t.memo||'',마감일:t.due_date||'기한 없음',상태:t.done_at?'완료':t.due_date&&t.due_date<today?'지연':'남음',쓴사람:t.author||'',만든시각:xlWhen(t.created_at),완료한사람:t.done_at?(t.done_name||''):'',완료시각:xlWhen(t.done_at)}));
+  return xlSave('오늘',[['오늘의 공지',nt],['내 할 일',td]]); }
+function xlReq(){
+  if(S.reqF==='trash') return xlSave('고객요청_휴지통',[['휴지통',(S.trash||[]).map(r=>({종류:RT[r.req_type]||r.req_type||'',아파트:r.complex||'',동호수:r.unit||'',차량번호:r.car_number||'',고객:r.customer_name||'',내용:r.message||'',접수시각:xlWhen(r.created_at),삭제시각:xlWhen(r.deleted_at),삭제한사람:r.deleted_name||'',완전삭제까지:r.days_left!=null?`${r.days_left}일`:''}))]]);
+  const F={open:'진행중',urgent:'긴급',done:'완료',all:'전체'};
+  return xlSave(`고객요청_${F[S.reqF]||'전체'}`,[['고객 요청',reqList().map(r=>({종류:RT[r.req_type]||r.req_type||'',긴급:r.urgent?'긴급':'',처리:r.done_at?'완료':r.checked_at?'확인함':'진행 중','고객 화면 상태':r.status||'',아파트:r.complex||'',동호수:r.unit||'',차량번호:r.car_number||'',고객:r.customer_name||'',연락처:r.phone||'',차종:r.car_model||'',정기권:r.wash_plan?`월 ${r.wash_plan}회`:'',내용:r.message||'','고객에게 보낸 답변':r.reply||'','내부 메모':r.staff_memo||'',접수시각:xlWhen(r.created_at),확인:r.checked_at?`${r.checked_name||''} ${xlWhen(r.checked_at)}`.trim():'',완료:r.done_at?`${r.done_name||''} ${xlWhen(r.done_at)}`.trim():''}))]]); }
+function xlLive(){
+  const jobs=S.ljobs?lScope():[], one=lFrom()===lTo(), ext=j=>!ljIO(j);
+  const apts=[...new Set(jobs.map(ljApt))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const sum=apts.map(a=>{const A=lStat(jobs.filter(j=>ljApt(j)===a)), o={아파트:a,배정:A.total,완료:A.done,미완료:A.total-A.done,'미완료 처리':A.skip,'진행률(%)':pct(A.done,A.total),'실내 배정':A.itotal,'실내 완료':A.idone};
+    if(one) o.현장전달=Object.entries(S.lrep||{}).filter(([k])=>k.startsWith(a+'|')).reduce((s,[,v])=>s+v,0); return o;});
+  const staffs=[...new Set([...jobs.filter(ext).map(ljStaff),...jobs.filter(j=>j.interior).map(ljIStaff)])].sort((a,b)=>(a?staffName(a):'힣').localeCompare(b?staffName(b):'힣','ko'));
+  const bySt=staffs.map(s=>{const A=lStat(jobs.filter(j=>ext(j)&&ljStaff(j)===s)), I=lStat(jobs.filter(j=>j.interior&&ljIStaff(j)===s));
+    return {현장직원:s?staffName(s):'미배정',배정:A.total,완료:A.done,미완료:A.total-A.done,'미완료 처리':A.skip,'진행률(%)':pct(A.done,A.total),'실내 배정':I.itotal,'실내 완료':I.idone,'마지막 완료':xlWhen(A.last)};});
+  const L=S.liveList, cars=(L?lListRows():jobs.filter(ext).sort((a,b)=>ljApt(a).localeCompare(ljApt(b),'ko')||(a.wash_date<b.wash_date?-1:a.wash_date>b.wash_date?1:0)||String((a.customers||{}).unit||'').localeCompare(String((b.customers||{}).unit||''),'ko',{numeric:true})))
+    .map(j=>{const c=j.customers||{}, st=ljExt(j); return {날짜:j.wash_date||'',아파트:ljApt(j),동호수:c.unit||'',차량번호:c.car_number||'','외부 직원':j.staff_id?staffName(j.staff_id):'미배정',상태:st==='done'?'완료':st==='skip'?'미완료':'대기','미완료 사유':st==='skip'?(j.skip_reason||'사유 없음'):'',완료시각:xlWhen(j.done_at),'넘어온 차량':j.carried?'↪ 넘어옴':''};});
+  const carName=L?`${L.k==='done'?'완료한 차량':'미완료 차량'}`:'차량 목록';
+  return xlSave(`실시간현황_${lFrom().replace(/-/g,'')}${one?'':'-'+lTo().replace(/-/g,'')}`,[['아파트별',sum],['담당자별',bySt],[carName,cars]],cars.length); }
+function xlField(){
+  return xlSave('현장전달',[['현장전달',(frList()||[]).map(r=>({날짜:r.wash_date||'',아파트:r.complex||'',동호수:r.unit||'',차량번호:r.car_number||'',차종:r.car_model||'',고객:r.customer_name||'','실내 포함':r.interior?'실내 포함':'',현장직원:r.staff_name||'','담당 관리자':r.manager_name||'관리자 전체',메모:r.body||'',사진:(r.photos||[]).length,상태:r.done_at?'처리완료':r.read_at?'확인함':'새 메모','처리 메모':r.reply||'',보낸시각:xlWhen(r.created_at),확인:r.read_at?`${r.read_name||''} ${xlWhen(r.read_at)}`.trim():'',처리완료:r.done_at?`${r.done_name||''} ${xlWhen(r.done_at)}`.trim():'','세차 상태':r.job_status||''}))]]); }
+function xlAcc(){
+  return xlSave(`가입승인_${S.accAll?'전체':'승인대기'}`,[['가입 승인',(S.accs||[]).map(a=>({이름:a.name||'',아이디:a.login_id||'',연락처:a.phone||'','가입 차량번호':a.car_number||'',상태:a.account_status||'',가입시각:xlWhen(a.created_at),'계약 고객':a.candidate_customer_id?`${a.customer_id?'연결됨':'찾음'} · ${a.candidate_name||''}`:'못 찾음','계약 아파트':a.candidate_complex||'','계약 동호수':a.candidate_unit||'','계약 차량번호':a.candidate_car||''}))]]); }
+function xlJobs(){
+  const K={both:'외부 + 실내',ext:'외부만',int:'실내만'};
+  return xlSave(`세차일정_${S.jobDay.replace(/-/g,'')}`,[['세차 일정',jobsAll().filter(jfPass).map(j=>{const c=j.customers||{}, io=jIO(j);
+    return {날짜:j.wash_date||S.jobDay,차량번호:c.car_number||'',차종:c.car_model||'',색상:c.car_color||'',아파트:c.complex||'',동호수:c.unit||'',담당자:jMgr(j).join(', '),종류:K[jKind(j)],'외부 직원':io?'':(j.staff_id?staffName(j.staff_id):'미배정'),'외부 상태':jExtSt(j)||'','외부 미완료 사유':jExtSt(j)==='미완료'?(j.skip_reason||''):'','실내 직원':io?(j.staff_id?staffName(j.staff_id):'미배정'):j.interior?staffName(jIntStaff(j))||'미배정':'','실내 상태':jIntSt(j)||'','실내 미완료 사유':jIntSt(j)==='미완료'?(j.interior_reason||(io?j.skip_reason:'')||''):'',고객:c.name||'',연락처:c.phone||'',정기권:c.wash_plan?`월 ${c.wash_plan}회`:'','외부 완료 시각':xlWhen(j.done_at),'실내 완료 시각':xlWhen(j.interior_done_at),'원래 날짜':j.moved_from||'',서비스:j.svc_kind?`${j.svc_kind} · 0원`:''};})]]); }
+function intPriceAmt(cid){ const ci=(S.cint||{})[cid]||{}, r=S.cls&&S.cls[cid];
+  if((ci.interior_plan||'request')==='service') return 0; if(ci.interior_fee!=null) return Number(ci.interior_fee);
+  const b=ci.class_price!=null?ci.class_price:(r?Number(r.price||0):null); return b!=null?Number(b):''; }
+function xlSlots(){
+  if(!S.slotApt) return xlSave('실내세차일정',[]);
+  const V={all:'배정대기',done:'예약확정',fin:'완료',day:'날짜'}, {list}=intList();
+  return xlSave(`실내세차일정_${V[S.intView]||''}`,[['실내세차 신청',list.map(r=>({희망일:r.target_date||'',상태:irIsDone(r)?'완료':r.status==='승인'&&r.interior_skip?'실내 미완료':r.status==='승인'?'예약 확정':r.status==='보류'?'보류':'배정 대기','미완료 사유':r.status==='승인'&&r.interior_skip&&!r.interior_done?(r.interior_reason||'사유 없음'):'',아파트:r.complex||(S.slotApt==='__all__'?'':S.slotApt),동호수:r.unit||'',차량번호:r.car_number||'',고객:r.name||'',연락처:r.phone||'',차종:r.car_model||'',색상:r.car_color||'',차급:(S.cls&&S.cls[r.customer_id]&&S.cls[r.customer_id].car_class)||'','실내세차 금액':intPriceAmt(r.customer_id),현장직원:r.status==='승인'?(r.assigned_staff_name||'미배정'):`담당: ${r.default_staff_id?staffName(r.default_staff_id):'미배정'}`,신청:r.source==='round'?'회차 달력':xlWhen(r.created_at),완료시각:xlWhen(r.done_at)}))]]); }
+function xlNotice(){
+  return xlSave('공지받는고객',[['받는 고객',ntList().map(c=>({선택:S.noticeSel.includes(c.id)?'✓':'',고객:c.name||'',상태:NT_ST.find(x=>x[0]===ntStKey(c))[1],아파트:c.complex||'',동호수:c.unit||'',차량번호:c.car_number||'',연락처:c.phone||''}))]]); }
+
 /* ---------- 탭: 공지 보내기 ---------- */
 const NT_ST=[['on','세차중'],['pause','일시정지'],['stop','정지'],['cancel','해지']];
 const NT_BASE=[['우천 연기','비 예보로 오늘 세차가 내일로 하루 미뤄져요. 이용에 불편을 드려 죄송해요.'],['시간 변경','오늘 세차 시간이 변경되었어요. 차량은 평소 위치에 두시면 돼요.'],['휴무 안내','휴무일 안내드려요. 해당 회차는 다음 날 진행해요.']];
@@ -2088,7 +2150,7 @@ function noticeView(){
   return `<div class="row"><div class="grow"><h1 class="h">공지 보내기</h1><p class="sub">고른 고객의 고객 앱 알림함으로 공지가 가요. 처음에는 '세차중' 고객만 보여요. 일시정지 · 정지 · 해지 고객에게도 보내려면 위 버튼을 눌러 같이 고르세요.</p></div></div>
   <div class="two-col"><div class="card"><div class="row" style="gap:8px;flex-wrap:wrap">${aptMulti('noticeApts',apts,'아파트 고르기 (여러 개)')}
     <div class="chips" role="group" aria-label="고객 상태">${NT_ST.map(([k,l])=>`<button class="chip cst-${k==='pause'?'pz':k}" aria-pressed="${S.noticeSt.includes(k)}" data-act="nst" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div></div>
-    <div class="row"><button class="link" data-act="nall">${all?'선택 해제':'목록 전체 선택'}</button><span class="sub">목록 ${list.length}명</span><span class="grow"></span><b>${S.noticeSel.length}명 선택</b>${S.noticeSel.length?`<button class="link" data-act="nnone">모두 해제</button>`:''}</div>
+    <div class="row"><button class="link" data-act="nall">${all?'선택 해제':'목록 전체 선택'}</button><span class="sub">목록 ${list.length}명</span><span class="grow"></span><b>${S.noticeSel.length}명 선택</b>${S.noticeSel.length?`<button class="link" data-act="nnone">모두 해제</button>`:''}<button class="btn2 sm" data-act="xlNotice">📤 엑셀로 받기</button></div>
     <div class="tbl" style="max-height:420px;overflow:auto"><table><tbody>${list.map(c=>{const k=ntStKey(c); return `<tr class="cm-row ${k==='cancel'?'is-cancel':k==='stop'?'is-stop':k==='pause'?'is-pz':''}"><td style="width:36px"><input type="checkbox" data-nsel="${c.id}" ${S.noticeSel.includes(c.id)?'checked':''} aria-label="${esc(c.name)} 선택"></td><td>${esc(c.name)}${k==='on'?'':` <span class="pill ${k==='pause'?'st-pz':'st-'+k}">${esc(NT_ST.find(x=>x[0]===k)[1])}</span>`}</td><td>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</td><td>${esc(c.car_number||'')}</td></tr>`;}).join('')||'<tr><td class="sub">조건에 맞는 고객이 없어요.</td></tr>'}</tbody></table></div></div>
   <div class="card"><div class="chips">${NT_BASE.map(([l,b])=>`<button class="chip" data-act="tpl" data-b="${esc(b)}">${l}</button>`).join('')}
     ${mine.map((x,i)=>`<span class="chip tpl-mine"><button type="button" class="link" data-act="tpl" data-b="${esc(x.b)}" title="${esc(x.b)}">⭐ ${esc(x.l)}</button><button type="button" class="link tpl-x" data-act="tplDel" data-i="${i}" aria-label="${esc(x.l)} 문구 지우기">✕</button></span>`).join('')}</div>
@@ -2563,6 +2625,14 @@ document.addEventListener('click',async e=>{
         const items=rows.map(r=>({customer_id:r.customer_id,body:rdFill(tpl,r)})).filter(x=>x.body);
         const n=await q(db.rpc('send_round_notices',{p_month:rdMonthKey(),p_title:S.rdTitle||'입금 안내',p_items:items})); S.rdSel=[]; toast(`${n||0}명에게 입금 안내를 보냈어요.`); },null),rdNoticeExtra(rows)); break; }
     case 'rdSched': try{ await rdScheduleExport(); }catch(e){ toast(friendly(e),true); } break;
+    case 'xlToday': await xlToday(); break;
+    case 'xlReq': await xlReq(); break;
+    case 'xlLive': await xlLive(); break;
+    case 'xlField': await xlField(); break;
+    case 'xlAcc': await xlAcc(); break;
+    case 'xlJobs': await xlJobs(); break;
+    case 'xlSlots': await xlSlots(); break;
+    case 'xlNotice': await xlNotice(); break;
     case 'rdExport': { try{ const X=await loadXLSX(); const md=rdMonthDate(), base=rdBase().filter((RD_TABS.find(([k])=>k===S.rdTab)||RD_TABS[0])[1]);
       const rows=base.map(r=>({아파트:r.complex,동호수:r.unit,차량번호:r.car_number,고객:r.name,연락처:r.phone,상태:r.wash_status,정기권:r.wash_plan?`월 ${r.wash_plan}회`:'',담당직원:r.staff_name||'',완료회차:r.done_count,정기권회차:r.wash_plan||'',회차완료:rdFull(r)?'완료':'',미작업:r.skip_count,완료한날:r.done_dates||'',다음회차:r.next_date||'',수금상태:r.bill_state||'',금액:r.bill_amount??'',입금안내:r.notice_count?when(r.last_notice_at):''}));
       const ws=X.utils.json_to_sheet(rows); const wb=X.utils.book_new(); X.utils.book_append_sheet(wb,ws,'회차현황'); X.writeFile(wb,`오토핸즈_회차현황_${md.getFullYear()}${pad(md.getMonth()+1)}_${S.rdTab}.xlsx`); toast(`${rows.length}명을 엑셀로 받았어요.`); }catch(e){ toast(friendly(e),true); } break; }
