@@ -71,6 +71,8 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .by{font-size:11.5px;font-weight:500;color:var(--sub)}
 .memo{background:#FFF8E6;border:1px solid var(--gold-soft);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}.memo p{margin:0;white-space:pre-wrap}
 .memo-edit{display:flex;flex-direction:column;gap:8px}.memo-add{align-self:flex-start}
+.reply-box{background:#EAF2FB;border:1px solid #BFD3EE;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}.reply-box p{margin:0;white-space:pre-wrap}.reply-box b{font-size:12.5px;color:#1D3A6E}
+.reply-edit{display:flex;flex-direction:column;gap:8px;background:#F4F8FD;border:1px solid #BFD3EE;border-radius:10px;padding:10px}.reply-edit .chips{gap:6px}.reply-add{align-self:flex-start}
 .selbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
 .btn.sm,.btn2.sm{min-height:36px;padding:0 12px;font-size:13px}.btn.danger{background:#7A2323;border-color:#7A2323}.btn.danger:hover{background:#5E1A1A}.btn.danger:disabled{background:#E7E3D9;border-color:#E7E3D9;color:#9A9384}
 .sel{display:inline-grid;place-items:center;width:30px;height:30px;margin:-4px 0 -4px -4px;cursor:pointer}.sel input{width:19px;height:19px;margin:0;accent-color:#7A2323}
@@ -956,6 +958,7 @@ function reqListView(list,apts,nUrgent){
   ${list.length?selBar(list.map(r=>r.id),false)+`<div class="grid">${list.map(reqCard).join('')}</div>`
   :`<div class="empty">${S.reqQ||S.reqApt?'조건에 맞는 요청이 없어요.':'표시할 요청이 없어요.'}</div>`}`;
 }
+const REPLY_QUICK=['네, 확인했어요.','요청하신 대로 처리할게요.','담당 직원에게 전달했어요.','일정 변경해 드렸어요.'];
 function reqCard(r){
   let act='';
   if(r.status==='접수'||r.status==='보류'){
@@ -968,6 +971,14 @@ function reqCard(r){
     ?`<div class="memo-edit"><textarea class="inp" id="memo-${r.id}" maxlength="1000" placeholder="조치 내용, 통화 내용 등 내부 메모 (고객에게 안 보여요)">${esc(r.staff_memo||'')}</textarea><div class="row"><span class="grow"></span><button class="link" data-act="memoCancel">취소</button><button class="btn" data-act="memoSave" data-id="${r.id}">메모 저장</button></div></div>`
     :r.staff_memo?`<div class="memo"><p>${esc(r.staff_memo)}</p><div class="row">${byName(r.memo_name,r.memo_at)}<span class="grow"></span><button class="link" data-act="memoEdit" data-id="${r.id}">메모 수정</button></div></div>`
     :`<button class="link memo-add" data-act="memoEdit" data-id="${r.id}">+ 메모 쓰기</button>`;
+  // 고객에게 답변 (4번) — 고객 앱 메시지 아래에 보이고 알림이 가요
+  const rEdit=S.replyEdit===r.id;
+  const reply=rEdit
+    ?`<div class="reply-edit"><b class="sub" style="color:var(--text)">💬 고객에게 답변</b><div class="chips">${REPLY_QUICK.map(x=>`<button type="button" class="chip" data-act="replyQuick" data-id="${r.id}" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+      <textarea class="inp" id="reply-${r.id}" maxlength="1000" placeholder="고객 앱에 보이는 답변이에요. 예: 네, 확인했어요. 내일 세차할 때 트렁크는 열지 않을게요.">${esc(S.replyDraft!==undefined?S.replyDraft:(r.reply||''))}</textarea>
+      <div class="row"><span class="grow note">보내면 고객 앱에 '매니저 답변이 왔어요' 알림이 가요.</span><button class="link" data-act="replyCancel">취소</button><button class="btn" data-act="replySend" data-id="${r.id}">${r.reply?'고친 답변 보내기':'답변 보내기'}</button></div></div>`
+    :r.reply?`<div class="reply-box"><b>💬 고객에게 보낸 답변</b><p>${esc(r.reply)}</p><div class="row">${byName(r.reply_name,r.reply_at)}<span class="grow"></span><button class="link" data-act="replyEdit" data-id="${r.id}">답변 고치기</button></div></div>`
+    :`<button class="btn2 sm reply-add" data-act="replyEdit" data-id="${r.id}">💬 고객에게 답변 보내기</button>`;
   return `<article class="card req${r.urgent?' is-urgent':''}${r.done_at?' is-done':''}${S.sel.includes(r.id)?' is-sel':''}">
     <div class="row"><label class="sel"><input type="checkbox" data-rsel="${r.id}" ${S.sel.includes(r.id)?'checked':''} aria-label="선택 (휴지통으로 보낼 요청)"></label><span class="pill t-${r.req_type}">${RT[r.req_type]||r.req_type}</span>${r.urgent?'<span class="pill p-urgent">긴급</span>':''}${r.done_at?'<span class="pill p-ok">완료</span>':''}<span class="grow"></span><span class="sub" title="고객 앱에 보이는 상태">고객 화면: ${statusPill(r.status,r.req_type)}</span></div>
     <div class="who"><span class="apt">${esc(where)}</span><span class="car">${esc(r.car_number||'-')}</span></div>
@@ -980,6 +991,7 @@ function reqCard(r){
       <label class="flag"><input type="checkbox" data-rflag="check" data-id="${r.id}" ${r.checked_at?'checked':''} ${r.done_at?'disabled':''}><span>확인</span>${r.checked_at?byName(r.checked_name,r.checked_at):''}</label>
       <label class="flag"><input type="checkbox" data-rflag="done" data-id="${r.id}" ${r.done_at?'checked':''}><span>완료</span>${r.done_at?byName(r.done_name,r.done_at):''}</label>
     </div>
+    ${reply}
     ${memo}
     <div class="row"><span class="sub grow">접수 ${when(r.created_at)}</span></div></article>`;
 }
@@ -1438,7 +1450,7 @@ function notesPanel(c){
   </div>
   ${!list?'<p class="sub">불러오는 중...</p>':list.length?`<ul class="notes">${list.map(n=>`<li class="${n.important?'imp':''}">
       <button class="star-btn" data-act="noteStar" data-id="${n.id}" data-c="${c.id}" data-on="${n.important?0:1}" aria-pressed="${n.important}" aria-label="${n.important?'중요 표시 빼기':'중요로 표시'}">${n.important?'⭐':'☆'}</button>
-      <button class="note-open grow" data-act="noteOpen" data-id="${n.id}" data-c="${c.id}" title="크게 보기 · 수정"><span class="nb">${esc(n.body)}</span><small class="by">${esc(n.author)} · ${fullWhen(n.created_at)}${n.source==='request'?' · 고객 요청 완료 자동기록':''}${n.updated_at?` · 수정 ${esc(n.editor||'')} ${fullWhen(n.updated_at)}`:''}</small></button>
+      <button class="note-open grow" data-act="noteOpen" data-id="${n.id}" data-c="${c.id}" title="크게 보기 · 수정"><span class="nb">${esc(n.body)}</span><small class="by">${esc(n.author)} · ${fullWhen(n.created_at)}${n.source==='request'?' · 고객 요청 완료 자동기록':''}${n.source==='staff'?' · 📱 현장직원 답변':''}${n.updated_at?` · 수정 ${esc(n.editor||'')} ${fullWhen(n.updated_at)}`:''}</small></button>
       ${S.nsOk&&n.source!=='request'&&!/^\[/.test(n.body||'')?(()=>{const on=((S.noteStaff||{})[c.id]||[]).includes(n.id); return `<button class="ns-btn${on?' on':''}" data-act="noteStaff" data-id="${n.id}" data-c="${c.id}" data-on="${on?0:1}" aria-pressed="${on}" title="${on?'담당 직원앱에 보이는 중 · 누르면 숨겨요':'누르면 담당 직원앱에도 보여요'}">📱 ${on?'직원앱 표시 중':'직원앱에 보이기'}</button>`;})():''}
       <button class="link" data-act="noteDel" data-id="${n.id}" data-c="${c.id}">삭제</button></li>`).join('')}</ul>`
     :'<p class="sub">아직 메모가 없어요.</p>'}`;
@@ -2387,6 +2399,14 @@ document.addEventListener('click',async e=>{
     case 'reqClear': S.reqQ=''; S.reqApt=''; await loadTab(); break;
     case 'memoEdit': S.memoEdit=id; render(); setTimeout(()=>{const m=$('#memo-'+id); if(m){m.focus(); m.setSelectionRange(m.value.length,m.value.length);}},30); break;
     case 'memoCancel': S.memoEdit=null; render(); break;
+    case 'replyEdit': S.replyEdit=id; S.replyDraft=undefined; render(); setTimeout(()=>{const m=$('#reply-'+id); if(m){m.focus(); m.setSelectionRange(m.value.length,m.value.length);}},30); break;
+    case 'replyCancel': S.replyEdit=null; S.replyDraft=undefined; render(); break;
+    case 'replyQuick': { const m=$('#reply-'+id), cur=(m&&m.value||'').trim(); S.replyDraft=cur?cur+' '+t.dataset.v:t.dataset.v; render(); setTimeout(()=>{const x=$('#reply-'+id); if(x){x.focus(); x.setSelectionRange(x.value.length,x.value.length);}},30); break; }
+    case 'replySend': {
+      const v=(($('#reply-'+id)||{}).value||'').trim(); if(!v){ toast('답변 내용을 적어 주세요.',true); break; }
+      try{ await q(db.rpc('reply_request',{p_id:id,p_body:v})); S.replyEdit=null; S.replyDraft=undefined; toast('답변을 보냈어요. 고객에게 알림이 갔어요.'); }catch(err){ toast(friendly(err),true); }
+      await loadTab(); break;
+    }
     case 'memoSave': {
       const v=(($('#memo-'+id)||{}).value||'');
       try{ await q(db.rpc('save_request_memo',{p_id:id,p_memo:v})); S.memoEdit=null; toast(v.trim()?'메모를 저장했어요.':'메모를 지웠어요.'); }catch(err){ toast(friendly(err),true); }
@@ -2710,7 +2730,7 @@ document.addEventListener('change',async e=>{
   if(t.dataset.jint){ await act(()=>q(db.from('wash_jobs').update({interior:t.checked}).eq('id',Number(t.dataset.jint))),null); return; }
   if(t.dataset.nsel){ const id=Number(t.dataset.nsel); S.noticeSel=t.checked?[...new Set([...S.noticeSel,id])]:S.noticeSel.filter(x=>x!==id); render(); }
 });
-document.addEventListener('input',e=>{ if(e.target.dataset&&e.target.dataset.svf==='reason'&&S.rdc&&S.rdc.sv){ S.rdc.sv.reason=e.target.value; return; } if(e.target.id==='rsnEtc'&&S.rsn){ S.rsn.etc=e.target.value; return; } if(e.target.id==='mvDate'&&S.mv){ S.mv.date=e.target.value; return; } if(e.target.dataset&&e.target.dataset.rcwhyetc&&S.rdc){ S.rdc.rs[e.target.dataset.rcwhyetc]=e.target.value.trim(); return; }
+document.addEventListener('input',e=>{ if(/^reply-\d+$/.test(e.target.id)){ S.replyDraft=e.target.value; return; } if(e.target.dataset&&e.target.dataset.svf==='reason'&&S.rdc&&S.rdc.sv){ S.rdc.sv.reason=e.target.value; return; } if(e.target.id==='rsnEtc'&&S.rsn){ S.rsn.etc=e.target.value; return; } if(e.target.id==='mvDate'&&S.mv){ S.mv.date=e.target.value; return; } if(e.target.dataset&&e.target.dataset.rcwhyetc&&S.rdc){ S.rdc.rs[e.target.dataset.rcwhyetc]=e.target.value.trim(); return; }
   if(e.target.dataset&&(e.target.dataset.pz==='memo'||e.target.dataset.pz==='date')&&S.pz){ S.pz[e.target.dataset.pz]=e.target.value; return; }
   if(e.target.dataset&&e.target.dataset.ipc){ const k=e.target.dataset.ipc; S.ipDraft=S.ipDraft||{}; const r=(S.iprices||[]).find(x=>x.car_class===k)||{}; const v=e.target.value.trim(); if(String(r.price)===v.replace(/\D/g,'')&&v!=='') delete S.ipDraft[k]; else S.ipDraft[k]=v; const b=document.querySelector('[data-act=ipSave]'); if(b) b.disabled=!Object.keys(S.ipDraft).length; return; }
   if(/^nt(Title|Body)$/.test(e.target.id)){ ntRead(); return; }
