@@ -391,14 +391,14 @@ let deferredInstall=null;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;if(typeof render==='function'&&S.ready)render();});
 window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('관리자 앱을 설치했어요. 홈 화면의 오토핸즈 관리자 아이콘으로 열어 주세요.');render();});
 const isStandalone=()=>window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-const TABS=[['today','오늘 (공지·할 일)'],['req','고객 요청'],['live','실시간 세차 현황'],['field','현장전달'],['round','회차 현황'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['cust','고객 세차 설정'],['notice','고객 공지 보내기']];
+const TABS=[['today','오늘 (공지·할 일)'],['req','고객 요청'],['live','실시간 세차 현황'],['field','현장전달'],['round','회차 현황'],['cmgr','고객관리'],['coll','수금관리'],['acc','가입 승인'],['jobs','세차 일정'],['slots','실내세차 일정'],['notice','고객 공지 보내기']];
 /* 메뉴(탭) 순서 · 숨기기 — 사람마다 저장 (30 SQL의 user_ui_prefs, 없으면 이 기기에만) */
 const TAB_KEYS=TABS.map(([k])=>k);
 function tabPrefNorm(v){ v=v&&typeof v==='object'?v:{}; const order=(Array.isArray(v.order)?v.order:[]).filter(k=>TAB_KEYS.includes(k));
   TAB_KEYS.forEach(k=>{ if(!order.includes(k)) order.push(k); }); const hidden=(Array.isArray(v.hidden)?v.hidden:[]).filter(k=>TAB_KEYS.includes(k));
   return {order,hidden:hidden.length>=TAB_KEYS.length?[]:hidden}; }
 function tabsView(){ const P=S.tabPref||tabPrefNorm(null); return P.order.filter(k=>!P.hidden.includes(k)).map(k=>TABS.find(t=>t[0]===k)); }
-function setTab(k){ if(!TAB_KEYS.includes(k)) return; S.tab=k;
+function setTab(k){ if(k==='cust'){ k='cmgr'; S.cmMode='set'; } if(!TAB_KEYS.includes(k)) return; S.tab=k;
   try{ history.replaceState(null,'','#'+k); }catch(_){} try{ localStorage.setItem('ah-admin-tab',k); }catch(_){} }
 async function loadTabPref(){
   let v=null; S.tabPrefServer=false;
@@ -419,14 +419,14 @@ const S={ready:false,session:null,me:null,tab:'req',err:'',busy:false,dialog:nul
   liveDay:keyOf(new Date()),live:null,liveAt:null,frows:null,frState:'open',frMine:false,frSel:[],frReply:{},fmgr:[],purl:{},pview:null,cntField:0,cntFieldAll:0,
   reqs:[],reqF:'open',reqApt:'',reqQ:'',reqType:'all',memoEdit:null,sel:[],trash:[],cntTrash:0,cmApt:'',cmApts:[],amOpen:'',cmQ:'',cmQin:'',cmOpen:[],notes:{},noteCnt:{},noteStar:{},noteDraft:{},cmSel:[],cmSt:'all',cstat:{},pauseDate:'',noteModal:null,nmBody:'',nmStar:false,coll:null,cmMonth:0,accs:[],cset:{payday:20,notice2_days:5},pr:{mode:'pay',off:0,from:'',to:'',method:'',proof:'',acct:'',rows:null},payMethod:'계좌이체',payProof:'없음',payAcct:'',cmData:null,cmView:'apt',crole:null,mineOnly:true,cxDraft:null,payAmt:'',payAmtTouched:false,payNote:'',adjVal:'',adjNote:'',collTab:'미수금',collApt:'',collQ:'',collQin:'',collSel:[],collOpen:[],cbills:{},cnotes:{},cnDraft:{},cnStar:{},cform:null,payPick:{},payDate:'',intReqs:[],intSel:[],intDate:'',intStaff:'',intView:'all',capVal:'',closedWd:[],wdDraft:null,wdAll:false,slotDays:[],mgFrom:'',mgTo:'',cancelNotify:true,resPick:[],resQ:'',resStaff:'',resNotify:true, accs:[],accAll:false, staff:[], customers:[],
   jobDay:keyOf(new Date()), jobs:[], slotApt:'', slotMonth:0, slots:[], slotDay:null,
-  custQ:'', custApt:'전체', notice:'', noticeApts:[], noticeSt:['on'], noticeSel:[], ntTpls:null};
+  cmMode:'list', notice:'', noticeApts:[], noticeSt:['on'], noticeSel:[], ntTpls:null};
 
 /* ---------- 데이터 ---------- */
 async function q(p){ const {data,error}=await p; if(error) throw error; return data; }
 /* 차급(소형·중형·대형·SUV) · 실내세차 금액 — SQL 20 실행 전이면 조용히 건너뜀 */
 async function loadCls(){ try{ const {data,error}=await db.rpc('list_customer_car_classes'); if(!error){ const m={}; (data||[]).forEach(r=>m[r.customer_id]=r); S.cls=m; } }catch(_){} }
 const CLASSES=['소형','중형','대형','SUV'];
-const clsTag=id=>{ const r=S.cls&&S.cls[id]; if(!r) return ''; return `<span class="cls ${r.car_class==='SUV'?'cls-suv':r.car_class?'':'cls-none'}" title="실내세차 ${Number(r.price||0).toLocaleString('ko-KR')}원${r.class_source==='미분류'?' · 고객 세차 설정에서 차급을 골라 주세요':''}">${r.car_class||'미분류'}</span>`; };
+const clsTag=id=>{ const r=S.cls&&S.cls[id]; if(!r) return ''; return `<span class="cls ${r.car_class==='SUV'?'cls-suv':r.car_class?'':'cls-none'}" title="실내세차 ${Number(r.price||0).toLocaleString('ko-KR')}원${r.class_source==='미분류'?' · 고객관리 › 세차 설정에서 차급을 골라 주세요':''}">${r.car_class||'미분류'}</span>`; };
 const clsPrice=id=>{ const r=S.cls&&S.cls[id]; return r?Number(r.price||0).toLocaleString('ko-KR')+'원':''; };
 async function loadBase(){
   const me=await q(db.from('profiles').select('id,name,role,status').eq('id',S.session.user.id).maybeSingle());
@@ -468,7 +468,7 @@ async function loadTab(){
       const live=new Set(S.coll.map(r=>r.id)); S.collSel=S.collSel.filter(x=>live.has(x)); S.collOpen=S.collOpen.filter(x=>live.has(x));
       await Promise.all(S.collOpen.map(id=>Promise.all([loadCBills(id),loadCNotes(id)])));
     }
-    if(S.tab==='cust'){ try{ S.offd=await q(db.rpc('list_wash_offdays'))||[]; S.offOk=true; }catch(_){ S.offd=[]; S.offOk=false; }
+    if(S.tab==='cmgr'){ try{ S.offd=await q(db.rpc('list_wash_offdays'))||[]; S.offOk=true; }catch(_){ S.offd=[]; S.offOk=false; }
       try{ const ci=await q(db.rpc('list_customer_interior')); S.cint={}; (ci||[]).forEach(r=>S.cint[r.customer_id]=r); S.cintOk=true; }catch(_){ S.cint={}; S.cintOk=false; } S.intDraft={}; }
     if(S.tab==='cmgr'){
       await loadCols('cmgr');
@@ -1069,7 +1069,7 @@ function jobsView(){
   <div class="selbar"><b class="sub" style="color:var(--text)">${list.length}대</b><span class="grow"></span>${colBtn('jobs')}</div>
   ${list.length?`<div class="tbl cm-tbl"><table><thead><tr>${cols.map(c=>`<th>${esc(colLabel('jobs',c[0]))}</th>`).join('')}</tr></thead><tbody>
     ${list.map(j=>`<tr>${cols.map(c=>c[2](j)).join('')}</tr>`).join('')}
-  </tbody></table></div>`:all.length?'<div class="empty">분류 조건에 맞는 차량이 없어요.</div>':`<div class="empty">이 날 일정이 없어요. 위의 '일정 만들기'를 눌러 보세요.<br><span class="note">고객 세차 설정 탭에서 정기권·지정 요일·담당 직원이 입력된 고객만 자동으로 들어가요.</span></div>`}`;
+  </tbody></table></div>`:all.length?'<div class="empty">분류 조건에 맞는 차량이 없어요.</div>':`<div class="empty">이 날 일정이 없어요. 위의 '일정 만들기'를 눌러 보세요.<br><span class="note">고객관리 › 세차 설정에서 정기권·지정 요일·담당 직원이 입력된 고객만 자동으로 들어가요.</span></div>`}`;
 }
 
 /* ---------- 탭: 실내세차 일정 ---------- */
@@ -1120,8 +1120,8 @@ function slotsView(){
   const capNow=S.capVal!==''?S.capVal:(s&&s.capacity?s.capacity:2);
   return `<div class="row"><div class="grow"><h1 class="h">실내세차 일정</h1><p class="sub">단지별로 실내세차 가능한 날짜와 받을 차량 수를 열어 두면, 고객 앱 달력에서 그 날짜만 신청할 수 있어요. 신청이 정원만큼 차면 그 날짜는 자동으로 '마감'돼요.</p></div></div>
   ${(()=>{const noApt=S.customers.filter(c=>!(c.complex||'').trim()).length;
-    if(!apts.length) return `<div class="card"><h2 class="h">아직 실내세차를 열 단지가 없어요</h2><p class="sub">실내세차 날짜는 <b>아파트(단지)별</b>로 열어요. 지금 계약완료 고객 ${S.customers.length}명 중 ${noApt}명이 아파트 이름이 비어 있어서 단지 목록이 만들어지지 않았어요.</p><p class="sub">[고객 세차 설정] 탭에서 고객마다 <b>아파트</b> 칸을 입력하고 저장하면 여기에 단지가 나타나고, 그 단지 고객들은 고객 앱에서 실내세차를 신청할 수 있어요.</p><div class="row"><button class="btn" data-act="tab" data-t="cust">고객 세차 설정으로 가기</button></div></div>`;
-    return `<div class="chips"><button class="chip" aria-pressed="${S.slotApt==='__all__'}" data-act="sapt" data-a="__all__">🗂 전체보기</button>${apts.map(a=>`<button class="chip" aria-pressed="${S.slotApt===a}" data-act="sapt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>${noApt?`<p class="note" style="color:var(--red)">아파트 이름이 비어 있는 계약 고객 ${noApt}명은 실내세차를 신청할 수 없어요. [고객 세차 설정]에서 아파트를 입력해 주세요.</p>`:''}`;})()}
+    if(!apts.length) return `<div class="card"><h2 class="h">아직 실내세차를 열 단지가 없어요</h2><p class="sub">실내세차 날짜는 <b>아파트(단지)별</b>로 열어요. 지금 계약완료 고객 ${S.customers.length}명 중 ${noApt}명이 아파트 이름이 비어 있어서 단지 목록이 만들어지지 않았어요.</p><p class="sub">[고객관리 › 세차 설정]에서 고객마다 <b>아파트</b> 칸을 입력하고 저장하면 여기에 단지가 나타나고, 그 단지 고객들은 고객 앱에서 실내세차를 신청할 수 있어요.</p><div class="row"><button class="btn" data-act="tab" data-t="cust">고객관리 › 세차 설정으로 가기</button></div></div>`;
+    return `<div class="chips"><button class="chip" aria-pressed="${S.slotApt==='__all__'}" data-act="sapt" data-a="__all__">🗂 전체보기</button>${apts.map(a=>`<button class="chip" aria-pressed="${S.slotApt===a}" data-act="sapt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div>${noApt?`<p class="note" style="color:var(--red)">아파트 이름이 비어 있는 계약 고객 ${noApt}명은 실내세차를 신청할 수 없어요. [고객관리 › 세차 설정]에서 아파트를 입력해 주세요.</p>`:''}`;})()}
   ${S.slotApt?`${ALL?'':wdBar}${irStaffChips()}<div class="two-col"><div class="card"><div class="cal-head"><button class="btn2" data-act="smonth" data-d="-1" ${S.slotMonth<=-3?'disabled':''}>${ic('back')}</button><h2 class="h">${y}년 ${m+1}월 · ${ALL?'전체 아파트':esc(S.slotApt)}</h2><button class="btn2" data-act="smonth" data-d="1" ${S.slotMonth>=3?'disabled':''}>${ic('arrow')}</button></div>${irMonthBar(y,m)}<div class="cal">${cells}</div><p class="note">색 숫자: <b class="n-w">배정 대기</b> · <b class="n-c">예약 확정</b> · <b class="n-d">완료</b> · <b class="n-s">미완료</b>.${ALL?'':` 작은 글씨는 '신청 대수 / 받을 수 있는 대수'예요.`} 날짜를 누르면 아래에 그날 차량이 나와요.</p></div>
   <div class="side-col">${ALL?irAllDay():`<div class="card"><h2 class="h">${kdate(S.slotDay)}</h2>`}${ALL?'':`
     ${S.slotDay<=t?`<p class="sub">지난 날짜예요. 이미 한 실내세차를 <b>기록으로 추가</b>할 수 있어요. (고객 알림은 가지 않아요 · 실내세차 비용은 그 달 수금에 들어가요)</p>${s?`<p class="sub">신청 ${s.booked}대 / 받을 수 있는 ${s.capacity}대</p>`:''}<button class="btn" data-act="resAdd">+ 지난 날짜 실내세차 기록 추가</button>`:`${s?`<p class="sub">신청 ${s.booked}대 / 받을 수 있는 ${s.capacity}대 ${s.capacity===0?'· <b style="color:var(--red)">마감</b> (새 신청 안 받음)':s.booked>=s.capacity?'· <b style="color:var(--red)">마감</b>':`· 남은 자리 ${s.capacity-s.booked}대`}</p>`:'<p class="sub">아직 신청을 받지 않는 날짜예요.</p>'}
@@ -1174,10 +1174,10 @@ function intReqPanel(){
   </div>`;
 }
 
-/* ---------- 탭: 고객 세차 설정 ---------- */
+/* ---------- 고객관리 › 세차 설정 (예전 '고객 세차 설정' 탭) ---------- */
 function wdCell(plan,c){ const p=Number(plan)||0;
   if(PLAN_DAYS[p]) return wdChecks(c.wash_days&&c.wash_days.length?c.wash_days:(c.wash_weekday!=null?[c.wash_weekday]:[]),'data-rwd');
-  if(PICK_N[p]) return '<span class="sub">📅 고객관리에서 날짜 고르기</span>';
+  if(PICK_N[p]) return '<span class="sub">📅 [고객 목록]에서 날짜 고르기</span>';
   return `<select data-f="wash_weekday"><option value="">미정</option>${WD_ORDER.map(d=>`<option value="${d}" ${c.wash_weekday===d?'selected':''}>${WDF[d]}</option>`).join('')}</select>`; }
 
 /* 아파트별 외부세차 휴무 (54 SQL) — 요일 (0=일 ~ 6=토), 기본 수 · 토 */
@@ -1197,14 +1197,11 @@ function intPick(cid){ const plan=((S.cint||{})[cid]||{}).interior_plan||'', d=(
   const on=d?d.on:ipInc(plan), n=d?d.n:(plan==='every'?'every':String(ipN(plan)||1));
   return `<div class="int-pick"><label class="auto"><input type="checkbox" data-intp="${cid}" ${on?'checked':''}><span>실내포함</span></label><select data-intn="${cid}" aria-label="실내 횟수" ${on?'':'hidden'}>${[1,2,3,4,5,6,7,8].map(k=>`<option value="${k}" ${n===String(k)?'selected':''}>월 ${k}회</option>`).join('')}<option value="every" ${n==='every'?'selected':''}>매회</option></select>${!on&&plan==='service'?'<small class="by">요청 서비스</small>':''}</div>`; }
 const intCode=(on,n)=>!on?'request':n==='every'?'every':Number(n)>1?'m'+n:'monthly';
-function custView(){
-  const apts=['전체',...complexes()], qq=S.custQ.trim().toLowerCase(), fs=fieldStaff();
-  const list=S.customers.filter(c=>(S.custApt==='전체'||c.complex===S.custApt)&&(!qq||[c.name,c.car_number,c.unit,c.phone].join(' ').toLowerCase().includes(qq)));
-  return `<div class="row"><div class="grow"><h1 class="h">고객 세차 설정</h1><p class="sub">정기권·지정 요일·담당 현장직원을 모두 입력하고 저장하면, 지정 요일 날짜에 직원 앱에 자동으로 나타나요. 월 8회 · 12회는 매주 요일 2 · 3개, 월 2회(격주) · 월 3회는 고객관리의 📅 날짜에서 달마다 직접 골라요.</p></div></div>
-  ${offdaysCard()}
-  <div class="row"><input class="inp" id="custQ" placeholder="이름·차량번호·동 검색" value="${esc(S.custQ)}" style="min-width:220px"><div class="chips">${apts.map(a=>`<button class="chip" aria-pressed="${S.custApt===a}" data-act="capt" data-a="${esc(a)}">${esc(a)}</button>`).join('')}</div></div>
-  ${list.length?`<div class="tbl"><table><thead><tr><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권 · 실내포함</th><th>지정 요일</th><th>차종</th><th>차급</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
-    ${list.map(c=>`<tr data-cid="${c.id}"><td><b>${esc(c.name)}</b></td><td><input data-f="complex" value="${esc(c.complex||'')}" placeholder="예: 범어파크뷰" ${c.complex?'':'class="need"'}></td><td><input data-f="unit" value="${esc(c.unit||'')}" placeholder="예: 103동 1201호" style="max-width:120px"></td><td>${esc(c.car_number||'-')}</td>
+/* 고객관리 › 세차 설정 — 정기권 · 요일 · 담당 현장직원 · 차급을 한 줄씩 바로 고치기 (예전 '고객 세차 설정' 탭을 고객관리로 합침) */
+const pzWhy=c=>{ const st=(S.cstat||{})[c.id]||{}; return st.wash_status==='해지'&&st.pause_reason?`<br><small class="by">사유: ${esc(st.pause_reason)}</small>`:''; };
+function custSetTable(list,empty){ const fs=fieldStaff();
+  return list.length?`<div class="tbl cm-tbl"><table><thead><tr><th>상태</th><th>고객</th><th>아파트</th><th>동·호수</th><th>차량번호</th><th>정기권 · 실내포함</th><th>지정 요일</th><th>차종</th><th>차급</th><th>색상</th><th>담당 현장직원</th><th></th></tr></thead><tbody>
+    ${list.map(c=>{const st=cmState(c); return `<tr class="cm-row ${st.cls}" data-cid="${c.id}"><td class="nowrap"><span class="pill ${st.pill||'st-'+st.k}">${esc(st.label)}</span>${pzWhy(c)}</td><td><button class="cust-btn" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.name||'-')}</button></td><td><input data-f="complex" value="${esc(c.complex||'')}" placeholder="예: 범어파크뷰" ${c.complex?'':'class="need"'}></td><td><input data-f="unit" value="${esc(c.unit||'')}" placeholder="예: 103동 1201호" style="max-width:120px"></td><td>${esc(c.car_number||'-')}</td>
       <td><select data-f="wash_plan" data-rowplan="1">${planOpts(c.wash_plan)}</select>${S.cintOk?intPick(c.id):''}</td>
       <td class="wd-cell">${wdCell(c.wash_plan,c)}</td>
       <td><input data-f="car_model" value="${esc(c.car_model||'')}" placeholder="예: 아반떼"></td>
@@ -1212,9 +1209,8 @@ function custView(){
         return `<select data-f="car_class" data-was="${esc(man)}" ${r&&r.class_source==='미분류'?'class="need"':''} title="실내세차 ${clsPrice(c.id)}"><option value="">${!r||man?'자동':r.car_class?`자동 (${r.car_class})`:'미분류'}</option>${CLASSES.map(k=>`<option value="${k}" ${man===k?'selected':''}>${k}${k==='SUV'?'':' (세단)'}</option>`).join('')}</select>`;})()}</td>
       <td><input data-f="car_color" value="${esc(c.car_color||'')}" placeholder="예: 흰색" style="max-width:90px"></td>
       <td><select data-f="field_staff_id"><option value="">미배정</option>${fs.map(s=>`<option value="${s.id}" ${s.id===c.field_staff_id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></td>
-      <td><button class="btn2" data-act="save-cust" data-id="${c.id}">저장</button></td></tr>`).join('')}
-  </tbody></table></div>`:'<div class="empty">조건에 맞는 계약완료 고객이 없어요.</div>'}`;
-}
+      <td><button class="btn2" data-act="save-cust" data-id="${c.id}">저장</button></td></tr>`;}).join('')}
+  </tbody></table></div>`:empty; }
 
 /* ---------- 탭: 고객관리 (차량별 메모·처리이력) ---------- */
 // 일시정지 = 짧게 쉼(하늘색) · 정지 = 한 달 이상(노랑). 종류를 안 고른 예전 고객은 기간으로 나눠요 (54 SQL과 같은 규칙)
@@ -1395,6 +1391,8 @@ function cmgrView(){
     rowsG.push({c:head,kind:'head',g,n:LG[head.id].car_count,shown:mem.length});
     if(gOpen.includes(g)) mem.filter(x=>x!==head).forEach(x=>rowsG.push({c:x,kind:'sub',g})); }
   return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.<br>신규 = 계약일로부터 30일 이내 (자동) · 이관중 = 관리자가 직접 표시 (세차 일정은 그대로)<br>일시정지(하늘색) = 짧게 쉼 (수리, 이번 주 패스 등) · 정지(노랑) = 한 달 이상 쉼 · 해지(회색) · 다시 시작할 날을 모르면 '미정'</p></div></div>
+  <div class="mini-tabs" role="tablist" aria-label="고객관리 보기">${[['list','📋 고객 목록 · 메모'],['set','⚙️ 세차 설정 (정기권 · 요일 · 담당직원)']].map(([k,l])=>`<button role="tab" class="mtab" aria-selected="${(S.cmMode||'list')===k}" data-act="cmMode" data-f="${k}">${l}</button>`).join('')}</div>
+  ${S.cmMode==='set'?`<p class="note" style="margin:0">정기권·지정 요일·담당 현장직원을 모두 입력하고 [저장]하면, 지정 요일 날짜에 직원 앱에 자동으로 나타나요. 월 8회 · 12회는 매주 요일 2 · 3개, 월 2회(격주) · 월 3회는 [고객 목록]의 📅 날짜에서 달마다 직접 골라요. 아래 아파트 · 상태 · 검색 조건이 그대로 적용돼요.</p>${offdaysCard()}`:''}
   <div class="coll-tools">
     <label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="custFile" accept=".xlsx,.xls,.csv" hidden></label>
     <button class="btn2 sm" data-act="custTpl">엑셀 양식 받기</button>
@@ -1414,14 +1412,14 @@ function cmgrView(){
     <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.cmQ||nF?`<button class="link" type="button" data-act="cmClear">초기화</button>`:''}
   </form>
   <div class="chips">${[['all','전체'],['on','세차중'],['new','신규'],['pause','일시정지'],['stop','정지'],['soon','재개 임박'],['move','이관중'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k==='pause'?'pz':k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
-  <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}<span class="grow"></span>
+  <div class="selbar"${S.cmMode==='set'?' style="display:none"':''}><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}<span class="grow"></span>
     <button class="btn2 sm" data-act="cmSet" data-s="세차중" ${n?'':'disabled'}>세차중으로</button>
     <button class="btn2 sm st-pz" data-act="cmPause" data-k="일시정지" ${n?'':'disabled'}>일시정지</button>
     <button class="btn2 sm st-stop" data-act="cmPause" data-k="정지" ${n?'':'disabled'}>정지</button>
     <button class="btn2 sm st-move" data-act="cmSet" data-s="이관중" ${n?'':'disabled'}>이관중</button>
     <button class="btn2 sm st-cancel" data-act="cmSet" data-s="해지" ${n?'':'disabled'}>해지</button>
     <button class="btn sm danger" data-act="cmTrash" ${n?'':'disabled'}>🗑 삭제</button></div>
-  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="cmSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th>${cols.map(c=>`<th>${esc(colLabel('cmgr',c[0]))}</th>`).join('')}</tr></thead><tbody>
+  ${S.cmMode==='set'?custSetTable(list,`<div class="empty">${S.cmQ||nF||S.cmSt!=='all'?'조건에 맞는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`):list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="cmSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th>${cols.map(c=>`<th>${esc(colLabel('cmgr',c[0]))}</th>`).join('')}</tr></thead><tbody>
     ${rowsG.map(({c,kind,g,n,shown})=>{const nn=S.noteCnt[c.id]||{total:0,starred:0}, open=S.cmOpen.includes(c.id), st=cmState(c), sel=S.cmSel.includes(c.id), gx=kind==='head'&&gOpen.includes(g);
       return `<tr class="cm-row ${st.cls}${open?' open':''}${sel?' picked':''}${kind==='sub'?' grp-sub':''}${kind==='head'?' grp-head':''}"><td class="ck"><input type="checkbox" data-cmsel="${c.id}" ${sel?'checked':''} aria-label="${esc(c.car_number||'')} 선택"></td>${cols.map(col=>col[2](c,{kind,g,n,shown,st,gx,open,nn})).join('')}</tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box">${notesPanel(c)}</div></td></tr>`:''}`;}).join('')}
@@ -2074,7 +2072,7 @@ function renderMain(){
   } else if(!S.me||S.me.status!=='승인'||!['admin','master'].includes(S.me.role)){
     R.innerHTML=`<div class="login"><div class="card"><h2 class="h">관리자만 들어올 수 있어요</h2><p class="sub">관리자 계정으로 로그인해 주세요. 현장직원은 직원 앱을 이용해 주세요.</p><div class="row"><a class="btn2" href="/field">직원 앱으로</a><button class="btn2" data-act="logout">로그아웃</button></div></div></div>`;
   } else {
-    const views={today:todayView,req:reqView,live:liveView,field:fieldView,round:roundView,cmgr:cmgrView,coll:collView,acc:accView,jobs:jobsView,slots:slotsView,cust:custView,notice:noticeView};
+    const views={today:todayView,req:reqView,live:liveView,field:fieldView,round:roundView,cmgr:cmgrView,coll:collView,acc:accView,jobs:jobsView,slots:slotsView,notice:noticeView};
     R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div>
       ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<button class="tl" data-act="push-on" aria-label="휴대폰 알림" style="${pushState==='on'?'color:var(--gold-2)':''}">${ic('bell',14)}<span${pushState==='on'?' class="lbl"':''}>${pushState==='on'?'알림 켜짐':'알림 켜기'}</span></button><a href="/" aria-label="영업 CRM">${ic('arrow',14)}<span class="lbl">영업 CRM</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
     <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${tabsView().map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}${k==='today'&&S.cntTodo?`<span class="cnt">${S.cntTodo}</span>`:''}</button>`).join('')}<button type="button" class="tab-set" data-act="tabSet" title="메뉴 순서 · 숨기기 (나만 적용)" aria-label="메뉴 순서 바꾸기">⚙</button></div></nav>
@@ -2138,6 +2136,7 @@ document.addEventListener('click',async e=>{
     case 'amAll': { const k=t.dataset.k; S[k]=[...t.closest('.apt-multi').querySelectorAll('input[data-amk]')].map(i=>i.value); S.amOpen=k; render(); break; }
     case 'amNone': { const k=t.dataset.k; S[k]=[]; S.amOpen=k; render(); break; }
     case 'cmSt': S.cmSt=t.dataset.f; render(); break;
+    case 'cmMode': S.cmMode=t.dataset.f==='set'?'set':'list'; render(); break;
     case 'collTab': S.collTab=t.dataset.f; S.collSel=[]; render(); break;
     case 'collClear': S.collQ=''; S.collQin=''; S.collApt=''; render(); break;
     case 'cfToggle': S.cfOpen=!(S.cfOpen===undefined?cfOn():S.cfOpen); render(); break;
@@ -2547,7 +2546,6 @@ document.addEventListener('click',async e=>{
       const bad=Object.entries(d).find(([k,v])=>!/^\d[\d,]*$/.test(String(v).trim())); if(bad){ toast(`${bad[0]} 금액을 숫자로 적어 주세요.`,true); break; }
       ask('실내세차 기본 금액을 바꿀까요?',Object.entries(d).map(([k,v])=>`${k}: ${Number(String(v).replace(/\D/g,'')).toLocaleString('ko-KR')}원`).join('\n')+'\n\n계약 실내 요금이 없는 고객의 실내세차와 고객 앱 안내 금액이 바뀌어요. 이미 입금 확인한 달은 그대로예요.','저장',
         ()=>act(async()=>{ const n=await q(db.rpc('set_interior_prices',{p_prices:d})); S.ipDraft=null; toast(`기본 금액을 저장했어요 (${n||0}개 바뀜).`); },null)); break; }
-    case 'capt': S.custApt=t.dataset.a; render(); break;
     case 'save-cust': {
       const tr=t.closest('tr'), get=f=>{const el=tr.querySelector(`[data-f="${f}"]`);return el?el.value:'';};
       const pl=Number(get('wash_plan'))||0, need=PLAN_DAYS[pl], rdays=sortWd([...tr.querySelectorAll('[data-rwd]:checked')].map(x=>Number(x.dataset.rwd)));
@@ -2710,7 +2708,7 @@ document.addEventListener('input',e=>{ if(e.target.dataset&&e.target.dataset.svf
   if(e.target.id==='rdTplIn'){ S.rdTplDraft=e.target.value; const pv=$('#rdPrev'); const r=(S.rounds||[]).find(x=>x.customer_id===S.rdSel[0]); if(pv&&r) pv.textContent=rdFill(S.rdTplDraft,r); if(S.dialog&&S.rdRows) S.dialog.extra=rdNoticeExtra(S.rdRows); return; }
   if(e.target.id==='rdTitle'){ S.rdTitle=e.target.value; return; }
   if(e.target.id&&e.target.id.startsWith('frr-')){ S.frReply[Number(e.target.id.slice(4))]=e.target.value; return; }
-  if(e.target.id==='custQ'){ S.custQ=e.target.value; render(); }
+
   if(e.target.id==='reqQ'){ S.reqQ=e.target.value; }
   if(e.target.id==='cmQ'){ S.cmQin=e.target.value; }
   if(e.target.id==='nm-body'){ S.nmBody=e.target.value; }
@@ -2758,9 +2756,9 @@ async function start(){
   S.session=data.session; S.ready=true;
   // 앱을 새로 열면 '오늘(공지·할 일)'부터 보여줘요. 링크(#탭)로 들어오거나 새로고침하면 그 탭 그대로예요.
   { const h=(location.hash||'').slice(1);
-    if(TAB_KEYS.includes(h)){ S.tab=h; S.fromHash=true; } else S.tab='today'; }
+    if(h==='cust'){ S.tab='cmgr'; S.cmMode='set'; S.fromHash=true; } else if(TAB_KEYS.includes(h)){ S.tab=h; S.fromHash=true; } else S.tab='today'; }
   // 주소 끝(#cmgr 등)만 바꿔도 그 메뉴로 이동
-  window.addEventListener('hashchange',async()=>{ const h=(location.hash||'').slice(1); if(TAB_KEYS.includes(h)&&h!==S.tab&&S.me){ setTab(h); render(); await loadTab(); } });
+  window.addEventListener('hashchange',async()=>{ const h=(location.hash||'').slice(1); if((TAB_KEYS.includes(h)||h==='cust')&&h!==S.tab&&S.me){ setTab(h); render(); await loadTab(); } });
   if(S.session) await start(); else render();
   // 실시간 세차 현황 · 현장전달: 30초마다 자동 새로고침 (입력 중이거나 창이 숨겨져 있으면 건너뜀)
   let tick=0;
