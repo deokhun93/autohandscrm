@@ -53,7 +53,7 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .job{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
 .job.picked{outline:2px solid var(--gold)}
 .car{font-family:var(--f-en);font-weight:800;font-size:18px;letter-spacing:.02em}
-.tag{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--gold-soft);color:#6B5418;white-space:nowrap}
+.tag{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--gold-soft);color:#6B5418;white-space:nowrap}.tag.svc{background:#E8F0FE;color:#1D3A6E}
 .pill{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;white-space:nowrap}
 .pill.대기{background:var(--wait);color:#6B5418}.pill.완료{background:var(--ok);color:var(--ok-ink)}.pill.미작업{background:var(--skip);color:#555}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:14px}.kv dt{color:var(--sub)}.kv dd{margin:0;font-weight:500;display:flex;align-items:center;gap:6px}
@@ -297,7 +297,7 @@ function jobCard2(j){
   const kind=io?tr('실내만','Interior only'):j.interior?tr('외부 + 실내','Exterior + Interior'):tr('외부만','Exterior only');
   return `<article class="job ${picked?'picked':''}">
     <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)}"><span class="box">${ic('check')}</span></label>
-      <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span><span class="tag">${kind}</span>${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')} · ${tr('원래','from')} ${esc(kdate(j.moved_from))}</span>`:''}</div></div>
+      <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span><span class="tag">${kind}</span>${j.svc_kind?`<span class="tag svc">${j.svc_kind==='AS'?'AS':tr('서비스','Service')} · ${tr('추가 세차 (수당 지급)','Extra wash (paid)')}</span>`:''}${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')} · ${tr('원래','from')} ${esc(kdate(j.moved_from))}</span>`:''}</div></div>
     ${carPhoto(j)}
     <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
     ${carNotes(j)}
@@ -349,7 +349,7 @@ function jobCardOld(j){
   if(j.status==='미작업') act=`<button class="link" data-act="undo" data-id="${j.id}">${ic('undo',14)}${tr('미작업 취소','Undo')}</button><span class="sub">${tr('미작업으로 보고됨','Reported as not done')}</span>`;
   return `<article class="job ${picked?'picked':''}">
     <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)}"><span class="box">${ic('check')}</span></label>
-      <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span>${j.interior?`<span class="tag">${tr('실내세차','Interior')}</span>`:''}${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')}</span>`:''}</div>
+      <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span>${j.interior?`<span class="tag">${tr('실내세차','Interior')}</span>`:''}${j.svc_kind?`<span class="tag svc">${j.svc_kind==='AS'?'AS':tr('서비스','Service')} · ${tr('추가 세차 (수당 지급)','Extra wash (paid)')}</span>`:''}${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')}</span>`:''}</div>
       <span class="pill ${j.status}">${j.status==='대기'?tr('세차대기','Waiting'):j.status==='완료'?tr('세차완료','Done'):tr('미작업','Not done')}</span></div>
     <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
     ${carNotes(j)}
