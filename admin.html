@@ -1458,7 +1458,7 @@ function collMonthPanel(){
       ${d.sum.map(r=>`<tr><td><button class="link" data-act="cmApt" data-a="${esc(r.complex)}" title="이 아파트 명단 보기">${esc(r.complex)}</button></td><td>${r.members}명</td><td class="nowrap"><b>${won0(r.billed)}</b></td><td class="nowrap" style="color:#1F5136;font-weight:800">${won0(r.paid)}</td><td class="nowrap" style="color:var(--red);font-weight:800">${won0(r.unpaid)}</td><td class="nowrap">${r.done_count} / ${r.partial_count} / ${r.open_count}</td><td class="nowrap sub">${r.adjusted_count?`${r.adjusted_count}건 (${r.adjust_sum>0?'+':''}${Number(r.adjust_sum).toLocaleString('ko-KR')}원)`:'-'}</td></tr>`).join('')}
       <tr style="font-weight:800"><td>전체</td><td>${T.members}명</td><td>${won0(T.billed)}</td><td style="color:#1F5136">${won0(T.paid)}</td><td style="color:var(--red)">${won0(T.unpaid)}</td><td>${T.done} / ${T.part} / ${T.open}</td><td class="sub">${T.adj?`${T.adj}건`:'-'}</td></tr></tbody></table></div>`:'<p class="sub">이 달 청구가 없어요.</p>');
   return `<details class="cm-box" open><summary>📊 월별 수금 현황 <span class="sub" style="font-weight:600">· 청구 달 기준${scopeTag()}</span></summary>
-    <div class="row" style="margin-top:8px"><div class="month-nav"><button class="btn2 sm" data-act="cmMonth" data-d="-1" aria-label="이전 달">◀</button><b>${title}</b><button class="btn2 sm" data-act="cmMonth" data-d="1" ${S.cmMonth>=0?'disabled':''} aria-label="다음 달">▶</button></div>${S.cmMonth?`<button class="link" data-act="cmThis">이번 달로</button>`:''}<span class="grow"></span><button class="btn2 sm" data-act="cmExport">📤 이 달 수금 현황 엑셀</button></div>
+    <div class="row" style="margin-top:8px"><div class="month-nav"><button class="btn2 sm" data-act="cmMonth" data-d="-1" aria-label="이전 달">◀</button><b>${title}</b><button class="btn2 sm" data-act="cmMonth" data-d="1" ${S.cmMonth>=0?'disabled':''} aria-label="다음 달">▶</button></div>${S.cmMonth?`<button class="link" data-act="cmThis">이번 달로</button>`:''}<span class="grow"></span><button class="btn2 sm" data-act="cmExport">📤 이 달 수금 현황 엑셀</button><button class="btn2 sm" data-act="ledgerExport" title="최근 4개월을 수금장부 양식으로 받아요">📒 수금장부 엑셀</button></div>
     ${d.err?`<p class="note" style="color:var(--red)">${esc(d.err)}</p>`:''}
     <div class="cm-sum"><div class="a"><span>${md.getMonth()+1}월 받을 돈</span><b>${won0(T.billed)}</b><small>${T.members}명${T.adj?` · 금액 조정 ${T.adj}건`:''}</small></div>
       <div class="b"><span>입금받은 돈</span><b>${won0(T.paid)}</b><small>수금완료 ${T.done}명${T.part?` · 일부 입금 ${T.part}명`:''}</small></div>
@@ -1855,6 +1855,73 @@ async function rdScheduleExport(){
   a.download=`오토핸즈_스케줄표_${Y}${pad(M+1)}${S.rdApts.length===1?'_'+S.rdApts[0]:''}.xlsx`; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
   toast(`${Object.keys(groups).length}개 아파트 · ${base.length}대를 스케줄표로 받았어요.`); }
 
+/* ---------- 수금관리 → 수금장부 양식 (최근 4개월 · 최신 달부터) ---------- */
+const LG_MONTHS=4;
+const lgPlan=s=>{ const m=String(s||'').match(/(\d+)/); return m?'월'+m[1]:(s||''); };
+const lgStatus=s=>s==='세차중'?'세':s==='일시정지'?'정지':(s||'');
+const lgKind=m=>m==='세금계산서'?'계':(m?ML(m):'');
+async function ledgerExport(){
+  const md=cmMonthDate(), to=keyOf(md);
+  const mem=(S.coll||[]).filter(r=>inScope(r.complex)&&(!S.collApt||r.complex===S.collApt));
+  if(!mem.length){ toast('엑셀로 받을 고객이 없어요.',true); return; }
+  let rows;
+  try{ rows=await q(db.rpc('list_collection_ledger',{p_month:to,p_months:LG_MONTHS})); }
+  catch(e){ toast(/list_collection_ledger|schema cache|does not exist/.test(String(e&&e.message||e))?'59번 SQL을 먼저 실행해 주세요.':friendly(e),true); return; }
+  const E=await loadExcelJS();
+  const months=[]; for(let i=0;i<LG_MONTHS;i++){ const d=new Date(md.getFullYear(),md.getMonth()-i,1); months.push(d); }   // 최신 달부터
+  const by={}; (rows||[]).forEach(b=>{ (by[b.member_id]=by[b.member_id]||{})[String(b.bill_month).slice(0,7)]=b; });
+  const mk=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}`, prevK=d=>mk(new Date(d.getFullYear(),d.getMonth()-1,1));
+  const list=mem.filter(r=>r.wash_status!=='해지'||months.some(d=>(by[r.id]||{})[mk(d)]))
+    .sort((a,b)=>String(a.complex||'').localeCompare(String(b.complex||''),'ko')||String(a.unit||'').localeCompare(String(b.unit||''),'ko',{numeric:true}));
+  const split=b=>{ if(!b||!b.remaining) return [0,0]; const e=Math.min(b.remaining,b.ext_amount||0); return [e,b.remaining-e]; };   // 남은 돈은 외부부터 채워요
+  const wb=new E.Workbook(), ws=wb.addWorksheet('수금장부',{views:[{state:'frozen',xSplit:5,ySplit:5,zoomScale:85}]}), F='맑은 고딕';
+  const fill=a=>({type:'pattern',pattern:'solid',fgColor:{argb:a}}), th={style:'thin',color:{argb:'FFBFBFBF'}}, B={top:th,bottom:th,left:th,right:th}, C={horizontal:'center',vertical:'middle',wrapText:true};
+  const FIX=[['NO',5],['세차여부',6],['아파트명',13],['동호수',10],['차량번호',11],['차종',10],['색',5],['요일',8],['회차',6],['이름/예금주',13],['연락처',16],['비고',18],['외부금액',10],['내부',10],['결제',14],['결제종류',8],['단체',6]];
+  const MB=['체크','입금일','내부','외부','내부','외부','내부','당월\n미납','총\n미납'], MW=[5,12,5,9,9,10,9,10,10], NF=FIX.length, BW=MB.length+1;
+  FIX.forEach(([,w],i)=>ws.getColumn(i+1).width=w);
+  months.forEach((_,m)=>{ MW.forEach((w,i)=>ws.getColumn(NF+1+m*BW+i).width=w); ws.getColumn(NF+1+m*BW+MB.length).width=1.5; });
+  const put=(r,c,v,o={})=>{ const x=ws.getCell(r,c); if(v!==''&&v!=null) x.value=v; x.alignment=o.al||C; x.border=B; x.font={name:F,size:o.sz||10,bold:!!o.b,color:{argb:o.fc||'FF000000'}}; if(o.bg) x.fill=fill(o.bg); if(o.nf) x.numFmt=o.nf; return x; };
+  const NUM='#,##0;-#,##0;""';
+  ws.mergeCells(1,1,1,NF); put(1,1,`오토핸즈 수금장부  ·  ${months[LG_MONTHS-1].getMonth()+1}월 ~ ${md.getFullYear()}년 ${md.getMonth()+1}월${S.collApt?'  ·  '+S.collApt:''}${scopeOn()?'  ·  내 담당 아파트':''}`,{sz:14,b:true,al:{horizontal:'left',vertical:'middle'}}); ws.getRow(1).height=28;
+  ws.mergeCells(2,1,2,NF); put(2,1,`세차중 ${list.filter(r=>r.wash_status==='세차중').length}대  ·  외부금액 합계 ${list.filter(r=>r.wash_status==='세차중').reduce((a,r)=>a+(r.fee||0),0).toLocaleString('ko-KR')}원`,{al:{horizontal:'right',vertical:'middle'},fc:'FF555555'});
+  months.forEach((d,m)=>{ const c0=NF+1+m*BW, bs=list.map(r=>(by[r.id]||{})[mk(d)]).filter(b=>b&&b.total>0);
+    const billed=bs.reduce((a,b)=>a+b.total,0), un=bs.reduce((a,b)=>a+b.remaining,0), done=bs.filter(b=>b.done).length;
+    ws.mergeCells(2,c0,2,c0+MB.length-1);
+    put(2,c0,billed?`수금률 ${Math.round((billed-un)/billed*100)}% (금액) · ${Math.round(done/bs.length*100)}% (인원)   청구 ${billed.toLocaleString('ko-KR')} · 미납 ${un.toLocaleString('ko-KR')}`:'청구 없음',{b:true,fc:'FFFFFFFF',bg:'FF0B3D6B'}); });
+  ws.getRow(2).height=24;
+  FIX.forEach(([h],i)=>{ ws.mergeCells(3,i+1,5,i+1); put(3,i+1,h,{b:true,bg:'FFD9EAD3'}); });
+  months.forEach((d,m)=>{ const c0=NF+1+m*BW;
+    ws.mergeCells(3,c0,5,c0); put(3,c0,'체크',{b:true,bg:'FFC9DAF8'});
+    ws.mergeCells(3,c0+1,3,c0+2); put(3,c0+1,`${d.getMonth()+1}월`,{b:true,sz:12,bg:'FFC9DAF8'}); put(3,c0+2,'',{bg:'FFC9DAF8'});
+    ws.mergeCells(3,c0+3,3,c0+6); put(3,c0+3,'',{bg:'FFD0E0E3'});
+    ws.mergeCells(4,c0+1,5,c0+1); put(4,c0+1,'입금일',{b:true,bg:'FFC9DAF8'});
+    ws.mergeCells(4,c0+2,5,c0+2); put(4,c0+2,'내부',{b:true,fc:'FF4A86E8',bg:'FFC9DAF8'});
+    ws.mergeCells(4,c0+3,4,c0+4); put(4,c0+3,'전달',{b:true,bg:'FFD0E0E3'}); ws.mergeCells(4,c0+5,4,c0+6); put(4,c0+5,'당월',{b:true,bg:'FFD0E0E3'});
+    ['외부','내부','외부','내부'].forEach((h,i)=>put(5,c0+3+i,h,{b:true,bg:'FFD0E0E3'}));
+    ws.mergeCells(3,c0+7,5,c0+7); put(3,c0+7,'당월\n미납',{b:true,fc:'FFFFFFFF',bg:'FF4A86E8'});
+    ws.mergeCells(3,c0+8,5,c0+8); put(3,c0+8,'총\n미납',{b:true,fc:'FFFFFFFF',bg:'FF666666'}); });
+  [3,4,5].forEach(r=>ws.getRow(r).height=r===3?22:18);
+  list.forEach((r,n)=>{ const rr=6+n, pd=(S.pdef||{})[r.id]||{}, mi=(S.mint||{})[r.id]||{}, inv=pd.pay_method==='세금계산서', bg=inv?'FFC9DAF8':undefined;
+    const fx=[n+1,lgStatus(r.wash_status),r.complex||'',r.unit||'',r.car_number||'',r.car_model||'',r.car_color||'',r.wash_weekday||'',lgPlan(r.wash_plan),
+      r.payer_name&&r.payer_name!==r.name?`${r.name||''}\n${r.payer_name}`:(r.name||''),r.phone||'',[pd.pay_note,inv?'계산서 발행':''].filter(Boolean).join(' · '),r.fee??'',mi.plan_label||(mi.interior_fee?mi.interior_fee:''),pd.pay_account||'',lgKind(pd.pay_method),''];
+    fx.forEach((v,i)=>put(rr,i+1,v,{b:i===2||i===4,bg:i===1?'FFFFE599':bg,nf:i===12||i===13?NUM:undefined,al:i===11?{vertical:'middle',wrapText:true}:C,sz:i===11?9:10}));
+    months.forEach((d,m)=>{ const c0=NF+1+m*BW, b=(by[r.id]||{})[mk(d)], pv=(by[r.id]||{})[prevK(d)], [pe,pi]=split(pv);
+      const day=b?(b.paid_days||'')+(b.paid&&!b.done?` (일부 ${Math.round(b.paid/10000*10)/10}만)`:'')+(inv&&b.paid_days?' 계산서':''):'';
+      put(rr,c0,b&&b.total>0?(b.done?'☑':'☐'):'',{sz:14,fc:'FFE00000',bg});
+      put(rr,c0+1,b&&b.paused?'정지':day,{b:true,bg,sz:9});
+      put(rr,c0+2,b&&b.int_count?b.int_count:'',{b:true,bg});
+      put(rr,c0+3,pe,{nf:NUM,bg}); put(rr,c0+4,pi,{nf:NUM,bg});
+      put(rr,c0+5,b?(b.paused?0:b.ext_amount):'',{b:true,nf:NUM,bg}); put(rr,c0+6,b?b.int_amount:'',{b:true,nf:NUM,bg});
+      put(rr,c0+7,b?b.remaining:'',{b:true,nf:NUM,fc:'FFFFFFFF',bg:'FF4A86E8'});
+      put(rr,c0+8,b?(b.unpaid_before||0)+(b.remaining||0):'',{b:true,nf:NUM,fc:'FFFFFFFF',bg:'FF666666'}); });
+    ws.getRow(rr).height=30; });
+  ws.autoFilter={from:{row:5,column:1},to:{row:5+list.length,column:NF}};
+  ws.pageSetup={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'3:5'};
+  const buf=await wb.xlsx.writeBuffer(), a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=`오토핸즈_수금장부_${md.getFullYear()}${pad(md.getMonth()+1)}${S.collApt?'_'+S.collApt:''}.xlsx`; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);
+  toast(`${list.length}명을 수금장부로 받았어요.`); }
+
 /* ---------- 엑셀 ---------- */
 let xlsxLoading=null;
 function loadXLSX(){ if(window.XLSX) return Promise.resolve(window.XLSX); if(xlsxLoading) return xlsxLoading;
@@ -2145,6 +2212,7 @@ document.addEventListener('click',async e=>{
     case 'cmView': S.cmView=t.dataset.f; render(); break;
     case 'cmApt': S.collApt=t.dataset.a; S.collTab='전체'; render(); setTimeout(()=>{ const el=document.querySelector('.coll-tbl'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); },50); break;
     case 'cmExport': await cmExport(); break;
+    case 'ledgerExport': try{ await ledgerExport(); }catch(e){ toast(friendly(e),true); } break;
     case 'collUnpay': { const mid=Number(t.dataset.m); ask('입금 확인을 취소할까요?','이 달이 다시 미입금으로 돌아가요.','확인',()=>act(()=>q(db.rpc('unpay_collection_bill',{p_bill_id:id})),'입금 확인을 취소했어요.',async()=>{ await loadCBills(mid); })); break; }
     case 'collPayMonth': { const ids=[...S.collSel]; if(!ids.length) break; S.payDate=keyOf(new Date()); S.payUseDef=true;
       const withDef=ids.filter(x=>pdefOf(x)&&pdefOf(x).pay_method).length;
