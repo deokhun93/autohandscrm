@@ -61,6 +61,7 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .chip-red[aria-pressed="true"]{background:#C62828;border-color:#C62828;color:#fff}
 .req-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.req-tools select{min-width:130px}.req-tools input{min-width:200px}.req-tools label.auto input{min-width:0;flex:0 0 auto}
 .req .who{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}.req .apt{font-weight:900;font-size:16px}
+.req.is-sameday{border:2.5px solid #C62828!important}.p-sameday{background:#FCEAEA;color:#9B1C1C;border:1px solid #C62828}
 .req.is-urgent{border-color:#E8A9A9;box-shadow:inset 4px 0 0 #C62828,var(--shadow)}
 .req.is-done{background:#EEECE6;box-shadow:none}.req.is-done .msg,.req.is-done .who{text-decoration:line-through;text-decoration-color:#9A9384;color:#7C7768}.req.is-done .msg{background:#E4E1D8}
 .flags{display:flex;gap:8px;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:10px}
@@ -989,7 +990,8 @@ function reqCard(r){
   let act='';
   if(r.status==='접수'||r.status==='보류'){
     if(r.req_type==='interior') act=`<button class="link" data-act="req" data-id="${r.id}" data-a="hold">보류</button><button class="btn" data-act="req" data-id="${r.id}" data-a="approve">${ic('check')}승인</button>`;
-    if(r.req_type==='schedule') act=`<button class="link" data-act="req" data-id="${r.id}" data-a="hold">보류</button><button class="btn" data-act="req" data-id="${r.id}" data-a="approve">${ic('check')}일정 적용</button>`;
+    if(r.req_type==='schedule') act=/^\[당일 변경 · 미정\]/.test(r.message||'')?`<span class="note">오늘 세차는 빠졌어요. 다시 시작할 날은 [회차 현황] 달력에서 넣고 [완료]를 체크해 주세요.</span>`
+      :`<button class="link" data-act="req" data-id="${r.id}" data-a="hold">보류</button><button class="btn" data-act="req" data-id="${r.id}" data-a="approve">${ic('check')}일정 적용</button>`;
   }
   const where=[r.complex,r.unit].filter(Boolean).join(' ')||'아파트 미입력';
   const editing=S.memoEdit===r.id;
@@ -1005,8 +1007,9 @@ function reqCard(r){
       <div class="row"><span class="grow note">보내면 고객 앱에 '매니저 답변이 왔어요' 알림이 가요.</span><button class="link" data-act="replyCancel">취소</button><button class="btn" data-act="replySend" data-id="${r.id}">${r.reply?'고친 답변 보내기':'답변 보내기'}</button></div></div>`
     :r.reply?`<div class="reply-box"><b>💬 고객에게 보낸 답변</b><p>${esc(r.reply)}</p><div class="row">${byName(r.reply_name,r.reply_at)}<span class="grow"></span><button class="link" data-act="replyEdit" data-id="${r.id}">답변 고치기</button></div></div>`
     :`<button class="btn2 sm reply-add" data-act="replyEdit" data-id="${r.id}">💬 고객에게 답변 보내기</button>`;
-  return `<article class="card req${r.urgent?' is-urgent':''}${r.done_at?' is-done':''}${S.sel.includes(r.id)?' is-sel':''}">
-    <div class="row"><label class="sel"><input type="checkbox" data-rsel="${r.id}" ${S.sel.includes(r.id)?'checked':''} aria-label="선택 (휴지통으로 보낼 요청)"></label><span class="pill t-${r.req_type}">${RT[r.req_type]||r.req_type}</span>${r.urgent?'<span class="pill p-urgent">긴급</span>':''}${r.done_at?'<span class="pill p-ok">완료</span>':''}<span class="grow"></span><span class="sub" title="고객 앱에 보이는 상태">고객 화면: ${statusPill(r.status,r.req_type)}</span></div>
+  const sd=/^\[당일 변경/.test(r.message||''), sdOw=sd?ownersOf(r.complex):[];
+  return `<article class="card req${r.urgent?' is-urgent':''}${sd?' is-sameday':''}${r.done_at?' is-done':''}${S.sel.includes(r.id)?' is-sel':''}">
+    <div class="row"><label class="sel"><input type="checkbox" data-rsel="${r.id}" ${S.sel.includes(r.id)?'checked':''} aria-label="선택 (휴지통으로 보낼 요청)"></label><span class="pill t-${r.req_type}">${RT[r.req_type]||r.req_type}</span>${r.urgent?'<span class="pill p-urgent">긴급</span>':''}${sd?`<span class="pill p-sameday">📅 당일날짜 변경신청${/미정\]/.test(r.message)?' · 미정':''}</span>${sdOw.length?`<span class="sub">담당 총무 <b>${esc(sdOw.join(', '))}</b></span>`:''}`:''}${r.done_at?'<span class="pill p-ok">완료</span>':''}<span class="grow"></span><span class="sub" title="고객 앱에 보이는 상태">고객 화면: ${statusPill(r.status,r.req_type)}</span></div>
     <div class="who"><span class="apt">${esc(where)}</span><span class="car">${esc(r.car_number||'-')}</span></div>
     <p class="sub" style="margin-top:-6px">${esc(r.customer_name||'')}${r.car_model?' · '+esc(r.car_model):''}${r.wash_plan?' · 월 '+r.wash_plan+'회':''}</p>
     ${phoneLine(r.phone,'r'+r.id)}
@@ -1908,12 +1911,22 @@ async function rdScheduleExport(){
     (r.data||[]).forEach(c=>info[c.id]=c); }
   const dOf=k=>{ const [y,m,d]=k.split('-').map(Number); return new Date(y,m-1,d); };
   // 부재 등으로 다른 날 한 차량은 원래 날짜 칸에 실제로 한 날짜를 적어요 (10번) — moved_from이 이번 달이면 그 날짜 칸
-  const mk=`${Y}-${pad(M+1)}`, slotK=j=>j.moved_from&&String(j.moved_from).slice(0,7)===mk?String(j.moved_from).slice(0,10):j.wash_date, md_=k=>{ const d=dOf(k); return `${d.getMonth()+1}/${d.getDate()}`; };
-  const cars=base.map(r=>{ const c=info[r.customer_id]||{}, all=((S.mjobs||{})[r.customer_id]||[]).filter(j=>!j.svc_kind), jobs=all.filter(j=>!j.interior_only), wds=new Set();
+  const mk=`${Y}-${pad(M+1)}`, slotK=j=>j._slot?j._slot:j.moved_from&&String(j.moved_from).slice(0,7)===mk?String(j.moved_from).slice(0,10):j.wash_date, md_=k=>{ const d=dOf(k); return `${d.getMonth()+1}/${d.getDate()}`; };
+  const cars=base.map(r=>{ const c=info[r.customer_id]||{}, all=((S.mjobs||{})[r.customer_id]||[]).filter(j=>!j.svc_kind), wds=new Set();
+    const reg=new Set(((c.wash_days&&c.wash_days.length)?c.wash_days:(c.wash_weekday!=null?[c.wash_weekday]:[])).map(Number)), pick=!!PICK_N[r.wash_plan];
+    // 원래 요일에 못 하고 다른 날 한 세차 (회차 달력에서 다른 날에 '완료'로 넣은 경우 포함) → 원래 요일 칸에 ○ (3번)
+    //   지정 요일이 아닌 날 완료 + 그 전 6일 안의 지정 요일에 완료가 없으면, 그 지정 요일 날짜의 세차로 봐요
+    let jobs=all.filter(j=>!j.interior_only).map(j=>({...j}));
+    if(reg.size&&!pick) jobs.filter(j=>j.status==='완료'&&slotK(j)===j.wash_date&&!reg.has(dOf(j.wash_date).getDay())).forEach(j=>{
+      for(let b=1;b<=6;b++){ const d=dOf(j.wash_date); d.setDate(d.getDate()-b); const k=keyOf(d);
+        if(k.slice(0,7)!==mk||!reg.has(d.getDay())) continue;
+        if(jobs.some(x=>x!==j&&slotK(x)===k&&x.status==='완료')) break;
+        j._slot=k; jobs=jobs.filter(x=>x===j||slotK(x)!==k||x.status==='완료'); break; } });
     jobs.forEach(j=>wds.add(dOf(slotK(j)).getDay()));
-    if(!jobs.length) ((c.wash_days&&c.wash_days.length)?c.wash_days:(c.wash_weekday!=null?[c.wash_weekday]:[])).forEach(w=>wds.add(Number(w)));
+    if(!jobs.length) reg.forEach(w=>wds.add(w));
+    if(!wds.size&&pick) wds.add(0);   // 월 2회 · 3회인데 아직 날짜를 안 고른 차량도 빠지지 않게 (10번)
     const st=r.wash_status&&r.wash_status!=='세차중'?r.wash_status+(r.wash_status==='일시정지'&&c.pause_until?` ~${Number(c.pause_until.slice(5,7))}/${Number(c.pause_until.slice(8,10))}`:''):'';
-    return {r,c,jobs,ints:all.filter(j=>j.interior),wds:[...wds].sort(),st}; });
+    return {r,c,jobs,pick,ints:all.filter(j=>j.interior),wds:[...wds].sort(),st:st||(pick&&!jobs.length?'날짜 미정':'')}; });
   const wb=new E.Workbook(), used=new Set(), F='맑은 고딕';
   const fill=a=>({type:'pattern',pattern:'solid',fgColor:{argb:a}}), th={style:'thin'}, md2={style:'medium'}, C={horizontal:'center',vertical:'center',wrapText:true};
   const groups={}; cars.forEach(x=>{ const a=x.r.complex||'기타'; (groups[a]=groups[a]||[]).push(x); });
@@ -1939,10 +1952,12 @@ async function rdScheduleExport(){
         let vals=[k+1,'','','','','','','','','','','',''];
         if(x){ const wj=x.jobs.filter(j=>dOf(slotK(j)).getDay()===w), byDay={}; wj.forEach(j=>byDay[dOf(slotK(j)).getDate()]=j);
           const moved=j=>slotK(j)!==j.wash_date;
-          const mark=d=>{ const j=byDay[d]; return !j?'':j.status==='완료'?(moved(j)?md_(j.wash_date):'○'):j.status==='미작업'?'X':moved(j)?'→'+md_(j.wash_date):''; };
-          // 실내: 끝난 날짜를 적고, 아직이면 '예정' (실내만 하는 날은 그 차량의 첫 요일 칸에)
+          // 다른 날 한 세차도 원래 날짜 칸에 ○ (3번) · 월 2회 · 3회는 고른 날짜에 '예정' (10번)
+          const mark=d=>{ const j=byDay[d]; return !j?'':j.status==='완료'?'○':j.status==='미작업'?'X':moved(j)?'→'+md_(j.wash_date):x.pick?'예정':''; };
+          // 실내: 끝난 날짜를 적고, 미리 예약한 실내는 '(16일 예정)' (4번) · 실내만 하는 날은 그 차량의 첫 요일 칸에
           const iw=x.ints.filter(j=>j.interior_only?w===x.wds[0]:dOf(slotK(j)).getDay()===w);
-          const idone=iw.filter(j=>j.interior_done).map(j=>md_(j.wash_date)), inside=idone.length?idone.join('\n'):iw.length?'예정':'';
+          const idone=iw.filter(j=>j.interior_done).map(j=>md_(j.wash_date)), iplan=iw.filter(j=>!j.interior_done&&j.status!=='미작업'&&!j.interior_skip).map(j=>`(${dOf(j.wash_date).getDate()}일 예정)`);
+          const inside=[...idone,...iplan].join('\n');
           const dong=String(x.r.unit||'').match(/^\s*(\d+)/);
           vals=[k+1,x.r.car_number||'',x.r.car_model||'',x.wds.map(v=>SC_DAY[v]).join('·'),dong?dong[1]:(x.r.unit||''),x.c.car_color||'',
             ...[0,1,2,3,4].map(i=>dates[i]?mark(dates[i]):''),inside,x.st]; }
