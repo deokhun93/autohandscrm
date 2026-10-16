@@ -275,6 +275,8 @@ tr.round-full td{background:#F4FAF6}.rt-done{color:#1F5136;font-weight:800}.mont
 .sec-h{display:flex;align-items:center;gap:10px;margin:6px 0 0}.sec-h h2{margin:0;font-size:18px}
 @media(max-width:900px){.td-add{grid-template-columns:1fr 1fr}.td-add .full{grid-column:1/-1}}
 .pill.st-new{background:#DCE8FB;color:#1D3A6E}.pill.st-move{background:#EADCF7;color:#5B2E8C}
+.add-q-box{position:relative}.add-res{position:absolute;z-index:20;left:0;right:0;top:100%;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);max-height:320px;overflow:auto}.add-res:empty{display:none}.add-hit{display:block;width:100%;text-align:left;border:0;background:none;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line)}.add-hit:hover{background:var(--gold-soft)}
+.cm-row.is-new td{background:#E3EDFD}.cm-row.is-new td:first-child{box-shadow:inset 4px 0 0 #2F6FD6}
 .cm-row.is-move td{background:#F6EFFC}.chip.cst-new[aria-pressed="true"]{background:#1D3A6E;border-color:#1D3A6E;color:#fff}.chip.cst-move[aria-pressed="true"]{background:#6B3FA0;border-color:#6B3FA0;color:#fff}
 .btn2.st-move{color:#5B2E8C;border-color:#CDB4EA}
 .cm-box{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:12px 14px}.cm-box>summary{cursor:pointer;font-weight:800;font-size:15px}
@@ -1075,6 +1077,11 @@ const JB_COLS=[
   ['plan','정기권',j=>{const p=(j.customers||{}).wash_plan; return `<td class="nowrap">${p?`월 ${p}회`:'-'}</td>`;},0],
   ['donetime','완료 시각',j=>`<td class="nowrap sub">${j.done_at?'외부 '+when(j.done_at):''}${j.interior_done_at?`${j.done_at?'<br>':''}실내 ${when(j.interior_done_at)}`:''}${!j.done_at&&!j.interior_done_at?'-':''}</td>`,0],
 ];
+/* 세차 일정 · 차량 추가: 차량번호로 고객 찾기 (3회차 12번) — 숫자만 적어도 돼요 (예: 3456) */
+const carKey=v=>String(v||'').replace(/\s/g,'').toLowerCase();
+function addResHtml(){ const q=carKey(S.addQ); if(!q||S.addCid) return '';
+  const qd=q.replace(/\D/g,''), hit=S.customers.filter(c=>inScope(c.complex)&&(carKey(c.car_number).includes(q)||(qd.length>=3&&carKey(c.car_number).replace(/\D/g,'').includes(qd))||carKey(c.name).includes(q))).slice(0,8);
+  return hit.length?hit.map(c=>`<button type="button" class="add-hit" data-act="addPick" data-id="${c.id}"><b class="car">${esc(c.car_number||'-')}</b> <span class="sub">${esc([c.complex,c.unit].filter(Boolean).join(' '))} · ${esc(c.name||'')}</span></button>`).join(''):'<p class="sub" style="margin:6px 8px">맞는 차량이 없어요.</p>'; }
 /* 세차 일정 분류 (담당자 · 직원 · 아파트 · 상태) — 같은 줄은 '또는', 줄끼리는 '그리고' */
 const JF_GROUPS=[['mgr','담당자'],['staff','직원'],['apt','아파트'],['st','상태']];
 function jfVals(j){ const sn=id=>id?staffName(id):'(미배정)', st=[];
@@ -1103,7 +1110,7 @@ function jobsView(){
   ${S.carry?`<div class="carry-box"><label class="auto"><input type="checkbox" id="carryOn" ${S.carry.is_on?'checked':''}><span><b>못 한 차량 다음 근무일로 자동 넘기기</b></span></label><p class="note">대기로 남았거나 현장 사정(차량 없음 · 차량 잠김 · 우천 · 시간 부족)으로 미완료한 차량은 다음 날 낮 12시가 지나면 그 아파트의 다음 근무일로 옮겨져요. 패스(수리 · 여행 · 차량변경) · 고객 요청 취소 · 기타 사유는 넘기지 않아요. 넘어온 차량은 '↪ 못 한 차량'으로 보여요.${S.carry.is_on?'':' <b style="color:var(--red)">지금은 꺼져 있어요.</b>'}</p></div>`:''}
   ${S.cutoff?`<div class="carry-box cut-box"><div class="row" style="gap:8px;flex-wrap:wrap"><b>⏰ 고객 당일 일정 변경 마감</b><input type="time" class="inp" id="cutTime" value="${esc(S.cutoff)}" style="width:130px" aria-label="당일 변경 마감 시간"><button class="btn2 sm" data-act="cutSave">저장</button></div><p class="note">세차 당일, 이 시간 전에 고객이 앱에서 바꿀 날짜를 고르면 세차 일정에 바로 반영되고 관리자 · 현장 담당자에게 🚨 긴급 알림이 가요. 시간이 지나면 고객 앱에 '담당자에게 연락해 주세요'라고 안내해요.</p></div>`:''}
   <div class="summary"><div style="background:var(--gold-soft)"><b>${c(ext,j=>jExtSt(j)==='대기')} · ${c(ints,j=>jIntSt(j)==='대기')}</b><span>대기 (외부 · 실내)</span></div><div style="background:var(--ok)"><b>${c(ext,j=>jExtSt(j)==='완료')} · ${c(ints,j=>jIntSt(j)==='완료')}</b><span>완료 (외부 · 실내)</span></div><div style="background:var(--skip)"><b>${c(ext,j=>jExtSt(j)==='미완료')} · ${c(ints,j=>jIntSt(j)==='미완료')}</b><span>미완료 (외부 · 실내)</span></div><div style="background:var(--card);border:1px solid var(--line)"><b>${list.length}${list.length<all.length?` / ${all.length}`:''}</b><span>차량${c(list,j=>j.carried)?` · ↪ 넘어온 차량 ${c(list,j=>j.carried)}`:''}</span></div></div>
-  <div class="card"><div class="row"><b class="grow">차량 추가</b><select class="inp" id="add-cust" style="min-width:260px" aria-label="추가할 고객"><option value="">고객 고르기</option>${S.customers.filter(c=>inScope(c.complex)).map(c=>`<option value="${c.id}">${esc(c.complex)} ${esc(c.unit||'')} · ${esc(c.car_number||c.name)}</option>`).join('')}</select><button class="btn sm" data-act="add-job">추가</button></div></div>
+  <div class="card add-car"><div class="row"><b class="grow">차량 추가</b><div class="add-q-box"><input class="inp" id="add-q" style="min-width:260px" placeholder="🔎 차량번호로 찾기 (예: 3456)" autocomplete="off" aria-label="추가할 차량번호 검색" value="${esc(S.addQ||'')}"><input type="hidden" id="add-cust" value="${S.addCid||''}"><div class="add-res" id="add-res">${addResHtml()}</div></div><button class="btn sm" data-act="add-job">추가</button></div></div>
   ${S.jobs53===false?'<p class="note" style="color:var(--red)">⚠ 53번 SQL을 실행하면 외부 · 실내 직원 따로 배정 · 상태 · 사유를 쓸 수 있어요.</p>':''}
   ${jfPanel(all)}
   <div class="selbar"><b class="sub" style="color:var(--text)">${list.length}대</b><span class="grow"></span><button class="btn2 sm" data-act="xlJobs">📤 엑셀로 받기</button>${colBtn('jobs')}</div>
@@ -1291,9 +1298,11 @@ function cmState(c){
       :{k:'pause',label:`일시정지 · ${md?md+' 재개':'재개 미정'}${why}`,cls:'is-pz',pill:'st-pz',days};
   }
   if(st.wash_status==='이관중') return {k:'move',label:'이관중',cls:'is-move'};
-  // 신규: 계약일로부터 30일 이내 (자동)
-  if(c.contract_date){ const d=Math.round((new Date(keyOf(new Date())+'T00:00:00')-new Date(String(c.contract_date).slice(0,10)+'T00:00:00'))/86400000);
-    if(d>=0&&d<30) return {k:'new',label:`신규 · 계약 ${d+1}일째`,cls:''}; }
+  // 신규: 계약일(고객관리 등록일)부터 한 달 동안 줄을 파란색으로 (3회차 1번) · 예) 10/16 계약 → 11/15까지
+  if(c.contract_date){ const k0=String(c.contract_date).slice(0,10), t0=new Date(k0+'T00:00:00'), now=new Date(keyOf(new Date())+'T00:00:00');
+    const end=new Date(t0); end.setMonth(end.getMonth()+1); end.setDate(end.getDate()-1);
+    const d=Math.round((now-t0)/86400000);
+    if(d>=0&&now<=end) return {k:'new',label:`신규 · 계약 ${d+1}일째 (~${end.getMonth()+1}/${end.getDate()})`,cls:'is-new'}; }
   return {k:'on',label:'세차중',cls:''};
 }
 /* ---------- 실내세차 방식 (37 SQL) ---------- */
@@ -1435,7 +1444,7 @@ function cmgrView(){
     const mem=list.filter(x=>grpOf(x)===g), head=mem.find(x=>LG[x.id].is_primary)||mem[0];
     rowsG.push({c:head,kind:'head',g,n:LG[head.id].car_count,shown:mem.length});
     if(gOpen.includes(g)) mem.filter(x=>x!==head).forEach(x=>rowsG.push({c:x,kind:'sub',g})); }
-  return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.<br>신규 = 계약일로부터 30일 이내 (자동) · 이관중 = 관리자가 직접 표시 (세차 일정은 그대로)<br>일시정지(하늘색) = 짧게 쉼 (수리, 이번 주 패스 등) · 정지(노랑) = 한 달 이상 쉼 · 해지(회색) · 다시 시작할 날을 모르면 '미정'</p></div></div>
+  return `<div class="row"><div class="grow"><h1 class="h">고객관리</h1><p class="sub">계약 고객(차량)별 정보와 메모·처리이력이에요. 메모는 관리자만 보고 고객 앱에는 보이지 않아요. 고객 요청을 [완료]하면 그 차량 메모에 자동으로 남아요.<br>신규 = 계약일부터 한 달 동안 파란 줄 (자동) · 이관중 = 관리자가 직접 표시 (세차 일정은 그대로)<br>일시정지(하늘색) = 짧게 쉼 (수리, 이번 주 패스 등) · 정지(노랑) = 한 달 이상 쉼 · 해지(회색) · 다시 시작할 날을 모르면 '미정'</p></div></div>
   <div class="mini-tabs" role="tablist" aria-label="고객관리 보기">${[['list','📋 고객 목록 · 메모'],['set','⚙️ 세차 설정 (정기권 · 요일 · 담당직원)']].map(([k,l])=>`<button role="tab" class="mtab" aria-selected="${(S.cmMode||'list')===k}" data-act="cmMode" data-f="${k}">${l}</button>`).join('')}</div>
   ${S.cmMode==='set'?`<p class="note" style="margin:0">정기권·지정 요일·담당 현장직원을 모두 입력하고 [저장]하면, 지정 요일 날짜에 직원 앱에 자동으로 나타나요. 월 8회 · 12회는 매주 요일 2 · 3개, 월 2회(격주) · 월 3회는 [고객 목록]의 📅 날짜에서 달마다 직접 골라요. 아래 아파트 · 상태 · 검색 조건이 그대로 적용돼요.</p>${offdaysCard()}`:''}
   <div class="coll-tools">
@@ -2670,9 +2679,11 @@ document.addEventListener('click',async e=>{
       const html=()=>`<label class="field"><span>옮길 날짜</span><input type="date" class="inp" id="mvDate" value="${S.mv.date}" min="${keyOf(new Date())}"></label><p class="note">${esc(c.complex||'')} 휴무일인지 확인해 주세요. 고객에게 알림은 가지 않아요. 원래 날짜에는 다시 자동으로 생기지 않아요.</p>`;
       ask(`날짜 옮기기 · ${c.car_number||''}`,`${kdate(j.wash_date)} 일정을 다른 날로 옮겨요.`,'옮기기',()=>act(async()=>{ if(!S.mv.date){ toast('옮길 날짜를 골라 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
         await q(db.rpc('admin_move_job',{p_job_id:id,p_date:S.mv.date})); toast(`${kdate(S.mv.date)}로 옮겼어요.`); S.mv=null; },null),html()); break; }
+    case 'addPick': { const c=S.customers.find(x=>x.id===Number(t.dataset.id)); if(!c) break; S.addCid=c.id; S.addQ=`${c.car_number||''} · ${[c.complex,c.unit].filter(Boolean).join(' ')}`; render(); break; }
     case 'add-job': {
-      const cid=Number(($('#add-cust')||{}).value||0); if(!cid){toast('추가할 고객을 골라 주세요.',true);break;}
+      const cid=Number(($('#add-cust')||{}).value||0); if(!cid){toast('추가할 차량을 차량번호로 찾아 골라 주세요.',true);break;}
       const c=S.customers.find(x=>x.id===cid);
+      S.addCid=null; S.addQ='';
       await act(()=>q(db.from('wash_jobs').insert({customer_id:cid,wash_date:S.jobDay,staff_id:c&&c.field_staff_id||null,sort_order:999})),'추가했어요.'); break;
     }
     case 'del-job': ask('이 일정을 삭제할까요?','이 날 이 차량 일정을 지워요. 지운 일정은 자동으로 다시 생기지 않아요.','삭제',()=>act(()=>q(db.rpc('remove_wash_job',{p_id:id})),'삭제했어요. 이 날은 다시 자동으로 생기지 않아요.')); break;
@@ -2885,6 +2896,7 @@ document.addEventListener('input',e=>{ if(/^reply-\d+$/.test(e.target.id)){ S.re
   if(e.target.dataset&&e.target.dataset.ipc){ const k=e.target.dataset.ipc; S.ipDraft=S.ipDraft||{}; const r=(S.iprices||[]).find(x=>x.car_class===k)||{}; const v=e.target.value.trim(); if(String(r.price)===v.replace(/\D/g,'')&&v!=='') delete S.ipDraft[k]; else S.ipDraft[k]=v; const b=document.querySelector('[data-act=ipSave]'); if(b) b.disabled=!Object.keys(S.ipDraft).length; return; }
   if(/^nt(Title|Body)$/.test(e.target.id)){ ntRead(); return; }
   if(/^td(Title|Memo)$/.test(e.target.id)){ tdRead(); return; }
+  if(e.target.id==='add-q'){ S.addQ=e.target.value; S.addCid=null; const h=$('#add-cust'); if(h) h.value=''; const r=$('#add-res'); if(r) r.innerHTML=addResHtml(); return; }
   if(e.target.id==='rdQ'){ S.rdQ=e.target.value; const pos=e.target.selectionStart; render(); const el=$('#rdQ'); if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} } return; }
   if(e.target.id==='rdTplIn'){ S.rdTplDraft=e.target.value; const pv=$('#rdPrev'); const r=(S.rounds||[]).find(x=>x.customer_id===S.rdSel[0]); if(pv&&r) pv.textContent=rdFill(S.rdTplDraft,r); if(S.dialog&&S.rdRows) S.dialog.extra=rdNoticeExtra(S.rdRows); return; }
   if(e.target.id==='rdTitle'){ S.rdTitle=e.target.value; return; }
