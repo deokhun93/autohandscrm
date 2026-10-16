@@ -69,6 +69,10 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .int-check.on{background:var(--ok);border:1px solid #7DBE98}.int-check.on .box{background:#7DBE98;color:var(--ink);border-color:#7DBE98}
 .int-check:has(input:focus-visible){outline:2px solid var(--gold)}
 .int-check .box svg{width:15px;height:15px;stroke-width:2.6}
+.req-line.cust-msg{background:#FFF1E6;border:2px solid #E8590C;color:#5A2A0A;font-size:14px;line-height:1.45}.req-line.cust-msg b{color:#C2410C}
+.new-pill{font-style:normal;background:#E8590C;color:#fff;border-radius:999px;padding:1px 8px;font-size:11.5px;font-weight:800;margin-left:4px;animation:np 1.2s ease-in-out infinite alternate}@keyframes np{from{opacity:1}to{opacity:.55}}
+.job.has-msg{border:2px solid #E8590C;box-shadow:0 0 0 3px #FDE3D2}
+.msg-banner{margin:0;display:flex;gap:8px;align-items:center;background:#E8590C;color:#fff;border-radius:12px;padding:10px 12px;font-weight:800;font-size:14px}
 .req-line{margin:0;display:flex;gap:8px;font-size:13px;background:var(--muted);border-radius:10px;padding:8px 10px}
 .act{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 6px 0 16px;border-radius:12px;border:1px solid var(--ink);background:var(--ink);color:#fff;font-weight:700;font-size:14px}
@@ -297,18 +301,22 @@ function partRow(j,part){
     ${st==='완료'&&at?`<p class="note">${hm(at)} ${tr('완료','done')}${mine?'':` · ${esc(who||'')}`}</p>`:''}${st==='미완료'?`<p class="note" style="color:var(--err)">${tr('사유','Reason')}: ${esc(rsnTr(why||'-'))}</p>`:''}
     ${act?`<div class="act">${act}</div>`:''}</div>`;
 }
+/* 고객 메시지 강조 (3회차 5번): 주황 테두리 · 새 메시지 표시 · 목록 위 안내 */
+const jobMsg=j=>S.reqs.find(r=>r.customer_id===j.customer_id&&(r.status==='접수'||Date.now()-new Date(r.created_at)<7*864e5));
+function msgLine(msg){ if(!msg) return ''; const isNew=msg.status==='접수';
+  return `<p class="req-line cust-msg">${ic('msg',18)}<span><b>📩 ${tr('고객 메시지','Customer message')}</b>${isNew?` <em class="new-pill">${tr('새 메시지','New')}</em>`:''}<br>${esc(msg.message)} ${LANG==='en'?trLink(msg.message,'en'):''}</span></p>`; }
 function jobCard2(j){
   const c=j.customers||{}, picked=S.sel.includes(j.customer_id), io=j.interior_only;
   const msg=S.reqs.find(r=>r.customer_id===j.customer_id&&(r.status==='접수'||Date.now()-new Date(r.created_at)<7*864e5));
   const kind=io?tr('실내만','Interior only'):j.interior?tr('외부 + 실내','Exterior + Interior'):tr('외부만','Exterior only');
-  return `<article class="job ${picked?'picked':''}">
+  return `<article class="job ${picked?'picked':''}${msg?' has-msg':''}">
     <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)}"><span class="box">${ic('check')}</span></label>
       <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span><span class="tag">${kind}</span>${j.svc_kind?`<span class="tag svc">${j.svc_kind==='AS'?'AS':tr('서비스','Service')} · ${tr('추가 세차 (수당 지급)','Extra wash (paid)')}</span>`:''}${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')} · ${tr('원래','from')} ${esc(kdate(j.moved_from))}</span>`:''}</div></div>
     ${carPhoto(j)}
     <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
     ${carNotes(j)}
     ${io?'':partRow(j,'ext')}${j.interior?partRow(j,'int'):''}
-    ${msg?`<p class="req-line">${ic('msg',16)}<span><b>${tr('고객 요청','Customer request')}</b> ${esc(msg.message)} ${LANG==='en'?trLink(msg.message,'en'):''}</span></p>`:''}
+    ${msgLine(msg)}
     ${S.reps.filter(r=>r.job_id===j.id).map(r=>`<p class="memo-line"><span>📝 ${esc(r.body||tr('(사진만 보냄)','(photos only)'))}${r.photos&&r.photos.length?` · 📷 ${r.photos.length}`:''}</span><span class="st">${hm(r.created_at)} → ${esc(r.manager_name||tr('관리자','Manager'))} · ${r.done_at?`<b>${tr('처리완료','Resolved')}</b>`:r.read_at?`<b>${tr('관리자 확인함','Seen by manager')}</b>`:tr('전달됨','Sent')}</span>${r.reply?`<span class="rp">${tr('관리자','Manager')}: ${esc(r.reply)} ${LANG==='en'?trLink(r.reply,'en'):''}</span>`:''}</p>`).join('')}
     <button class="btn2" data-act="memo" data-id="${j.id}" style="width:100%">📝 ${tr('특이사항 메모 · 사진 → 담당 관리자','Report an issue · photo → manager')}</button></article>`;
 }
@@ -353,14 +361,14 @@ function jobCardOld(j){
   if(open) act=`<button class="link" data-act="skip" data-id="${j.id}">${tr('미작업 처리','Not done')}</button><button class="btn" data-act="done" data-id="${j.id}" ${needInt?'disabled':''}>${tr('완료 알림 보내기','Wash done')}<span class="arr">${ic('send')}</span></button>`;
   if(j.status==='완료') act=`<span class="sub">${j.done_at?hm(j.done_at)+tr(' 완료 · ',' done · '):''}+${won(PAY)}</span><span class="pill 완료">${tr('알림 보냄','Notified')}</span>`;
   if(j.status==='미작업') act=`<button class="link" data-act="undo" data-id="${j.id}">${ic('undo',14)}${tr('미작업 취소','Undo')}</button><span class="sub">${tr('미작업으로 보고됨','Reported as not done')}</span>`;
-  return `<article class="job ${picked?'picked':''}">
+  return `<article class="job ${picked?'picked':''}${msg?' has-msg':''}">
     <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)}"><span class="box">${ic('check')}</span></label>
       <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span>${j.interior?`<span class="tag">${tr('실내세차','Interior')}</span>`:''}${j.svc_kind?`<span class="tag svc">${j.svc_kind==='AS'?'AS':tr('서비스','Service')} · ${tr('추가 세차 (수당 지급)','Extra wash (paid)')}</span>`:''}${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')}</span>`:''}</div>
       <span class="pill ${j.status}">${j.status==='대기'?tr('세차대기','Waiting'):j.status==='완료'?tr('세차완료','Done'):tr('미작업','Not done')}</span></div>
     <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
     ${carNotes(j)}
     ${j.interior?`<label class="int-check ${j.interior_done?'on':''}"><input type="checkbox" data-int="${j.id}" ${j.interior_done?'checked':''} ${open?'':'disabled'}><span class="box">${ic('check')}</span>${tr('실내세차 완료','Interior done')}</label>${open&&needInt?`<p class="note">${tr('실내세차를 체크해야 완료 알림을 보낼 수 있어요.','Check "Interior done" first.')}</p>`:''}`:''}
-    ${msg?`<p class="req-line">${ic('msg',16)}<span><b>${tr('고객 요청','Customer request')}</b> ${esc(msg.message)} ${LANG==='en'?trLink(msg.message,'en'):''}</span></p>`:''}
+    ${msgLine(msg)}
     ${S.reps.filter(r=>r.job_id===j.id).map(r=>`<p class="memo-line"><span>📝 ${esc(r.body||tr('(사진만 보냄)','(photos only)'))}${r.photos&&r.photos.length?` · 📷 ${r.photos.length}`:''}</span><span class="st">${hm(r.created_at)} → ${esc(r.manager_name||tr('관리자','Manager'))} · ${r.done_at?`<b>${tr('처리완료','Resolved')}</b>`:r.read_at?`<b>${tr('관리자 확인함','Seen by manager')}</b>`:tr('전달됨','Sent')}</span>${r.reply?`<span class="rp">${tr('관리자','Manager')}: ${esc(r.reply)} ${LANG==='en'?trLink(r.reply,'en'):''}</span>`:''}</p>`).join('')}
     <div class="act">${act}</div>
     <button class="btn2" data-act="memo" data-id="${j.id}" style="width:100%">📝 ${tr('특이사항 메모 · 사진 → 담당 관리자','Report an issue · photo → manager')}</button></article>`;
@@ -378,6 +386,7 @@ function homeView(){
   <div><p class="sub">${esc(S.me.name)}${tr(' 님 · 회사 배정',' · assigned by office')}</p><h1 class="h">${tr(`${S.day===keyOf(new Date())?'오늘':kdate(S.day)} 세차 ${s.today_total}대`,`${S.day===keyOf(new Date())?'Today':kdate(S.day)}: ${s.today_total} car(s)`)}</h1></div>
   <div class="datebar"><button class="chip" data-act="day" data-d="-1">${tr('이전','Prev')}</button><input type="date" id="day" value="${S.day}" aria-label="${tr('날짜 선택','Pick a date')}"><button class="chip" data-act="day" data-d="1">${tr('다음','Next')}</button><button class="chip" data-act="today">${tr('오늘','Today')}</button></div>
   ${S.err?`<p class="req-line" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}
+  ${(()=>{ const n=S.jobs.filter(j=>jobMsg(j)).length; return n?`<p class="msg-banner">📩 ${tr(`고객 메시지가 있는 차량 ${n}대 · 주황 테두리 카드를 꼭 확인해 주세요`,`${n} car(s) with a customer message · check the orange cards`)}</p>`:''; })()}
   <div class="summary"><div class="w"><b>${s.today_wait}</b><span>${tr('세차대기','Waiting')}</span></div><div class="d"><b>${s.today_done}</b><span>${tr('세차완료','Done')}</span></div><div class="s"><b>${s.today_skip}</b><span>${tr('미작업','Not done')}</span></div></div>
   <div class="money m"><span><b style="font-size:15px">${tr(`${month}월 수당`,`${MON[month-1]} pay`)}</b><small>${tr(`${month}월 1일 ~ 말일 · 완료 ${s.month_done}대`,`${MON[month-1]} 1 – end · ${s.month_done} done`)}</small></span><b>${won(s.month_done*PAY)}</b></div>
   <div class="money t"><span style="font-weight:700">${S.day===keyOf(new Date())?tr('오늘 수당','Today\'s pay'):tr('이날 수당','Pay this day')}</span><b>${won(s.today_done*PAY)}</b></div>
