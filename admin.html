@@ -71,7 +71,8 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .by{font-size:11.5px;font-weight:500;color:var(--sub)}
 .memo{background:#FFF8E6;border:1px solid var(--gold-soft);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}.memo p{margin:0;white-space:pre-wrap}
 .memo-edit{display:flex;flex-direction:column;gap:8px}.memo-add{align-self:flex-start}
-.reply-box{background:#EAF2FB;border:1px solid #BFD3EE;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}.reply-box p{margin:0;white-space:pre-wrap}.reply-box b{font-size:12.5px;color:#1D3A6E}
+.sch-card{margin-top:14px}.sch-row td{vertical-align:top}.sch-row .sch-st{font-size:11px}.sch-wait .sch-st{background:#FFF4E5;color:#B35C00}.sch-sent .sch-st{background:#E6F4EA;color:#1E7B34}.sch-fail .sch-st{background:#FDECEC;color:#C92A2A}.sch-cancel{opacity:.6}.sch-pick{flex-wrap:wrap}
+.reply-box{background:#EAF2FB;border:1px solid #BFD3EE;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}.reply-box p{margin:0;white-space:pre-wrap}.reply-box b{font-size:12.5px;color:#1D3A6E}.reply-box.sch-reply{background:#FFF8EC;border-color:#F5C77E}.reply-box.sch-reply b{color:#8A4B00}
 .reply-edit{display:flex;flex-direction:column;gap:8px;background:#F4F8FD;border:1px solid #BFD3EE;border-radius:10px;padding:10px}.reply-edit .chips{gap:6px}.reply-add{align-self:flex-start}
 .selbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px}
 .btn.sm,.btn2.sm{min-height:36px;padding:0 12px;font-size:13px}.btn.danger{background:#7A2323;border-color:#7A2323}.btn.danger:hover{background:#5E1A1A}.btn.danger:disabled{background:#E7E3D9;border-color:#E7E3D9;color:#9A9384}
@@ -390,6 +391,17 @@ const $=s=>document.querySelector(s);
 const WD=['일','월','화','수','목','금','토'], WDF=['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
 const pad=n=>String(n).padStart(2,'0');
 const keyOf=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+// 예약 메시지 (10/16 검토 13번)
+const pad2=n=>String(n).padStart(2,'0');
+const kdt=ts=>{ if(!ts) return ''; const d=new Date(ts); return `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]}) ${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+const dtLocal=d=>`${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+const schedDefault=()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); return dtLocal(d); };
+function schedAt(v){ if(!v) throw new Error('예약 날짜와 시간을 골라 주세요.'); const d=new Date(v); if(isNaN(d)) throw new Error('예약 날짜와 시간을 다시 골라 주세요.'); if(d.getTime()<Date.now()+60000) throw new Error('예약 시간은 지금보다 뒤로 골라 주세요.'); return d.toISOString(); }
+async function loadSched(){ try{ S.sched=await q(db.rpc('list_scheduled_messages'))||[]; }catch(_){ S.sched=S.sched||[]; } }
+const schedPending=()=>(S.sched||[]).filter(x=>x.state==='예약');
+let dueRunning=false;
+async function runDue(){ if(dueRunning||!db||!S.session||!S.me) return; dueRunning=true;
+  try{ const n=await q(db.rpc('run_due_scheduled_messages')); if(n>0){ kickPush(); if((S.tab==='notice'||S.tab==='req')&&!S.dialog&&!S.busy){ await loadTab(); } } }catch(_){ } finally{ dueRunning=false; } }
 const kdate=k=>{if(!k)return '';const [y,m,d]=k.split('-').map(Number);return `${m}월 ${d}일 (${WD[new Date(y,m-1,d).getDay()]})`;};
 const when=ts=>{const d=new Date(ts);return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;};
 const maskPhone=p=>String(p||'').replace(/^(\d{3})-?(\d{3,4})-?(\d{4})$/,(m,a,b,c)=>`${a}-${'*'.repeat(b.length)}-${c}`);
@@ -492,6 +504,7 @@ async function loadTab(){
       const live=new Set((st||[]).map(r=>r.id)); S.customers=S.customers.filter(c=>live.has(c.id)); S.cmSel=S.cmSel.filter(x=>live.has(x));
       await Promise.all(S.cmOpen.map(loadNotes));
     }
+    if(S.tab==='notice'||S.tab==='req') await loadSched();
     if(S.tab==='notice'){ try{ const st=await q(db.rpc('list_customer_status')); S.cstat={}; (st||[]).forEach(r=>S.cstat[r.id]=r); }catch(_){}
       if(!S.ntTpls){ let v=null; try{ v=await q(db.rpc('get_my_ui_pref',{p_key:'notice_tpls'})); }catch(_){ try{ v=JSON.parse(localStorage.getItem('ah-notice-tpls')||'null'); }catch(__){} } S.ntTpls=Array.isArray(v)?v:[]; } }
     if(S.tab==='today'){ const [nt,td]=await Promise.all([q(db.rpc('list_staff_notices',{p_scope:S.ntScope})),q(db.rpc('list_admin_todos',{p_scope:S.tdScope}))]); S.notices=nt||[]; S.todos=td||[]; }
@@ -998,11 +1011,14 @@ function reqCard(r){
     :r.staff_memo?`<div class="memo"><p>${esc(r.staff_memo)}</p><div class="row">${byName(r.memo_name,r.memo_at)}<span class="grow"></span><button class="link" data-act="memoEdit" data-id="${r.id}">메모 수정</button></div></div>`
     :`<button class="link memo-add" data-act="memoEdit" data-id="${r.id}">+ 메모 쓰기</button>`;
   // 고객에게 답변 (4번) — 고객 앱 메시지 아래에 보이고 알림이 가요
-  const rEdit=S.replyEdit===r.id;
+  const rEdit=S.replyEdit===r.id, rSch=schedPending().find(x=>x.kind==='reply'&&x.request_id===r.id);
+  const schBox=rSch&&!rEdit?`<div class="reply-box sch-reply"><b>⏰ 예약한 답변 · ${esc(kdt(rSch.send_at))}에 보내요</b><p>${esc(rSch.body)}</p><div class="row"><span class="sub">예약: ${esc(rSch.created_name||'')}</span><span class="grow"></span><button class="link" data-act="replyEdit" data-id="${r.id}">고치기</button><button class="link" data-act="schCancel" data-id="${rSch.id}">예약 취소</button></div></div>`:'';
   const reply=rEdit
     ?`<div class="reply-edit"><b class="sub" style="color:var(--text)">💬 고객에게 답변</b><div class="chips">${REPLY_QUICK.map(x=>`<button type="button" class="chip" data-act="replyQuick" data-id="${r.id}" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>
-      <textarea class="inp" id="reply-${r.id}" maxlength="1000" placeholder="고객 앱에 보이는 답변이에요. 예: 네, 확인했어요. 내일 세차할 때 트렁크는 열지 않을게요.">${esc(S.replyDraft!==undefined?S.replyDraft:(r.reply||''))}</textarea>
+      <textarea class="inp" id="reply-${r.id}" maxlength="1000" placeholder="고객 앱에 보이는 답변이에요. 예: 네, 확인했어요. 내일 세차할 때 트렁크는 열지 않을게요.">${esc(S.replyDraft!==undefined?S.replyDraft:(rSch?rSch.body:(r.reply||'')))}</textarea>
+      <div class="row sch-pick" style="gap:6px"><label class="sub" for="replyAt-${r.id}">⏰ 예약 시간</label><input class="inp" type="datetime-local" id="replyAt-${r.id}" value="${esc(rSch?dtLocal(new Date(rSch.send_at)):schedDefault())}" min="${dtLocal(new Date())}" style="width:auto"><button class="btn2 sm" data-act="replySched" data-id="${r.id}">${rSch?'예약 고치기':'예약 보내기'}</button></div>
       <div class="row"><span class="grow note">보내면 고객 앱에 '매니저 답변이 왔어요' 알림이 가요.</span><button class="link" data-act="replyCancel">취소</button><button class="btn" data-act="replySend" data-id="${r.id}">${r.reply?'고친 답변 보내기':'답변 보내기'}</button></div></div>`
+    :schBox?schBox+(r.reply?`<div class="reply-box"><b>💬 고객에게 보낸 답변</b><p>${esc(r.reply)}</p><div class="row">${byName(r.reply_name,r.reply_at)}</div></div>`:'')
     :r.reply?`<div class="reply-box"><b>💬 고객에게 보낸 답변</b><p>${esc(r.reply)}</p><div class="row">${byName(r.reply_name,r.reply_at)}<span class="grow"></span><button class="link" data-act="replyEdit" data-id="${r.id}">답변 고치기</button></div></div>`
     :`<button class="btn2 sm reply-add" data-act="replyEdit" data-id="${r.id}">💬 고객에게 답변 보내기</button>`;
   return `<article class="card req${r.urgent?' is-urgent':''}${r.done_at?' is-done':''}${S.sel.includes(r.id)?' is-sel':''}">
@@ -2143,6 +2159,15 @@ const NT_BASE=[['우천 연기','비 예보로 오늘 세차가 내일로 하루
 function ntStKey(c){ const st=S.cstat[c.id]||{wash_status:'세차중'}; return st.wash_status==='해지'?'cancel':st.wash_status==='일시정지'?(pzKind(st)==='정지'?'stop':'pause'):'on'; }
 const ntList=()=>S.customers.filter(c=>inScope(c.complex)&&aptIn('noticeApts',c.complex)&&(!S.noticeSt.length||S.noticeSt.includes(ntStKey(c))));
 async function ntSaveTpls(){ try{ await q(db.rpc('set_my_ui_pref',{p_key:'notice_tpls',p_value:S.ntTpls})); }catch(_){ try{ localStorage.setItem('ah-notice-tpls',JSON.stringify(S.ntTpls)); }catch(__){} } }
+function schedCard(kind){
+  const all=(S.sched||[]).filter(x=>x.kind===kind); if(!all.length) return '';
+  const pend=all.filter(x=>x.state==='예약'), done=all.filter(x=>x.state!=='예약');
+  const row=x=>`<tr class="sch-row sch-${x.state==='예약'?'wait':x.state==='보냄'?'sent':x.state==='실패'?'fail':'cancel'}"><td style="white-space:nowrap"><b>${esc(kdt(x.send_at))}</b><br><span class="pill sch-st">${esc(x.state)}</span></td>
+    <td>${kind==='notice'?`<b>${x.n}명</b> · `:`<b>${esc(x.customer_name||'')}</b> ${esc(x.car_number||'')} · `}${esc(x.body)}${x.error?`<br><span class="sub" style="color:var(--danger,#c92a2a)">못 보냈어요: ${esc(x.error)}</span>`:''}<br><span class="sub">예약: ${esc(x.created_name||'')}${x.state==='보냄'&&kind==='notice'&&x.result!=null?` · ${x.result}명에게 보냄`:''}</span></td>
+    <td style="width:1%">${x.state==='예약'?`<button class="btn2 sm" data-act="schCancel" data-id="${x.id}">예약 취소</button>`:''}</td></tr>`;
+  return `<div class="card sch-card"><div class="row"><h2 class="h" style="font-size:16px;margin:0">⏰ 예약한 ${kind==='notice'?'공지':'답변'}</h2><span class="sub">보낼 예정 ${pend.length}건${done.length?` · 최근 7일 ${done.length}건`:''}</span></div>
+    <div class="tbl"><table><tbody>${pend.concat(done).map(row).join('')}</tbody></table></div></div>`;
+}
 function noticeView(){
   const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
   const list=ntList(), cnt={}; NT_ST.forEach(([k])=>cnt[k]=S.customers.filter(c=>inScope(c.complex)&&aptIn('noticeApts',c.complex)&&ntStKey(c)===k).length);
@@ -2156,7 +2181,10 @@ function noticeView(){
     ${mine.map((x,i)=>`<span class="chip tpl-mine"><button type="button" class="link" data-act="tpl" data-b="${esc(x.b)}" title="${esc(x.b)}">⭐ ${esc(x.l)}</button><button type="button" class="link tpl-x" data-act="tplDel" data-i="${i}" aria-label="${esc(x.l)} 문구 지우기">✕</button></span>`).join('')}</div>
     <label for="notice" style="font-weight:700;font-size:13px">공지 내용</label><textarea class="inp" id="notice" maxlength="300">${esc(S.notice)}</textarea>
     <div class="row" style="gap:6px"><input class="inp grow" id="tplName" maxlength="20" placeholder="문구 이름 (예: 단지 행사 안내)" aria-label="저장할 문구 이름" style="min-width:0"><button class="btn2 sm" data-act="tplSave" title="지금 공지 내용을 내 문구로 저장 (나에게만 보여요)">⭐ 내 문구로 저장</button></div>
-    <button class="btn" id="nsend" data-act="nsend" ${S.noticeSel.length&&S.notice.trim()?'':'disabled'}>${ic('check')}선택한 고객에게 공지 보내기</button></div></div>`;
+    <div class="chips" role="group" aria-label="보내는 때"><button class="chip" aria-pressed="${!S.ntLater}" data-act="ntWhen" data-v="now">지금 보내기</button><button class="chip" aria-pressed="${!!S.ntLater}" data-act="ntWhen" data-v="later">⏰ 예약 보내기</button></div>
+    ${S.ntLater?`<div class="row" style="gap:6px"><label for="ntAt" style="font-weight:700;font-size:13px">보낼 날짜 · 시간</label><input class="inp" type="datetime-local" id="ntAt" value="${esc(S.ntAt||schedDefault())}" min="${dtLocal(new Date())}"></div><p class="note">정한 시간이 되면 고객 앱 알림으로 가요. 보내기 전에는 아래 목록에서 취소할 수 있어요.</p>`:''}
+    <button class="btn" id="nsend" data-act="nsend" ${S.noticeSel.length&&S.notice.trim()?'':'disabled'}>${ic('check')}${S.ntLater?'선택한 고객에게 공지 예약하기':'선택한 고객에게 공지 보내기'}</button></div></div>
+  ${schedCard('notice')}`;
 }
 
 /* ---------- 그리기 ---------- */
@@ -2536,6 +2564,15 @@ document.addEventListener('click',async e=>{
     case 'cutSave': { const v=(($('#cutTime')||{}).value||'').trim(); if(!/^\d{2}:\d{2}/.test(v)){ toast('시간을 골라 주세요.',true); break; }
       try{ S.cutoff=await q(db.rpc('set_sameday_cutoff',{p_time:v})); toast(`당일 변경 마감 시간을 ${S.cutoff}로 바꿨어요.`); }catch(err){ toast(friendly(err),true); } render(); break; }
     case 'replyCancel': S.replyEdit=null; S.replyDraft=undefined; render(); break;
+    case 'replySched': {
+      const v=(($('#reply-'+id)||{}).value||'').trim(); if(!v){ toast('답변 내용을 적어 주세요.',true); break; }
+      let at; try{ at=schedAt((($('#replyAt-'+id)||{}).value||'')); }catch(err){ toast(err.message,true); break; }
+      try{ await q(db.rpc('schedule_request_reply',{p_id:id,p_body:v,p_send_at:at})); S.replyEdit=null; S.replyDraft=undefined; toast(`${kdt(at)}에 답변이 가도록 예약했어요.`); }catch(err){ toast(friendly(err),true); }
+      await loadTab(); break;
+    }
+    case 'schCancel': { const x=(S.sched||[]).find(y=>y.id===id); if(!x) break;
+      ask('이 예약을 취소할까요?',`${kdt(x.send_at)} 예약 · ${x.body.slice(0,60)}\n취소하면 고객에게 보내지 않아요.`,'예약 취소',()=>act(async()=>{ await q(db.rpc('cancel_scheduled_message',{p_id:id})); await loadSched(); },'예약을 취소했어요.')); break; }
+    case 'ntWhen': S.ntLater=t.dataset.v==='later'; if(S.ntLater&&!S.ntAt) S.ntAt=schedDefault(); render(); break;
     case 'replyQuick': { const m=$('#reply-'+id), cur=(m&&m.value||'').trim(); S.replyDraft=cur?cur+' '+t.dataset.v:t.dataset.v; render(); setTimeout(()=>{const x=$('#reply-'+id); if(x){x.focus(); x.setSelectionRange(x.value.length,x.value.length);}},30); break; }
     case 'replySend': {
       const v=(($('#reply-'+id)||{}).value||'').trim(); if(!v){ toast('답변 내용을 적어 주세요.',true); break; }
@@ -2746,7 +2783,9 @@ document.addEventListener('click',async e=>{
     case 'tplDel': { const i=Number(t.dataset.i), x=(S.ntTpls||[])[i]; if(!x) break; ask(`'${x.l}' 문구를 지울까요?`,x.b,'지우기',async()=>{ S.ntTpls=S.ntTpls.filter((_,j)=>j!==i); await ntSaveTpls(); S.dialog=null; S.busy=false; toast('문구를 지웠어요.'); render(); }); break; }
     case 'nall': {const ids=ntList().map(c=>c.id);const all=ids.every(x=>S.noticeSel.includes(x));S.noticeSel=all?S.noticeSel.filter(x=>!ids.includes(x)):[...new Set([...S.noticeSel,...ids])];render();break;}
     case 'tpl': S.notice=t.dataset.b; render(); break;
-    case 'nsend': ask(`${S.noticeSel.length}명에게 공지를 보낼까요?`,S.notice.trim(),'보내기',()=>act(async()=>{const n=await q(db.rpc('send_customer_notice',{p_customer_ids:S.noticeSel,p_title:'공지사항',p_body:S.notice.trim()}));toast(`${n||0}명에게 보냈어요.`);S.notice='';S.noticeSel=[];},null)); break;
+    case 'nsend': if(S.ntLater){ let at; try{ at=schedAt(S.ntAt); }catch(err){ toast(err.message,true); break; }
+      ask(`${S.noticeSel.length}명에게 ${kdt(at)}에 공지를 보낼까요?`,S.notice.trim(),'예약하기',()=>act(async()=>{ await q(db.rpc('schedule_customer_notice',{p_customer_ids:S.noticeSel,p_title:'공지사항',p_body:S.notice.trim(),p_send_at:at})); toast(`${kdt(at)}에 ${S.noticeSel.length}명에게 가도록 예약했어요.`); S.notice=''; S.noticeSel=[]; await loadSched(); },null)); break; }
+      ask(`${S.noticeSel.length}명에게 공지를 보낼까요?`,S.notice.trim(),'보내기',()=>act(async()=>{const n=await q(db.rpc('send_customer_notice',{p_customer_ids:S.noticeSel,p_title:'공지사항',p_body:S.notice.trim()}));toast(`${n||0}명에게 보냈어요.`);S.notice='';S.noticeSel=[];},null)); break;
   }
 });
 document.addEventListener('toggle',e=>{ if(e.target&&e.target.id==='mgrBox') S.mgrOpen=e.target.open;
@@ -2906,6 +2945,7 @@ document.addEventListener('input',e=>{ if(/^reply-\d+$/.test(e.target.id)){ S.re
   if(e.target.id&&e.target.id.startsWith('cnote-')){ S.cnDraft[Number(e.target.id.slice(6))]=e.target.value; }
   if(e.target.id==='pauseDate'){ S.pauseDate=e.target.value; }
   if(e.target.id&&e.target.id.startsWith('note-')){ S.noteDraft[Number(e.target.id.slice(5))]=e.target.value; }
+  if(e.target.id==='ntAt'){ S.ntAt=e.target.value; return; }
   if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nsend'); if(b) b.disabled=!(S.noticeSel.length&&S.notice.trim()); }
 });
 document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.target.id==='tdTitle'||e.target.id==='tdMemo')&&!e.isComposing){ e.preventDefault(); tdSave(); return; } if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} else if(e.key==='Escape'&&S.noteModal&&!S.busy){S.noteModal=null;render();} });
@@ -2950,6 +2990,8 @@ async function start(){
     if(S.tab==='live'||S.tab==='field') await loadTab();
     else if(tick%2===0){ const a=S.cntReq,b=S.cntAcc,c=S.cntFieldAll; await refreshCounts(); if(a!==S.cntReq||b!==S.cntAcc||c!==S.cntFieldAll) render(); }
   },30000);
+  // 예약 메시지: 1분마다 보낼 시간이 된 것을 보내요 (창이 숨겨져 있어도)
+  setInterval(runDue,60000); setTimeout(runDue,5000);
   db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; render(); return; } if(!was){ S.err=''; await start(); } });
 })();
 </script>

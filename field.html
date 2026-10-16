@@ -575,6 +575,10 @@ document.addEventListener('submit',async e=>{
   S.session=data.session; S.ready=true;
   if(S.session) await loadAll(); else render();
   db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; S.jobs=[]; render(); return; } if(!was){ S.err=''; await loadAll(); } });
+  // 관리자가 예약한 공지 · 답변: 1분마다 보낼 시간이 된 것을 보내요 (10/16 검토 13번)
+  let dueRunning=false;
+  const runDue=async()=>{ if(dueRunning||!db||!S.session||!S.me) return; dueRunning=true; try{ const { data }=await db.rpc('run_due_scheduled_messages'); if(data>0) kickPush(); }catch(_){ } finally{ dueRunning=false; } };
+  setInterval(runDue,60000); setTimeout(runDue,8000);
   setInterval(()=>{ const ae=document.activeElement; if(S.session&&S.me&&!S.dialog&&!S.memo&&!S.rsn&&!S.cpv&&!S.cpBusy&&!(ae&&/INPUT|TEXTAREA/.test(ae.tagName))&&document.visibilityState==='visible') loadAll(); },60000);
 })();
 </script>
