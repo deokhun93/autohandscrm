@@ -154,7 +154,8 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .bills li.late{border-color:#F0B48A;background:#FFF6EE}.bills li.paid{background:#F4FAF6}.bills li.pre{background:#EEF4FF;border-color:#A9C2EE}
 .mt-a{display:inline-block;font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 8px;margin-left:4px}.mt-a.late{background:#C62828;color:#fff}.mt-a.cur{background:var(--gold-soft);color:#6B5418}.mt-a.ok{background:var(--ok);color:var(--ok-ink)}.mt-a.pre{background:#2F5DB3;color:#fff}.mt-a.pre0{background:#DCE6F8;color:#2F4A80}
 .pill.a-pre{background:#2F5DB3;color:#fff}.pill.a-tog{background:#EADCF7;color:#4B2A73}
-.a-chips{align-items:center}.a-chips .chip.a-late[aria-pressed="true"]{background:#C62828;color:#fff}.a-chips .chip.a-cur[aria-pressed="true"]{background:#2E7D4F;color:#fff}.a-chips .chip.a-pre[aria-pressed="true"]{background:#2F5DB3;color:#fff}.a-chips .chip.a-tog[aria-pressed="true"]{background:#6B3FA0;color:#fff}
+.a-chips{align-items:center}.c-rd .chip[aria-pressed="true"]{background:#1D3A6E;color:#fff;border-color:#1D3A6E}.c-rd .crd-fullDue[aria-pressed="true"]{background:#B35C00;border-color:#B35C00}.go-coll.is-due{background:#FFF4E5;border-color:#F5B971;color:#8A4B00;font-weight:800}
+.a-chips .chip.a-late[aria-pressed="true"]{background:#C62828;color:#fff}.a-chips .chip.a-cur[aria-pressed="true"]{background:#2E7D4F;color:#fff}.a-chips .chip.a-pre[aria-pressed="true"]{background:#2F5DB3;color:#fff}.a-chips .chip.a-tog[aria-pressed="true"]{background:#6B3FA0;color:#fff}
 .a-in{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 8px;padding:8px 10px;border:1px dashed #A9C2EE;border-radius:10px;background:#F7FAFF}.a-in .inp{width:auto;min-width:120px;padding:6px 8px}
 .pre-box{margin-top:6px;padding:8px 10px;border:1px solid #A9C2EE;border-radius:10px;background:#F7FAFF}
 .dialog:has(.cform){max-width:640px}.cform{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-height:56vh;overflow:auto;padding:2px}.cform .field span{font-size:12.5px;font-weight:700}.cform .inp{width:100%}
@@ -812,9 +813,9 @@ function roundView(){
     <label class="auto" title="일시정지 · 정지 · 해지 고객은 체크해야 보여요"><input type="checkbox" id="rdCancel" ${S.rdCancel?'checked':''}><span>쉬는·해지 고객도 보기${rest?` <b>${rest}</b>`:''}</span></label></form>
   <div class="selbar"><b class="sub" style="color:var(--text)">${n?`${n}명 선택됨`:`${list.length}명`}</b>${n?`<button class="link" data-act="rdSelNone">선택 해제</button>`:''}<span class="grow"></span>
     ${colBtn('round')}<button class="btn2 sm" data-act="rdSched" title="기존 스케줄표 양식 · 아파트마다 시트 1장">📤 스케줄표 엑셀</button><button class="btn2 sm" data-act="rdExport" title="회차 · 수금 목록">목록 엑셀</button><button class="btn2 sm" data-act="rdAuto" data-ids="${list.filter(rdNeedNotice).map(r=>r.customer_id).join(',')}" title="그 달 요금을 아직 안 낸 고객만 골라요 (이미 냈거나 선납한 고객은 빠져요)">🎯 안내 대상 자동 선택 <b>${list.filter(rdNeedNotice).length}</b></button><button class="btn sm" data-act="rdNotice" ${n?'':'disabled'}>📩 입금 안내 보내기 (고객 앱)</button></div>
-  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="rdSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th>${cols.map(c=>`<th>${esc(colLabel('round',c[0]))}</th>`).join('')}</tr></thead><tbody>
+  ${list.length?`<div class="tbl cm-tbl"><table><thead><tr><th class="ck"><input type="checkbox" data-act="rdSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택"></th>${cols.map(c=>`<th>${esc(colLabel('round',c[0]))}</th>`).join('')}<th>수금</th></tr></thead><tbody>
     ${list.map(r=>{const sel=S.rdSel.includes(r.customer_id), full=rdFull(r);
-      const stc=rdState(r).cls; return `<tr class="cm-row ${stc||(full?'round-full':'')}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-rdsel="${r.customer_id}" ${sel?'checked':''} aria-label="${esc(r.car_number||'')} 선택"></td>${cols.map(c=>c[2](r)).join('')}</tr>`;}).join('')}
+      const stc=rdState(r).cls; return `<tr class="cm-row ${stc||(full?'round-full':'')}${sel?' picked':''}"><td class="ck"><input type="checkbox" data-rdsel="${r.customer_id}" ${sel?'checked':''} aria-label="${esc(r.car_number||'')} 선택"></td>${cols.map(c=>c[2](r)).join('')}<td class="nowrap"><button class="btn2 sm go-coll${rdFull(r)&&['미수금','미납'].includes(r.bill_state)?' is-due':''}" data-act="rdGoColl" data-id="${r.customer_id}" title="수금관리로 가서 이 고객의 입금을 바로 기록해요">💰 수금 처리</button></td></tr>`;}).join('')}
   </tbody></table></div>`:`<div class="empty">${S.rounds.length?'이 탭에 해당하는 고객이 없어요.':'계약완료 고객이 없어요.'}</div>`}`;
 }
 // 입금 안내 대상: 그 달 칸이 비어 있는 고객 (수금완료 · 선납 · 정지 0원 · 청구 없음은 빼요)
@@ -1779,6 +1780,11 @@ function monTag(b){ if(b.paused) return ''; const m=String(b.bill_month).slice(0
   if(m>c) return b.paid_at?'<span class="mt-a pre">선납</span>':'<span class="mt-a pre0">선납 대기</span>';
   if(m===c) return b.paid_at?'<span class="mt-a ok">당월 완납</span>':'<span class="mt-a cur">당월</span>';
   return b.paid_at?'<span class="mt-a ok">완납</span>':'<span class="mt-a late">미납</span>'; }
+// 수금관리 › 회차 보기 (회차 현황과 같은 기준 · 이번 달)
+const _nc=v=>String(v||'').replace(/\s/g,'');
+const C_RD=[['full','회차 완료',r=>rdFull(r)],['fullDue','회차완료 · 미입금',r=>rdFull(r)&&['미수금','미납'].includes(r.bill_state)],['prog','진행 중',r=>!rdFull(r)]];
+const collRd=m=>m.customer_id&&(S.roundMap||{})[m.customer_id];
+const cRdPass=(m,k)=>{ const r=collRd(m), f=C_RD.find(x=>x[0]===k); return !!(r&&f&&f[2](r)); };
 const A_F=[['late','미납 고객'],['u19','26년 1~9월 미납'],['cur','당월 완납'],['pre','선납 고객'],['tog','함께 납부']];
 // 26년 1~9월 중 미납이 있는 고객 (3회차 9번 · 67 SQL)
 const U19=['2026-01-01','2026-09-01'];
@@ -1853,7 +1859,7 @@ function collView(){
   const cnt={전체:base.length}; COLL_TABS.forEach(k=>cnt[k]=base.filter(r=>r.coll_state===k).length); cnt['안내 누락']=base.filter(noticeMiss).length; cnt['요금 미입력']=base.filter(feeMiss).length;
   if(S.collTab==='요금 미입력'&&!cnt['요금 미입력']) S.collTab='전체';
   const list0=S.collTab==='전체'?base:S.collTab==='안내 누락'?base.filter(noticeMiss):S.collTab==='요금 미입력'?base.filter(feeMiss):base.filter(r=>r.coll_state===S.collTab);
-  const list=S.aF?list0.filter(r=>aFlags(r)[S.aF]):list0;
+  const list=(S.aF?list0.filter(r=>aFlags(r)[S.aF]):list0).filter(r=>!S.cRd||cRdPass(r,S.cRd));
   const ids=list.filter(r=>canEditCx(r.complex)).map(r=>r.id), allSel=ids.length&&ids.every(x=>S.collSel.includes(x)), n=S.collSel.length;
   const sumUnpaid=list.reduce((a,r)=>a+(r.unpaid_amount||0),0), sumBill=list.reduce((a,r)=>a+(r.cur_total||0),0),
     sumPaid=list.reduce((a,r)=>a+Math.min(r.cur_paid?(r.cur_total||0):(r.cur_paid_amount||0),r.cur_total||0),0), sumRest=list.reduce((a,r)=>a+(r.cur_remaining||0),0);
@@ -1872,6 +1878,7 @@ function collView(){
   ${periodPanel()}
   <div class="mini-tabs" role="tablist">${['전체',...COLL_TABS,'안내 누락',...(cnt['요금 미입력']?['요금 미입력']:[])].map(k=>`<button role="tab" class="mtab mt-${k}" aria-selected="${S.collTab===k}" data-act="collTab" data-f="${k}">${k} <b>${cnt[k]}</b></button>`).join('')}</div>
   ${S.prepayOk?`<div class="chips a-chips"><b class="sub" style="color:var(--text)">납부 보기</b>${A_F.map(([k,l])=>`<button class="chip a-${k}" aria-pressed="${S.aF===k}" data-act="aF" data-f="${k}">${l} <b>${list0.filter(r=>aFlags(r)[k]).length}</b></button>`).join('')}${S.aF?'<button class="link" data-act="aF" data-f="">모두 보기</button>':''}</div>`:''}
+  ${S.roundMap&&Object.keys(S.roundMap).length?`<div class="chips a-chips c-rd"><b class="sub" style="color:var(--text)">회차 보기 (${new Date().getMonth()+1}월)</b>${C_RD.map(([k,l])=>`<button class="chip crd-${k}" aria-pressed="${S.cRd===k}" data-act="cRd" data-f="${k}">${l} <b>${list0.filter(r=>cRdPass(r,k)).length}</b></button>`).join('')}${S.cRd?'<button class="link" data-act="cRd" data-f="">모두 보기</button>':''}</div>`:''}
   <form id="collsearch" class="req-tools" role="search">
     <select class="inp" id="collApt" aria-label="아파트별 보기"><option value="">아파트 전체</option>${apts.map(a=>`<option ${S.collApt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>
     <input class="inp grow" id="collQ" type="search" value="${esc(S.collQin)}" placeholder="차량번호 · 고객 · 입금자명 · 동호수 · 연락처 검색" aria-label="검색">
@@ -1884,7 +1891,7 @@ function collView(){
     <button class="btn sm danger" data-act="collDel" ${n?'':'disabled'}>🗑 명단에서 삭제</button>`:''}</div>
   ${list.length?`<div class="tbl cm-tbl coll-tbl"><table><thead><tr><th class="ck">${ids.length?`<input type="checkbox" data-act="collSelAll" data-ids="${ids.join(',')}" ${allSel?'checked':''} aria-label="현재 목록 전체 선택">`:''}</th>${cols.map(c=>`<th>${esc(colLabel('coll',c[0]))}</th>`).join('')}</tr></thead><tbody>
     ${list.map(r=>{const open=S.collOpen.includes(r.id), sel=S.collSel.includes(r.id), ed=canEditCx(r.complex), ow=ownersOf(r.complex);
-      return `<tr class="cm-row coll-${{'미수금':'due','수금완료':'ok','미납':'late','단기미납':'short','장기미납':'long','일시정지':'pz'}[r.coll_state]||'none'}${(S.u19||{})[r.id]?' coll-u19':''}${open?' open':''}${sel?' picked':''}"><td class="ck">${ed?`<input type="checkbox" data-collsel="${r.id}" ${sel?'checked':''} aria-label="${esc(r.car_number||r.name||'')} 선택">`:''}</td>${cols.map(col=>col[2](r,{ed,ow,open})).join('')}</tr>
+      return `<tr data-mid="${r.id}" class="cm-row coll-${{'미수금':'due','수금완료':'ok','미납':'late','단기미납':'short','장기미납':'long','일시정지':'pz'}[r.coll_state]||'none'}${(S.u19||{})[r.id]?' coll-u19':''}${open?' open':''}${sel?' picked':''}"><td class="ck">${ed?`<input type="checkbox" data-collsel="${r.id}" ${sel?'checked':''} aria-label="${esc(r.car_number||r.name||'')} 선택">`:''}</td>${cols.map(col=>col[2](r,{ed,ow,open})).join('')}</tr>
       ${open?`<tr class="cm-notes"><td colspan="${COLS}"><div class="notes-box coll-box">${collPanel(r)}</div></td></tr>`:''}`;}).join('')}
   </tbody></table></div>`:`<div class="empty">${S.coll.length?(scoped.length?'이 탭에 해당하는 고객이 없어요.':'내 담당 아파트에 수금 명단이 없어요. [내 담당 아파트만 보기]를 끄면 전체를 볼 수 있어요.'):'아직 수금 명단이 없어요. [엑셀 넣기] · [고객관리에서 불러오기] · [+ 직접 추가]로 시작하세요.'}</div>`}
   ${collSettingsPanel()}`;
@@ -2340,6 +2347,15 @@ document.addEventListener('click',async e=>{
     case 'cmMode': S.cmMode=t.dataset.f==='set'?'set':'list'; render(); break;
     case 'collTab': S.collTab=t.dataset.f; S.collSel=[]; render(); break;
     case 'aF': S.aF=S.aF===t.dataset.f?'':t.dataset.f; S.collSel=[]; render(); break;
+    case 'cRd': S.cRd=S.cRd===t.dataset.f?'':t.dataset.f; S.collSel=[]; render(); break;
+    case 'rdGoColl': { const r=(S.rounds||[]).find(x=>x.customer_id===id), car=r&&r.car_number||'';
+      setTab('coll'); S.collTab='전체'; S.aF=''; S.cRd=''; S.collApt=''; S.collQ=S.collQin=car; S.collOpen=[]; S.coll=null; render(); await loadTab();
+      const m=(S.coll||[]).find(x=>x.customer_id===id)||(car&&(S.coll||[]).find(x=>_nc(x.car_number)===_nc(car)));
+      if(!m){ S.collQ=S.collQin=''; render(); toast('수금 명단에서 이 고객을 찾지 못했어요. 수금관리에서 [고객관리에서 불러오기]를 눌러 주세요.',true); break; }
+      if(!inScope(m.complex)){ S.mineOnly=false; }
+      S.collOpen=[m.id]; await Promise.all([loadCBills(m.id),loadCNotes(m.id)]); render();
+      setTimeout(()=>{ const tr=document.querySelector(`tr[data-mid="${m.id}"]`); if(tr) tr.scrollIntoView({block:'center',behavior:'smooth'}); },60);
+      toast(`${car||m.name||''} 수금 화면이에요. [입금 확인]으로 받은 금액을 기록하세요.`); break; }
     case 'collClear': S.collQ=''; S.collQin=''; S.collApt=''; render(); break;
     case 'cfToggle': S.cfOpen=!(S.cfOpen===undefined?cfOn():S.cfOpen); render(); break;
     case 'intRoundCal': { const cid=id, d=t.dataset.d; const now=new Date(), dd=new Date(d); S.rdMonth=(dd.getFullYear()-now.getFullYear())*12+dd.getMonth()-now.getMonth(); if(S.rdMonth>0) S.rdMonth=0; S.rounds=null; setTab('round'); await loadTab(); render();
