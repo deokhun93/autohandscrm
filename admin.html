@@ -512,6 +512,7 @@ async function loadTab(){
     }
     if(S.tab==='notice'||S.tab==='req') await loadSched();
     if(S.tab==='notice'){ try{ const st=await q(db.rpc('list_customer_status')); S.cstat={}; (st||[]).forEach(r=>S.cstat[r.id]=r); }catch(_){}
+      try{ S.sentN=await q(db.rpc('list_sent_notices',{p_days:60}))||[]; S.sentOk=true; }catch(_){ S.sentN=[]; S.sentOk=false; }   // 72 SQL 전이면 보낸 공지 목록을 숨겨요
       if(!S.ntTpls){ let v=null; try{ v=await q(db.rpc('get_my_ui_pref',{p_key:'notice_tpls'})); }catch(_){ try{ v=JSON.parse(localStorage.getItem('ah-notice-tpls')||'null'); }catch(__){} } S.ntTpls=Array.isArray(v)?v:[]; } }
     if(S.tab==='today'){ const [nt,td]=await Promise.all([q(db.rpc('list_staff_notices',{p_scope:S.ntScope})),q(db.rpc('list_admin_todos',{p_scope:S.tdScope}))]); S.notices=nt||[]; S.todos=td||[]; }
     if(S.tab==='round'){
@@ -2214,7 +2215,18 @@ function xlNotice(){
 const NT_ST=[['on','세차중'],['pause','일시정지'],['stop','정지'],['cancel','해지']];
 const NT_BASE=[['우천 연기','비 예보로 오늘 세차가 내일로 하루 미뤄져요. 이용에 불편을 드려 죄송해요.'],['시간 변경','오늘 세차 시간이 변경되었어요. 차량은 평소 위치에 두시면 돼요.'],['휴무 안내','휴무일 안내드려요. 해당 회차는 다음 날 진행해요.']];
 function ntStKey(c){ const st=S.cstat[c.id]||{wash_status:'세차중'}; return st.wash_status==='해지'?'cancel':st.wash_status==='일시정지'?(pzKind(st)==='정지'?'stop':'pause'):'on'; }
-const ntList=()=>S.customers.filter(c=>inScope(c.complex)&&aptIn('noticeApts',c.complex)&&(!S.noticeSt.length||S.noticeSt.includes(ntStKey(c))));
+// 검색: 이름 · 차량번호 · 동호수 · 아파트 (아파트 고르기 · 상태와 같이 적용)
+const ntQPass=c=>{ const qq=String(S.ntQ||'').replace(/\s/g,'').toLowerCase(); return !qq||[c.name,c.car_number,c.unit,c.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq); };
+const ntList=()=>S.customers.filter(c=>inScope(c.complex)&&aptIn('noticeApts',c.complex)&&(!S.noticeSt.length||S.noticeSt.includes(ntStKey(c)))&&ntQPass(c));
+function ntRows(list){ return list.map(c=>{const k=ntStKey(c); return `<tr class="cm-row ${k==='cancel'?'is-cancel':k==='stop'?'is-stop':k==='pause'?'is-pz':''}"><td style="width:36px"><input type="checkbox" data-nsel="${c.id}" ${S.noticeSel.includes(c.id)?'checked':''} aria-label="${esc(c.name)} 선택"></td><td>${esc(c.name)}${k==='on'?'':` <span class="pill ${k==='pause'?'st-pz':'st-'+k}">${esc(NT_ST.find(x=>x[0]===k)[1])}</span>`}</td><td>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</td><td>${esc(c.car_number||'')}</td></tr>`;}).join('')||`<tr><td class="sub">${S.ntQ?'검색한 고객이 없어요.':'조건에 맞는 고객이 없어요.'}</td></tr>`; }
+// 보낸 공지 (최근 60일 · 72 SQL)
+function sentCard(){
+  if(!S.sentOk) return '';
+  const L=S.sentN||[];
+  return `<div class="card sch-card"><div class="row"><h2 class="h" style="font-size:16px;margin:0">📨 보낸 공지</h2><span class="sub">최근 60일 · ${L.length}건 · 예약 공지로 간 것도 여기 나와요 (입금 안내는 빼요)</span></div>
+    ${L.length?`<div class="tbl"><table><tbody>${L.map((x,i)=>`<tr><td style="white-space:nowrap"><b>${esc(kdt(x.sent_at))}</b><br><span class="sub">${esc(x.by_name||'')}</span></td>
+      <td>${esc(x.body)}<details style="margin-top:4px"><summary class="sub" style="cursor:pointer"><b>${x.n}명</b>에게 보냄 · 읽음 ${x.read_n}명 · 받은 고객 보기</summary><div class="sub" style="margin-top:4px;line-height:1.7">${(x.cars||[]).map(c=>`${esc([c.complex,c.unit].filter(Boolean).join(' '))} ${esc(c.car||'')} ${esc(c.name||'')}${c.read?' ✓':''}`).join('<br>')}</div></details></td></tr>`).join('')}</tbody></table></div>`:'<p class="sub">최근 60일 동안 보낸 공지가 없어요.</p>'}</div>`;
+}
 async function ntSaveTpls(){ try{ await q(db.rpc('set_my_ui_pref',{p_key:'notice_tpls',p_value:S.ntTpls})); }catch(_){ try{ localStorage.setItem('ah-notice-tpls',JSON.stringify(S.ntTpls)); }catch(__){} } }
 function schedCard(kind){
   const all=(S.sched||[]).filter(x=>x.kind===kind); if(!all.length) return '';
@@ -2232,8 +2244,9 @@ function noticeView(){
   return `<div class="row"><div class="grow"><h1 class="h">공지 보내기</h1><p class="sub">고른 고객의 고객 앱 알림함으로 공지가 가요. 처음에는 '세차중' 고객만 보여요. 일시정지 · 정지 · 해지 고객에게도 보내려면 위 버튼을 눌러 같이 고르세요.</p></div></div>
   <div class="two-col"><div class="card"><div class="row" style="gap:8px;flex-wrap:wrap">${aptMulti('noticeApts',apts,'아파트 고르기 (여러 개)')}
     <div class="chips" role="group" aria-label="고객 상태">${NT_ST.map(([k,l])=>`<button class="chip cst-${k==='pause'?'pz':k}" aria-pressed="${S.noticeSt.includes(k)}" data-act="nst" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div></div>
-    <div class="row"><button class="link" data-act="nall">${all?'선택 해제':'목록 전체 선택'}</button><span class="sub">목록 ${list.length}명</span><span class="grow"></span><b>${S.noticeSel.length}명 선택</b>${S.noticeSel.length?`<button class="link" data-act="nnone">모두 해제</button>`:''}<button class="btn2 sm" data-act="xlNotice">📤 엑셀로 받기</button></div>
-    <div class="tbl" style="max-height:420px;overflow:auto"><table><tbody>${list.map(c=>{const k=ntStKey(c); return `<tr class="cm-row ${k==='cancel'?'is-cancel':k==='stop'?'is-stop':k==='pause'?'is-pz':''}"><td style="width:36px"><input type="checkbox" data-nsel="${c.id}" ${S.noticeSel.includes(c.id)?'checked':''} aria-label="${esc(c.name)} 선택"></td><td>${esc(c.name)}${k==='on'?'':` <span class="pill ${k==='pause'?'st-pz':'st-'+k}">${esc(NT_ST.find(x=>x[0]===k)[1])}</span>`}</td><td>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</td><td>${esc(c.car_number||'')}</td></tr>`;}).join('')||'<tr><td class="sub">조건에 맞는 고객이 없어요.</td></tr>'}</tbody></table></div></div>
+    <div class="row" style="gap:6px"><input class="inp grow" id="ntQ" type="search" value="${esc(S.ntQ||'')}" placeholder="🔍 이름 · 차량번호 · 동호수 검색" aria-label="고객 검색" autocomplete="off"></div>
+    <div class="row"><button class="link" data-act="nall">${all?'선택 해제':'목록 전체 선택'}</button><span class="sub" id="ntCnt">목록 ${list.length}명</span><span class="grow"></span><b>${S.noticeSel.length}명 선택</b>${S.noticeSel.length?`<button class="link" data-act="nnone">모두 해제</button>`:''}<button class="btn2 sm" data-act="xlNotice">📤 엑셀로 받기</button></div>
+    <div class="tbl" style="max-height:420px;overflow:auto"><table><tbody id="ntTbl">${ntRows(list)}</tbody></table></div></div>
   <div class="card"><div class="chips">${NT_BASE.map(([l,b])=>`<button class="chip" data-act="tpl" data-b="${esc(b)}">${l}</button>`).join('')}
     ${mine.map((x,i)=>`<span class="chip tpl-mine"><button type="button" class="link" data-act="tpl" data-b="${esc(x.b)}" title="${esc(x.b)}">⭐ ${esc(x.l)}</button><button type="button" class="link tpl-x" data-act="tplDel" data-i="${i}" aria-label="${esc(x.l)} 문구 지우기">✕</button></span>`).join('')}</div>
     <label for="notice" style="font-weight:700;font-size:13px">공지 내용</label><textarea class="inp" id="notice" maxlength="300">${esc(S.notice)}</textarea>
@@ -2241,7 +2254,7 @@ function noticeView(){
     <div class="chips" role="group" aria-label="보내는 때"><button class="chip" aria-pressed="${!S.ntLater}" data-act="ntWhen" data-v="now">지금 보내기</button><button class="chip" aria-pressed="${!!S.ntLater}" data-act="ntWhen" data-v="later">⏰ 예약 보내기</button></div>
     ${S.ntLater?`<div class="row" style="gap:6px"><label for="ntAt" style="font-weight:700;font-size:13px">보낼 날짜 · 시간</label><input class="inp" type="datetime-local" id="ntAt" value="${esc(S.ntAt||schedDefault())}" min="${dtLocal(new Date())}"></div><p class="note">정한 시간이 되면 고객 앱 알림으로 가요. 보내기 전에는 아래 목록에서 취소할 수 있어요.</p>`:''}
     <button class="btn" id="nsend" data-act="nsend" ${S.noticeSel.length&&S.notice.trim()?'':'disabled'}>${ic('check')}${S.ntLater?'선택한 고객에게 공지 예약하기':'선택한 고객에게 공지 보내기'}</button></div></div>
-  ${schedCard('notice')}`;
+  ${schedCard('notice')}${sentCard()}`;
 }
 
 /* ---------- 그리기 ---------- */
@@ -3028,6 +3041,7 @@ document.addEventListener('input',e=>{ if(/^reply-\d+$/.test(e.target.id)){ S.re
   if(e.target.id==='pauseDate'){ S.pauseDate=e.target.value; }
   if(e.target.id&&e.target.id.startsWith('note-')){ S.noteDraft[Number(e.target.id.slice(5))]=e.target.value; }
   if(e.target.id==='ntAt'){ S.ntAt=e.target.value; return; }
+  if(e.target.id==='ntQ'){ S.ntQ=e.target.value; const L=ntList(), tb=$('#ntTbl'), cn=$('#ntCnt'); if(tb) tb.innerHTML=ntRows(L); if(cn) cn.textContent=`목록 ${L.length}명`; return; }
   if(e.target.id==='notice'){ S.notice=e.target.value; const b=$('#nsend'); if(b) b.disabled=!(S.noticeSel.length&&S.notice.trim()); }
 });
 document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&(e.target.id==='tdTitle'||e.target.id==='tdMemo')&&!e.isComposing){ e.preventDefault(); tdSave(); return; } if(e.key==='Escape'&&S.dialog&&!S.busy){S.dialog=null;render();} else if(e.key==='Escape'&&S.noteModal&&!S.busy){S.noteModal=null;render();} });
