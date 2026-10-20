@@ -36,6 +36,13 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stro
 .tabs .in{max-width:1180px;margin:0 auto;padding:0 12px;display:flex;gap:2px;overflow-x:auto}
 .tabs button{border:0;background:none;padding:14px 14px 12px;font-weight:700;color:var(--sub);border-bottom:2px solid transparent;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
 .tabs button[aria-selected="true"]{color:var(--text);border-color:var(--gold)}
+.pres{position:relative;display:flex;align-items:center}.pres:empty{display:none}
+.pres-btn{display:flex;align-items:center;gap:0;border:0;background:rgba(255,255,255,.08);border-radius:999px;padding:3px 10px 3px 4px;color:#fff}
+.pav{width:26px;height:26px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:800;color:#fff;border:2px solid var(--ink);margin-left:-6px;flex:none}.pres-btn .pav:first-child{margin-left:0}.pav.me{box-shadow:0 0 0 2px var(--gold-2,#E2C77F)}.pav.more{background:#5D6D7E}
+.pres-n{font-size:12px;font-weight:700;margin-left:6px;white-space:nowrap}
+.pres-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:40;background:var(--card,#fff);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:10px 12px;min-width:240px;display:flex;flex-direction:column;gap:8px;font-size:13px}
+.pres-row{display:flex;align-items:center;gap:8px}.pres-row .pav{margin-left:0;border-color:var(--card,#fff)}.pres-row small{color:var(--sub)}
+.pres-tab{display:inline-flex}.pres-tab:empty{display:none}.pdot{width:18px;height:18px;border-radius:50%;display:inline-grid;place-items:center;font-size:10px;font-weight:800;color:#fff;margin-left:-4px;border:1.5px solid var(--card,#fff)}.pres-tab .pdot:first-child{margin-left:2px}.pdot.more{background:#5D6D7E;width:auto;padding:0 4px;border-radius:9px}
 .tabs button.tab-set{margin-left:auto;color:var(--sub);font-size:15px;padding:12px 12px 10px;position:sticky;right:0;background:var(--card)}
 .tabset{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto}
 .tabset li{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:6px 8px;background:#fff}.tabset li.off{opacity:.55}
@@ -423,7 +430,28 @@ function tabPrefNorm(v){ v=v&&typeof v==='object'?v:{}; const order=(Array.isArr
   TAB_KEYS.forEach(k=>{ if(!order.includes(k)) order.push(k); }); const hidden=(Array.isArray(v.hidden)?v.hidden:[]).filter(k=>TAB_KEYS.includes(k));
   return {order,hidden:hidden.length>=TAB_KEYS.length?[]:hidden}; }
 function tabsView(){ const P=S.tabPref||tabPrefNorm(null); return P.order.filter(k=>!P.hidden.includes(k)).map(k=>TABS.find(t=>t[0]===k)); }
-function setTab(k){ if(k==='cust'){ k='cmgr'; S.cmMode='set'; } if(!TAB_KEYS.includes(k)) return; S.tab=k;
+/* ---------- 지금 보고 있는 사람 (구글 스프레드시트처럼 · Supabase 실시간 · SQL 필요 없음) ---------- */
+const PRES={ch:null,list:[]};
+const PRES_C=['#2F5DB3','#2E7D4F','#B4321E','#7B4BB3','#B07A12','#0F7C86','#C2185B','#5D6D7E'];
+const presColor=id=>{ let h=0; String(id||'').split('').forEach(c=>h=(h*31+c.charCodeAt(0))>>>0); return PRES_C[h%PRES_C.length]; };
+const presTabName=k=>(TABS.find(t=>t[0]===k)||[])[1]||k;
+const presInit=n=>String(n||'?').trim().slice(0,1);
+function presStart(){ if(PRES.ch||!db||!S.me||!db.channel) return;
+  try{ PRES.ch=db.channel('admin-online',{config:{presence:{key:S.me.id}}});
+    PRES.ch.on('presence',{event:'sync'},presSync).subscribe(st=>{ if(st==='SUBSCRIBED') presTrack(); }); }catch(_){ PRES.ch=null; } }
+function presStop(){ try{ if(PRES.ch) db.removeChannel(PRES.ch); }catch(_){} PRES.ch=null; PRES.list=[]; presPaint(); }
+function presTrack(){ if(!PRES.ch||!S.me) return; try{ PRES.ch.track({id:S.me.id,name:S.me.name||'관리자',role:S.me.role,tab:S.tab,at:new Date().toISOString(),dev:/Mobi|Android|iPhone/i.test(navigator.userAgent)?'폰':'PC'}); }catch(_){} }
+function presSync(){ const st=PRES.ch?PRES.ch.presenceState():{}, m=new Map();
+  Object.values(st).forEach(arr=>(arr||[]).forEach(p=>{ if(!p||!p.id) return; const o=m.get(p.id); if(!o) m.set(p.id,{...p,tabs:[p.tab],devs:[p.dev]}); else { o.tabs.push(p.tab); o.devs.push(p.dev); if(p.at>o.at) Object.assign(o,{tab:p.tab,at:p.at,dev:p.dev}); } }));
+  PRES.list=[...m.values()].sort((a,b)=>(b.id===(S.me&&S.me.id))-(a.id===(S.me&&S.me.id))||String(a.name).localeCompare(String(b.name),'ko')); presPaint(); }
+function presHtml(){ const L=PRES.list; if(!L.length) return '';
+  const me=S.me&&S.me.id, av=p=>`<span class="pav${p.id===me?' me':''}" style="background:${presColor(p.id)}" title="${esc(p.name)}${p.id===me?' (나)':''} · ${esc(presTabName(p.tab))} 보는 중 · ${esc([...new Set(p.devs)].join('·'))}">${esc(presInit(p.name))}</span>`;
+  return `<button type="button" class="pres-btn" data-act="presOpen" aria-expanded="${!!S.presOpen}" aria-label="지금 접속한 사람 ${L.length}명">${L.slice(0,5).map(av).join('')}${L.length>5?`<span class="pav more">+${L.length-5}</span>`:''}<span class="pres-n">${L.length}명 접속 중</span></button>
+    ${S.presOpen?`<div class="pres-pop" role="dialog" aria-label="지금 접속한 사람"><b>지금 관리자앱을 보고 있는 사람</b>${L.map(p=>`<div class="pres-row">${av(p)}<span class="grow"><b>${esc(p.name)}</b>${p.id===me?' <small>(나)</small>':''}<br><small>${esc([...new Set(p.tabs)].map(presTabName).join(' · '))} 보는 중 · ${esc([...new Set(p.devs)].join(' · '))}</small></span></div>`).join('')}</div>`:''}`; }
+function presTabHtml(k){ const me=S.me&&S.me.id, L=PRES.list.filter(p=>p.id!==me&&(p.tabs||[p.tab]).includes(k)); if(!L.length) return '';
+  return L.slice(0,3).map(p=>`<span class="pdot" style="background:${presColor(p.id)}" title="${esc(p.name)} 보는 중">${esc(presInit(p.name))}</span>`).join('')+(L.length>3?`<span class="pdot more">+${L.length-3}</span>`:''); }
+function presPaint(){ const el=document.getElementById('pres'); if(el) el.innerHTML=presHtml(); document.querySelectorAll('[data-pt]').forEach(x=>x.innerHTML=presTabHtml(x.dataset.pt)); }
+function setTab(k){ if(k==='cust'){ k='cmgr'; S.cmMode='set'; } if(!TAB_KEYS.includes(k)) return; S.tab=k; presTrack();
   try{ history.replaceState(null,'','#'+k); }catch(_){} try{ localStorage.setItem('ah-admin-tab',k); }catch(_){} }
 async function loadTabPref(){
   let v=null; S.tabPrefServer=false;
@@ -2315,9 +2343,9 @@ function renderMain(){
     R.innerHTML=`<div class="login"><div class="card"><h2 class="h">관리자만 들어올 수 있어요</h2><p class="sub">관리자 계정으로 로그인해 주세요. 현장직원은 직원 앱을 이용해 주세요.</p><div class="row"><a class="btn2" href="/field">직원 앱으로</a><button class="btn2" data-act="logout">로그아웃</button></div></div></div>`;
   } else {
     const views={today:todayView,req:reqView,live:liveView,field:fieldView,round:roundView,cmgr:cmgrView,coll:collView,acc:accView,jobs:jobsView,slots:slotsView,notice:noticeView};
-    R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div>
+    R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div><span id="pres" class="pres">${presHtml()}</span>
       ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<button class="tl" data-act="push-on" aria-label="휴대폰 알림" style="${pushState==='on'?'color:var(--gold-2)':''}">${ic('bell',14)}<span${pushState==='on'?' class="lbl"':''}>${pushState==='on'?'알림 켜짐':'알림 켜기'}</span></button><a href="/" aria-label="영업 CRM">${ic('arrow',14)}<span class="lbl">영업 CRM</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
-    <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${tabsView().map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}${k==='today'&&S.cntTodo?`<span class="cnt">${S.cntTodo}</span>`:''}</button>`).join('')}<button type="button" class="tab-set" data-act="tabSet" title="메뉴 순서 · 숨기기 (나만 적용)" aria-label="메뉴 순서 바꾸기">⚙</button></div></nav>
+    <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${tabsView().map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}<span class="pres-tab" data-pt="${k}">${presTabHtml(k)}</span>${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}${k==='today'&&S.cntTodo?`<span class="cnt">${S.cntTodo}</span>`:''}</button>`).join('')}<button type="button" class="tab-set" data-act="tabSet" title="메뉴 순서 · 숨기기 (나만 적용)" aria-label="메뉴 순서 바꾸기">⚙</button></div></nav>
     <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${mineBar()}${views[S.tab]()}</main>`;
   }
   if(window.AppNav&&!AppNav.getToken) AppNav.getToken=async()=>{ const {data}=await db.auth.getSession(); return data&&data.session?data.session.access_token:null; };
@@ -2345,7 +2373,8 @@ document.addEventListener('click',async e=>{
     case 'push-on': await enablePush(); break;
     case 'pw-eye': togglePw(t); break;
     case 'install': if(deferredInstall){ deferredInstall.prompt(); await deferredInstall.userChoice; deferredInstall=null; render(); } break;
-    case 'logout': await db.auth.signOut(); break;
+    case 'logout': presStop(); await db.auth.signOut(); break;
+    case 'presOpen': S.presOpen=!S.presOpen; presPaint(); break;
     case 'reload': try{await loadBase();}catch(_){} await refreshCounts(); await loadTab(); toast('새로 불러왔어요.'); break;
     case 'tab': setTab(t.dataset.t); S.err=''; render(); await loadTab(); break;
     case 'tabSet': S.tabDraft=JSON.parse(JSON.stringify(S.tabPref||tabPrefNorm(null)));
@@ -3066,7 +3095,7 @@ document.addEventListener('submit',async e=>{
   S.busy=false; if(error){ S.err=friendly(error); render(); $('#em').value=em; }
 });
 async function start(){
-  try{ const ok=await loadBase(); if(ok){ await loadTabPref(); setTab(S.tab); if(window.StaffNotice) StaffNotice.reload(); await refreshCounts(); await loadTab(); return; } }catch(e){ S.err=friendly(e); }
+  try{ const ok=await loadBase(); if(ok){ presStart(); await loadTabPref(); setTab(S.tab); if(window.StaffNotice) StaffNotice.reload(); await refreshCounts(); await loadTab(); return; } }catch(e){ S.err=friendly(e); }
   render();
 }
 (async function boot(){
@@ -3095,7 +3124,7 @@ async function start(){
   },30000);
   // 예약 메시지: 1분마다 보낼 시간이 된 것을 보내요 (창이 숨겨져 있어도)
   setInterval(runDue,60000); setTimeout(runDue,5000);
-  db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ S.me=null; render(); return; } if(!was){ S.err=''; await start(); } });
+  db.auth.onAuthStateChange(async (ev,session)=>{ const was=!!S.session; S.session=session; if(!session){ presStop(); S.me=null; render(); return; } if(!was){ S.err=''; await start(); } });
 })();
 </script>
 <script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));}</script>
