@@ -1562,7 +1562,14 @@ function collMonthPanel(){
   const T=d.sum.reduce((a,r)=>({members:a.members+r.members,billed:a.billed+r.billed,paid:a.paid+r.paid,unpaid:a.unpaid+r.unpaid,done:a.done+r.done_count,part:a.part+r.partial_count,open:a.open+r.open_count,adj:a.adj+r.adjusted_count,adjs:a.adjs+r.adjust_sum}),{members:0,billed:0,paid:0,unpaid:0,done:0,part:0,open:0,adj:0,adjs:0});
   const cancel=d.chg.filter(c=>/해지/.test(c.status||'')).length, pause=d.chg.length-cancel;
   const days=[...new Set(d.pays.map(p=>p.paid_at))];
-  const view=S.cmView==='pay'?(d.pays.length?days.map(k=>{const ps=d.pays.filter(p=>p.paid_at===k);return `<div class="pay-day">${kdate(k)} <span>${ps.length}건 · ${won0(ps.reduce((a,p)=>a+p.amount,0))}</span></div>
+  // 총무별: 아파트 → 담당 총무 (수금 설정의 총무별 담당 현황 기준 · 담당 총무가 여럿이면 함께 묶어요)
+  const byMgr=()=>{ const m=new Map(); d.sum.forEach(r=>{ const k=ownersOf(r.complex).join(', ')||'담당 없음'; const o=m.get(k)||{apts:[],members:0,billed:0,paid:0,unpaid:0,done:0,part:0,open:0};
+      o.apts.push(r.complex); o.members+=r.members; o.billed+=r.billed; o.paid+=r.paid; o.unpaid+=r.unpaid; o.done+=r.done_count; o.part+=r.partial_count; o.open+=r.open_count; m.set(k,o); });
+    const L=[...m.entries()].sort((a,b)=>(a[0]==='담당 없음')-(b[0]==='담당 없음')||b[1].billed-a[1].billed);
+    return L.length?`<div class="tbl"><table><thead><tr><th>총무</th><th>담당 아파트</th><th>인원</th><th>받을 돈</th><th>입금받은 돈</th><th>미입금</th><th>수금률</th><th>수금완료 / 일부 / 미입금</th></tr></thead><tbody>
+      ${L.map(([k,o])=>`<tr><td class="nowrap"><b>${esc(k)}</b></td><td class="sub">${o.apts.map(a=>`<button class="link" data-act="cmApt" data-a="${esc(a)}" title="이 아파트 명단 보기">${esc(a)}</button>`).join(', ')}</td><td>${o.members}명</td><td class="nowrap"><b>${won0(o.billed)}</b></td><td class="nowrap" style="color:#1F5136;font-weight:800">${won0(o.paid)}</td><td class="nowrap" style="color:var(--red);font-weight:800">${won0(o.unpaid)}</td><td class="nowrap">${o.billed?Math.round(o.paid*100/o.billed):0}%</td><td class="nowrap">${o.done} / ${o.part} / ${o.open}</td></tr>`).join('')}
+      <tr style="font-weight:800"><td>전체</td><td></td><td>${T.members}명</td><td>${won0(T.billed)}</td><td style="color:#1F5136">${won0(T.paid)}</td><td style="color:var(--red)">${won0(T.unpaid)}</td><td>${T.billed?Math.round(T.paid*100/T.billed):0}%</td><td>${T.done} / ${T.part} / ${T.open}</td></tr></tbody></table></div>`:'<p class="sub">이 달 청구가 없어요.</p>'; };
+  const view=S.cmView==='mgr'?byMgr():S.cmView==='pay'?(d.pays.length?days.map(k=>{const ps=d.pays.filter(p=>p.paid_at===k);return `<div class="pay-day">${kdate(k)} <span>${ps.length}건 · ${won0(ps.reduce((a,p)=>a+p.amount,0))}</span></div>
       <div class="tbl"><table><tbody>${ps.map(p=>`<tr><td>${esc(p.complex||'-')}</td><td>${esc(p.unit||'-')}</td><td><b class="car">${esc(p.car_number||'-')}</b></td><td>${esc(p.name||'')}${p.payer_name&&p.payer_name!==p.name?` <small class="by">(${esc(p.payer_name)})</small>`:''}</td><td class="nowrap"><b>${won0(p.amount)}</b></td><td>${p.bill_done?'<span class="pill cs-ok">완료</span>':'<span class="pill part">일부 입금</span>'}</td><td class="sub">${esc(p.note||'')}</td><td class="sub nowrap">${esc(p.by_name||'')}</td></tr>`).join('')}</tbody></table></div>`;}).join(''):'<p class="sub">이 달 청구분으로 들어온 입금이 없어요.</p>')
     :S.cmView==='chg'?(d.chg.length?`<div class="tbl"><table><thead><tr><th>아파트</th><th>동·호수</th><th>차량번호</th><th>고객</th><th>상태</th><th>바뀐 날</th><th>어디서</th></tr></thead><tbody>${d.chg.map(c=>`<tr><td>${esc(c.complex||'-')}</td><td>${esc(c.unit||'-')}</td><td><b class="car">${esc(c.car_number||'-')}</b></td><td>${esc(c.name||'')}</td><td><span class="pill ${/해지/.test(c.status)?'st-cancel':'st-pause'}">${esc(c.status||'')}</span></td><td class="nowrap">${when(c.changed_at)}</td><td class="sub">${esc(c.source)}</td></tr>`).join('')}</tbody></table></div>`:'<p class="sub">이 달에 해지 · 정지된 고객이 없어요.</p>')
     :(d.sum.length?`<div class="tbl"><table><thead><tr><th>아파트</th><th>인원</th><th>받을 돈</th><th>입금받은 돈</th><th>미입금</th><th>수금완료 / 일부 / 미입금</th><th>금액 조정</th></tr></thead><tbody>
@@ -1575,13 +1582,13 @@ function collMonthPanel(){
       <div class="b"><span>입금받은 돈</span><b>${won0(T.paid)}</b><small>수금완료 ${T.done}명${T.part?` · 일부 입금 ${T.part}명`:''}</small></div>
       <div class="c"><span>미입금</span><b>${won0(T.unpaid)}</b><small>${T.open+T.part}명 남음</small></div>
       <div><span>당월 해지 · 정지</span><b>${d.chg.length}명</b><small>해지 ${cancel} · 정지 ${pause}</small></div></div>
-    <div class="mini-tabs">${[['apt','아파트별'],['pay','입금 날짜별'],['chg','당월 해지 · 정지']].map(([k,l])=>`<button class="mtab" aria-selected="${S.cmView===k}" data-act="cmView" data-f="${k}">${l}</button>`).join('')}</div>
+    <div class="mini-tabs">${[['apt','아파트별'],['mgr','총무별'],['pay','입금 날짜별'],['chg','당월 해지 · 정지']].map(([k,l])=>`<button class="mtab" aria-selected="${S.cmView===k}" data-act="cmView" data-f="${k}">${l}</button>`).join('')}</div>
     <div style="margin-top:8px">${view}</div></details>`;
 }
 async function cmExport(){
   try{ const X=await loadXLSX(), d=cmScoped(), md=cmMonthDate(); if(!d) return;
     const wb=X.utils.book_new();
-    X.utils.book_append_sheet(wb,X.utils.json_to_sheet(d.sum.map(r=>({아파트:r.complex,인원:r.members,받을돈:r.billed,입금받은돈:r.paid,미입금:r.unpaid,수금완료:r.done_count,일부입금:r.partial_count,미입금인원:r.open_count,조정건수:r.adjusted_count,조정합계:r.adjust_sum}))),'아파트별');
+    X.utils.book_append_sheet(wb,X.utils.json_to_sheet(d.sum.map(r=>({아파트:r.complex,총무:ownersOf(r.complex).join(', ')||'담당 없음',인원:r.members,받을돈:r.billed,입금받은돈:r.paid,미입금:r.unpaid,수금완료:r.done_count,일부입금:r.partial_count,미입금인원:r.open_count,조정건수:r.adjusted_count,조정합계:r.adjust_sum}))),'아파트별');
     X.utils.book_append_sheet(wb,X.utils.json_to_sheet(d.pays.map(p=>({입금일:p.paid_at,아파트:p.complex,동호수:p.unit,차량번호:p.car_number,고객:p.name,입금자명:p.payer_name,금액:p.amount,상태:p.bill_done?'완료':'일부 입금',메모:p.note,처리:p.by_name}))),'입금 날짜별');
     X.utils.book_append_sheet(wb,X.utils.json_to_sheet(d.chg.map(c=>({아파트:c.complex,동호수:c.unit,차량번호:c.car_number,고객:c.name,상태:c.status,바뀐날:c.changed_at?String(c.changed_at).slice(0,10):'',어디서:c.source}))),'당월 해지·정지');
     X.writeFile(wb,`오토핸즈_월별수금현황_${md.getFullYear()}${pad(md.getMonth()+1)}.xlsx`); toast('엑셀로 받았어요.'); }catch(e){ toast(friendly(e),true); } }
