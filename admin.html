@@ -1869,8 +1869,10 @@ function collView(){
   const base=scoped.filter(r=>(!S.collApt||r.complex===S.collApt)&&cfPass(r)&&(!qq||[r.car_number,r.name,r.payer_name,r.unit,r.phone,r.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq)));
   const feeMiss=r=>r.fee==null&&r.wash_status!=='해지';
   const cnt={전체:base.length}; COLL_TABS.forEach(k=>cnt[k]=base.filter(r=>r.coll_state===k).length); cnt['안내 누락']=base.filter(noticeMiss).length; cnt['요금 미입력']=base.filter(feeMiss).length;
+  const hasRd=!!(S.roundMap&&Object.keys(S.roundMap).length); if(hasRd) cnt['회차완료']=base.filter(r=>cRdPass(r,'full')).length;   // 회차 현황과 같은 기준 (이번 달)
   if(S.collTab==='요금 미입력'&&!cnt['요금 미입력']) S.collTab='전체';
-  const list0=S.collTab==='전체'?base:S.collTab==='안내 누락'?base.filter(noticeMiss):S.collTab==='요금 미입력'?base.filter(feeMiss):base.filter(r=>r.coll_state===S.collTab);
+  if(S.collTab==='회차완료'&&!hasRd) S.collTab='전체';
+  const list0=S.collTab==='전체'?base:S.collTab==='회차완료'?base.filter(r=>cRdPass(r,'full')):S.collTab==='안내 누락'?base.filter(noticeMiss):S.collTab==='요금 미입력'?base.filter(feeMiss):base.filter(r=>r.coll_state===S.collTab);
   const list=(S.aF?list0.filter(r=>aFlags(r)[S.aF]):list0).filter(r=>!S.cRd||cRdPass(r,S.cRd));
   const ids=list.filter(r=>canEditCx(r.complex)).map(r=>r.id), allSel=ids.length&&ids.every(x=>S.collSel.includes(x)), n=S.collSel.length;
   const sumUnpaid=list.reduce((a,r)=>a+(r.unpaid_amount||0),0), sumBill=list.reduce((a,r)=>a+(r.cur_total||0),0),
@@ -1888,7 +1890,7 @@ function collView(){
   </div>
   ${collMonthPanel()}
   ${periodPanel()}
-  <div class="mini-tabs" role="tablist">${['전체',...COLL_TABS,'안내 누락',...(cnt['요금 미입력']?['요금 미입력']:[])].map(k=>`<button role="tab" class="mtab mt-${k}" aria-selected="${S.collTab===k}" data-act="collTab" data-f="${k}">${k} <b>${cnt[k]}</b></button>`).join('')}</div>
+  <div class="mini-tabs" role="tablist">${['전체',...(hasRd?['회차완료']:[]),...COLL_TABS,'안내 누락',...(cnt['요금 미입력']?['요금 미입력']:[])].map(k=>`<button role="tab" class="mtab mt-${k}" aria-selected="${S.collTab===k}" data-act="collTab" data-f="${k}" ${k==='회차완료'?`title="${new Date().getMonth()+1}월 회차를 다 채운 고객 (회차 현황과 같은 기준)"`:''}>${k==='회차완료'?'✅ 회차완료':k} <b>${cnt[k]}</b></button>`).join('')}</div>
   ${S.prepayOk?`<div class="chips a-chips"><b class="sub" style="color:var(--text)">납부 보기</b>${A_F.map(([k,l])=>`<button class="chip a-${k}" aria-pressed="${S.aF===k}" data-act="aF" data-f="${k}">${l} <b>${list0.filter(r=>aFlags(r)[k]).length}</b></button>`).join('')}${S.aF?'<button class="link" data-act="aF" data-f="">모두 보기</button>':''}</div>`:''}
   ${S.roundMap&&Object.keys(S.roundMap).length?`<div class="chips a-chips c-rd"><b class="sub" style="color:var(--text)">회차 보기 (${new Date().getMonth()+1}월)</b>${C_RD.map(([k,l])=>`<button class="chip crd-${k}" aria-pressed="${S.cRd===k}" data-act="cRd" data-f="${k}">${l} <b>${list0.filter(r=>cRdPass(r,k)).length}</b></button>`).join('')}${S.cRd?'<button class="link" data-act="cRd" data-f="">모두 보기</button>':''}</div>`:''}
   <form id="collsearch" class="req-tools" role="search">
@@ -2143,7 +2145,7 @@ async function collExport(tpl){
   try{
     const X=await loadXLSX();
     const rows=tpl?[{아파트:'범어파크뷰',동호수:'103동 1201호',차량번호:'12가3456',상태:'세차중','고객(입금자명)':'홍길동(홍엄마)',연락처:'010-1234-5678',차종:'아반떼',색상:'흰색',정기권:'월 4회',지정요일:'화요일',담당직원:'김덕훈',계약일:'2026-09-01',월요금:55000,납부일:10,미납개월:0,고객메모:'자동이체 예정'}]
-      :(S.collTab==='전체'?S.coll:S.coll.filter(r=>r.coll_state===S.collTab)).filter(r=>(!S.collApt||r.complex===S.collApt)&&cfPass(r)).map(r=>({아파트:r.complex,동호수:r.unit,차량번호:r.car_number,상태:r.wash_status,'고객(입금자명)':r.payer_name&&r.payer_name!==r.name?`${r.name}(${r.payer_name})`:r.name,연락처:r.phone,차종:r.car_model,색상:r.car_color,정기권:r.wash_plan,지정요일:r.wash_weekday,담당직원:r.staff_name,계약일:r.contract_date||'',월요금:r.fee??'',외부세차비용:r.cur_external??'',회차차감:r.cur_round_deduct?-r.cur_round_deduct:'',실내세차비용:r.cur_interior??'',실내세차횟수:r.cur_interior_count??'',매월요금:r.cur_total??'',금액조정:r.cur_adjust||'',이번달받은돈:r.cur_paid_amount??'',이번달남은돈:r.cur_remaining??'',차급:r.car_class||'',납부일:r.due_day,수금상태:r.coll_state,미납개월:r.overdue_months,미입금액:r.unpaid_amount,최근입금일:r.last_paid||'',고객메모:r.notes_text||''}));
+      :(S.collTab==='전체'?S.coll:S.collTab==='회차완료'?S.coll.filter(r=>cRdPass(r,'full')):S.coll.filter(r=>r.coll_state===S.collTab)).filter(r=>(!S.collApt||r.complex===S.collApt)&&cfPass(r)).map(r=>({아파트:r.complex,동호수:r.unit,차량번호:r.car_number,상태:r.wash_status,'고객(입금자명)':r.payer_name&&r.payer_name!==r.name?`${r.name}(${r.payer_name})`:r.name,연락처:r.phone,차종:r.car_model,색상:r.car_color,정기권:r.wash_plan,지정요일:r.wash_weekday,담당직원:r.staff_name,계약일:r.contract_date||'',월요금:r.fee??'',외부세차비용:r.cur_external??'',회차차감:r.cur_round_deduct?-r.cur_round_deduct:'',실내세차비용:r.cur_interior??'',실내세차횟수:r.cur_interior_count??'',매월요금:r.cur_total??'',금액조정:r.cur_adjust||'',이번달받은돈:r.cur_paid_amount??'',이번달남은돈:r.cur_remaining??'',차급:r.car_class||'',납부일:r.due_day,수금상태:r.coll_state,미납개월:r.overdue_months,미입금액:r.unpaid_amount,최근입금일:r.last_paid||'',고객메모:r.notes_text||''}));
     const ws=X.utils.json_to_sheet(rows,{header:tpl?XH:[...XH.slice(0,14),'수금상태','미납개월','미입금액','최근입금일','고객메모']});
     ws['!cols']=(tpl?XH:[...XH.slice(0,14),'수금상태','미납개월','미입금액','최근입금일','고객메모']).map(h=>({wch:h==='고객메모'?40:Math.max(8,h.length*2+2)}));
     const wb=X.utils.book_new(); X.utils.book_append_sheet(wb,ws,tpl?'수금명단 양식':'수금관리');
