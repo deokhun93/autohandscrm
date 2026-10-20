@@ -664,9 +664,11 @@ const RD_TPL_DEF='{이름} 고객님, {월}월 정기세차 {회차}회가 모�
 // 저장된 문구도 '[오토핸즈]'는 빼고, 계좌 줄이 없으면 붙여요 (3회차 7번)
 function rdTpl(){ let t=''; try{ t=localStorage.getItem('ah-round-tpl')||''; }catch(_){} if(!t) return RD_TPL_DEF;
   t=t.replace(/^\s*\[오토핸즈\]\s*/,''); if(!t.includes('{계좌}')) t=t.replace(/\s*감사합니다\.?\s*$/,'')+'\n입금 계좌: {계좌}\n감사합니다.'; return t; }
-const rdAccTxt=()=>{ const a=(S.rdAccs||[]).find(x=>x.id===S.rdAcc); return a?[a.bank,a.account_masked||(a.last4?'****'+a.last4:'')].filter(Boolean).join(' '):''; };
+// 지정 계좌 (수금 명단 결제 종류에 저장된 계좌)가 있으면 그 계좌, 없으면 창에서 고른 계좌 (72 SQL)
+const rdOwnAcc=r=>{ const id=r&&(S.rdOwn||{})[r.customer_id]; return id&&(S.rdAccs||[]).some(a=>a.id===id)?id:null; };
+const rdAccTxt=r=>{ const id=rdOwnAcc(r)||S.rdAcc, a=(S.rdAccs||[]).find(x=>x.id===id); return a?[a.bank,a.account_masked||(a.last4?'****'+a.last4:'')].filter(Boolean).join(' '):''; };
 function rdFill(tpl,r,send){ const m=rdMonthDate().getMonth()+1;
-  if(!send) tpl=S.rdAcc?tpl.replace(/\{계좌\}/g,rdAccTxt()):tpl.replace(/[^\n]*\{계좌\}[^\n]*\n?/g,'');
+  if(!send) tpl=rdAccTxt(r)?tpl.replace(/\{계좌\}/g,rdAccTxt(r)):tpl.replace(/[^\n]*\{계좌\}[^\n]*\n?/g,'');
   return tpl.replace(/\{이름\}/g,r.name||'').replace(/\{차량번호\}/g,r.car_number||'').replace(/\{월\}/g,m).replace(/\{회차\}/g,r.wash_plan||r.done_count||'')
     .replace(/\{완료\}/g,r.done_count).replace(/\{금액\}/g,r.bill_amount!=null?Number(r.bill_amount).toLocaleString('ko-KR')+'원':'').replace(/[ \t]{2,}/g,' ').trim(); }
 function rdBase(){
@@ -822,13 +824,16 @@ function roundView(){
 const rdPaid=r=>['수금완료','일시정지','청구없음'].includes(r.bill_state);
 const rdNeedNotice=r=>!!r.bill_state&&!rdPaid(r);
 function rdNoticeExtra(rows){
-  const tpl=S.rdTplDraft, first=rows[0], sent=rows.filter(r=>r.notice_count>0).length, noAmt=rows.filter(r=>r.bill_amount==null).length;
+  const tpl=S.rdTplDraft, first=rows[0], sent=rows.filter(r=>r.notice_count>0).length, noAmt=rows.filter(r=>r.bill_amount==null).length, own=rows.filter(rdOwnAcc).length;
+  const thisM=rdMonthKey()===keyOf(new Date(new Date().getFullYear(),new Date().getMonth(),1));
   return `<div class="tpl-box"><label class="field"><span style="font-weight:700;font-size:13px">알림 제목</span><input class="inp" id="rdTitle" maxlength="40" value="${esc(S.rdTitle)}"></label>
     <label class="field"><span style="font-weight:700;font-size:13px">안내 문구</span><textarea class="inp" id="rdTplIn" maxlength="500">${esc(tpl)}</textarea></label>
     <label class="field"><span style="font-weight:700;font-size:13px">입금 계좌 <span class="sub">({계좌} 자리에 들어가요 · 고객에게는 전체 번호가 가요)</span></span><select class="inp" id="rdAcc">${(S.rdAccs||[]).length?(S.rdAccs||[]).map(a=>`<option value="${a.id}" ${a.id===S.rdAcc?'selected':''}>${esc([a.bank,a.account_masked||(a.last4?'****'+a.last4:''),a.label].filter(Boolean).join(' · '))}${a.owner_name&&a.owner_name!=='공용'?' ('+esc(a.owner_name)+')':''}</option>`).join(''):''}<option value="" ${S.rdAcc?'':'selected'}>계좌 안 넣기</option></select></label>
+    ${own?`<p class="note" style="margin:0;color:#1F5136">✓ 지정 계좌가 있는 고객 <b>${own}명</b>은 그 계좌로 자동으로 들어가요. 위에서 고른 계좌는 나머지 <b>${rows.length-own}명</b>에게 들어가요.</p>`:`<p class="note" style="margin:0">지정 계좌가 있는 고객이 없어서 모두 위에서 고른 계좌로 들어가요. (지정 계좌: 수금관리 → 고객 정보 수정 → 결제 종류 · 입금 계좌)</p>`}
     <p class="note" style="margin:0">바꿔 들어가는 말: {이름} {차량번호} {월} {회차} {완료} {금액}(그 달 외부+실내 합계) {계좌}(고른 입금 계좌). 문구는 이 컴퓨터에 저장돼서 다음에도 그대로 나와요. <button class="link" data-act="rdTplReset">기본 문구로</button></p>
-    <b style="font-size:13px">미리보기 · ${esc(first.car_number||'')} ${esc(first.name||'')}</b><div class="tpl-prev" id="rdPrev">${esc(rdFill(tpl,first))}</div>
-    ${sent?`<p class="note" style="margin:0;color:#9A4A0E">이미 이번 달 안내를 받은 고객 ${sent}명이 포함돼 있어요.</p>`:''}${noAmt?`<p class="note" style="margin:0;color:#9A4A0E">수금 금액이 없는 고객 ${noAmt}명은 {금액}이 빈칸으로 들어가요.</p>`:''}</div>`;
+    <b style="font-size:13px">미리보기 · ${esc(first.car_number||'')} ${esc(first.name||'')}${rdOwnAcc(first)?' <span class="pill p-ok">지정 계좌</span>':''}</b><div class="tpl-prev" id="rdPrev">${esc(rdFill(tpl,first))}</div>
+    ${sent?`<p class="note" style="margin:0;color:#9A4A0E">이미 이번 달 안내를 받은 고객 ${sent}명이 포함돼 있어요.</p>`:''}${noAmt?`<p class="note" style="margin:0;color:#9A4A0E">수금 금액이 없는 고객 ${noAmt}명은 {금액}이 빈칸으로 들어가요.</p>`:''}
+    <p class="note" style="margin:0">보내면 수금관리 '입금 안내' 칸에 <b>${rdMonthDate().getMonth()+1}월분 1차 ✓</b>(1차가 있으면 2차)가 자동으로 찍혀요.${thisM?'':` <b style="color:#9A4A0E">수금관리는 이번 달 안내만 보여 주니, 지난달 안내는 수금관리 화면에 안 보여요.</b>`}</p></div>`;
 }
 
 /* ---------- 탭: 실시간 세차 현황 (기간 합산 · 아파트별 · 담당자별 · 완료/미완료 목록) ---------- */
@@ -2725,9 +2730,10 @@ document.addEventListener('click',async e=>{
       S.rdTplDraft=rdTpl(); S.rdTitle=S.rdTitle||'입금 안내'; S.rdRows=rows;
       try{ S.rdAccs=((await q(db.rpc('list_collection_accounts')))||[]).filter(a=>a.active!==false); }catch(_){ S.rdAccs=[]; }
       if(!S.rdAccs.some(a=>a.id===S.rdAcc)) S.rdAcc=(S.rdAccs.find(a=>a.mine)||S.rdAccs[0]||{}).id||null;
+      S.rdOwn={}; try{ ((await q(db.rpc('round_notice_accounts',{p_customer_ids:rows.map(r=>r.customer_id)})))||[]).forEach(x=>S.rdOwn[x.customer_id]=x.account_id); }catch(_){}
       ask(`${rows.length}명에게 입금 안내를 보낼까요?`,'고객 앱 알림함과 휴대폰 알림으로 가요. 고객마다 이름·금액이 바뀌어 들어가요.','보내기',()=>act(async()=>{
         const tpl=S.rdTplDraft; try{ localStorage.setItem('ah-round-tpl',tpl); }catch(_){}
-        const items=rows.map(r=>({customer_id:r.customer_id,body:rdFill(tpl,r,true)})).filter(x=>x.body);
+        const items=rows.map(r=>({customer_id:r.customer_id,body:rdFill(tpl,r,true),account_id:rdOwnAcc(r)})).filter(x=>x.body);
         const n=await q(db.rpc('send_round_notices',{p_month:rdMonthKey(),p_title:S.rdTitle||'입금 안내',p_items:items,p_account_id:S.rdAcc||null})); S.rdSel=[]; toast(`${n||0}명에게 입금 안내를 보냈어요.`); },null),rdNoticeExtra(rows)); break; }
     case 'rdSched': try{ await rdScheduleExport(); }catch(e){ toast(friendly(e),true); } break;
     case 'xlToday': await xlToday(); break;
