@@ -1616,14 +1616,17 @@ function prRange(){
   return {from:keyOf(start),to:keyOf(end)};
 }
 async function loadPeriod(){ const r=prRange(); S.pr.range=r; try{ S.pr.rows=await q(db.rpc('list_payments_range',{p_from:r.from,p_to:r.to}))||[]; S.pr.err=''; }catch(e){ S.pr.rows=[]; S.pr.err=friendly(e); } }
-function prRows(){ const pr=S.pr, sec=PV().sec; return (pr.rows||[]).filter(p=>inScope(p.complex)&&(!sec.fWho||!pr.who||(p.by_name||'-')===pr.who)&&(!pr.method||(pr.method==='미입력'?!p.method:p.method===pr.method))&&(!pr.proof||(p.proof||'없음')===pr.proof)&&(!pr.acct||String(p.account_id)===pr.acct)); }
+// 관리자(총무) = 그 아파트 담당 총무 (수금 설정의 '총무별 담당 현황'과 같아요)
+const prMgr=p=>ownersOf(p.complex).join(', ')||'담당 없음';
+const prMgrPass=(p,m)=>m==='담당 없음'?!ownersOf(p.complex).length:ownersOf(p.complex).includes(m);
+function prRows(){ const pr=S.pr, sec=PV().sec; return (pr.rows||[]).filter(p=>inScope(p.complex)&&(!sec.fApt||!pr.apt||cxT(p.complex)===pr.apt)&&(!sec.fMgr||!pr.mgr||prMgrPass(p,pr.mgr))&&(!sec.fWho||!pr.who||(p.by_name||'-')===pr.who)&&(!pr.method||(pr.method==='미입력'?!p.method:p.method===pr.method))&&(!pr.proof||(p.proof||'없음')===pr.proof)&&(!pr.acct||String(p.account_id)===pr.acct)); }
 function grpTable(title,rows,keyFn){ const m=new Map(); rows.forEach(p=>{const k=keyFn(p); const o=m.get(k)||{n:0,sum:0}; o.n++; o.sum+=p.amount; m.set(k,o);});
   return `<div><b style="font-size:13px">${title}</b><div class="tbl"><table><tbody>${[...m.entries()].sort((a,b)=>b[1].sum-a[1].sum).map(([k,o])=>`<tr><td>${esc(k)}</td><td class="nowrap">${o.n}건</td><td class="nowrap"><b>${won0(o.sum)}</b></td></tr>`).join('')||'<tr><td class="sub">없음</td></tr>'}</tbody></table></div></div>`; }
 /* ---------- 담당자별 '입금 내역 조회' 보기 설정 (각자 저장) ---------- */
-const PV_SEC=[['fMethod','결제 종류 고르기 (필터)'],['fAcct','계좌 고르기 (필터)'],['fWho','처리한 사람 고르기 (필터)'],['cards','요약 칸 (합계)'],['kindTbl','결제 종류별 합계 표'],['acctTbl','계좌별 합계 표'],['whoTbl','처리한 사람별 합계 표'],['list','날짜별 입금 목록']];
+const PV_SEC=[['fMethod','결제 종류 고르기 (필터)'],['fAcct','계좌 고르기 (필터)'],['fApt','아파트 고르기 (필터)'],['fMgr','관리자(총무) 고르기 (필터)'],['fWho','처리한 사람 고르기 (필터)'],['cards','요약 칸 (합계)'],['kindTbl','결제 종류별 합계 표'],['acctTbl','계좌별 합계 표'],['aptTbl','아파트별 합계 표'],['mgrTbl','관리자(총무)별 합계 표'],['whoTbl','처리한 사람별 합계 표'],['list','날짜별 입금 목록']];
 const PV_CARDS=[['real','실제 입금 (서비스 제외)'],...PAY_METHODS.map(m=>[m,ML(m)])];
 const PV_COLS=[['complex','아파트'],['unit','동·호수'],['car','차량번호'],['name','고객(입금자명)'],['amount','금액'],['method','결제 종류 · 계좌'],['month','청구 달'],['note','메모'],['by','처리한 사람']];
-const PV_DEF=()=>({kinds:[...PAY_METHODS],sec:{fMethod:1,fAcct:1,fWho:0,cards:1,kindTbl:1,acctTbl:1,whoTbl:0,list:1},cards:['real','서비스','타계좌입금'],cols:Object.fromEntries(PV_COLS.map(([k])=>[k,1]))});
+const PV_DEF=()=>({kinds:[...PAY_METHODS],sec:{fMethod:1,fAcct:1,fApt:1,fMgr:1,fWho:0,cards:1,kindTbl:1,acctTbl:1,aptTbl:1,mgrTbl:1,whoTbl:0,list:1},cards:['real','서비스','타계좌입금'],cols:Object.fromEntries(PV_COLS.map(([k])=>[k,1]))});
 function pvNorm(v){ const d=PV_DEF(); if(!v||typeof v!=='object') return d;
   const kinds=Array.isArray(v.kinds)?PAY_METHODS.filter(m=>v.kinds.includes(m)):d.kinds;
   return {kinds:kinds.length?kinds:d.kinds,sec:{...d.sec,...(v.sec||{})},cards:Array.isArray(v.cards)?v.cards.filter(c=>PV_CARDS.some(([k])=>k===c)):d.cards,cols:{...d.cols,...(v.cols||{})}}; }
@@ -1646,12 +1649,16 @@ function periodPanel(){
   const fmt=k=>{const [y,m,d]=k.split('-').map(Number);return `${y}.${m}.${d}`;};
   const days=[...new Set(rows.map(p=>p.paid_at))], sum=x=>x.reduce((a,p)=>a+p.amount,0);
   const who=[...new Set((pr.rows||[]).filter(p=>inScope(p.complex)).map(p=>p.by_name||'-'))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const aptL=[...new Set([...(pr.rows||[]).filter(p=>inScope(p.complex)).map(p=>cxT(p.complex)),pr.apt||''].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
+  const mgrL=[...new Set([...((S.crole&&S.crole.chongmu)||[]).map(c=>c.name),...(pr.rows||[]).filter(p=>inScope(p.complex)).flatMap(p=>ownersOf(p.complex)),pr.mgr&&pr.mgr!=='담당 없음'?pr.mgr:''].filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko'));
   const card=k=>{ const x=k==='real'?rows.filter(p=>p.method!=='서비스'):rows.filter(p=>p.method===k);
     return `<div class="${k==='real'?'b':''}"><span>${esc(k==='real'?'실제 입금 (서비스 제외)':ML(k))}</span><b>${won0(sum(x))}</b><small>${x.length}건</small></div>`; };
   const filters=[sec.fMethod?`<select class="inp" id="prMethod" aria-label="결제 종류"><option value="">결제 종류 전체</option>${[...myKinds(pr.method),'미입력'].map(m=>`<option value="${m}" ${pr.method===m?'selected':''}>${ML(m)}</option>`).join('')}</select>`:'',
     sec.fAcct?`<select class="inp" id="prAcct" aria-label="계좌"><option value="">계좌 전체</option>${S.accs.map(a=>`<option value="${a.id}" ${pr.acct===String(a.id)?'selected':''}>${esc(accName(a))}${a.active?'':' (안 씀)'}</option>`).join('')}</select>`:'',
+    sec.fApt?`<select class="inp" id="prApt" aria-label="아파트"><option value="">🏢 아파트 전체</option>${aptL.map(a=>`<option ${pr.apt===a?'selected':''}>${esc(a)}</option>`).join('')}</select>`:'',
+    sec.fMgr?`<select class="inp" id="prMgr" aria-label="관리자(총무)"><option value="">👤 관리자(총무) 전체</option>${mgrL.map(m=>`<option ${pr.mgr===m?'selected':''}>${esc(m)}</option>`).join('')}<option ${pr.mgr==='담당 없음'?'selected':''}>담당 없음</option></select>`:'',
     sec.fWho?`<select class="inp" id="prWho" aria-label="처리한 사람"><option value="">처리한 사람 전체</option>${who.map(w=>`<option ${pr.who===w?'selected':''}>${esc(w)}</option>`).join('')}</select>`:''].filter(Boolean).join('');
-  const tbls=[sec.kindTbl?grpTable('결제 종류별',rows,p=>p.method?ML(p.method):'미입력'):'',sec.acctTbl?grpTable('계좌별',rows.filter(p=>p.account_id||ACC_KINDS.includes(p.method)),p=>p.account||'계좌 미지정'):'',sec.whoTbl?grpTable('처리한 사람별',rows,p=>p.by_name||'-'):''].filter(Boolean).join('');
+  const tbls=[sec.kindTbl?grpTable('결제 종류별',rows,p=>p.method?ML(p.method):'미입력'):'',sec.acctTbl?grpTable('계좌별',rows.filter(p=>p.account_id||ACC_KINDS.includes(p.method)),p=>p.account||'계좌 미지정'):'',sec.aptTbl?grpTable('아파트별',rows,p=>cxT(p.complex)||'-'):'',sec.mgrTbl?grpTable('관리자(총무)별',rows,prMgr):'',sec.whoTbl?grpTable('처리한 사람별',rows,p=>p.by_name||'-'):''].filter(Boolean).join('');
   const cells=p=>[C.complex?`<td>${esc(p.complex||'-')}</td>`:'',C.unit?`<td>${esc(p.unit||'-')}</td>`:'',C.car?`<td><b class="car">${esc(p.car_number||'-')}</b></td>`:'',
     C.name?`<td>${esc(p.name||'')}${p.payer_name&&p.payer_name!==p.name?` <small class="by">(${esc(p.payer_name)})</small>`:''}</td>`:'',C.amount?`<td class="nowrap"><b>${won0(p.amount)}</b></td>`:'',C.method?`<td>${payTag(p)}</td>`:'',
     C.month?`<td class="sub nowrap">${p.bill_month.slice(0,7).replace('-','년 ')}월분${p.bill_done?'':' · 일부'}</td>`:'',C.note?`<td class="sub">${esc(p.note||'')}</td>`:'',C.by?`<td class="sub nowrap">${esc(p.by_name||'')}</td>`:''].join('');
@@ -1670,9 +1677,9 @@ function periodPanel(){
 }
 async function prExport(){ try{ const X=await loadXLSX(), r=S.pr.range||prRange(), rows=prRows();
   const wb=X.utils.book_new();
-  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(rows.map(p=>({입금일:p.paid_at,아파트:p.complex,동호수:p.unit,차량번호:p.car_number,고객:p.name,입금자명:p.payer_name,금액:p.amount,결제종류:p.method?ML(p.method):'미입력',입금계좌:p.account||'',증빙:p.proof&&p.proof!=='없음'?p.proof:'',청구달:p.bill_month.slice(0,7),상태:p.bill_done?'완료':'일부 입금',메모:p.note,처리:p.by_name}))),'입금 내역');
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(rows.map(p=>({입금일:p.paid_at,아파트:p.complex,관리자:prMgr(p),동호수:p.unit,차량번호:p.car_number,고객:p.name,입금자명:p.payer_name,금액:p.amount,결제종류:p.method?ML(p.method):'미입력',입금계좌:p.account||'',증빙:p.proof&&p.proof!=='없음'?p.proof:'',청구달:p.bill_month.slice(0,7),상태:p.bill_done?'완료':'일부 입금',메모:p.note,처리:p.by_name}))),'입금 내역');
   const sum=(f)=>{const m=new Map(); rows.forEach(p=>{const k=f(p); m.set(k,(m.get(k)||0)+p.amount);}); return [...m.entries()].map(([k,v])=>({구분:k,금액:v}));};
-  X.utils.book_append_sheet(wb,X.utils.json_to_sheet([...sum(p=>'결제 종류 · '+(p.method?ML(p.method):'미입력')),...sum(p=>'계좌 · '+(p.account||'-')),{구분:'실제 입금 (서비스 제외)',금액:rows.filter(p=>p.method!=='서비스').reduce((a,p)=>a+p.amount,0)},{구분:'합계',금액:rows.reduce((a,p)=>a+p.amount,0)}]),'합계');
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet([...sum(p=>'결제 종류 · '+(p.method?ML(p.method):'미입력')),...sum(p=>'계좌 · '+(p.account||'-')),...sum(p=>'아파트 · '+(cxT(p.complex)||'-')),...sum(p=>'관리자 · '+prMgr(p)),{구분:'실제 입금 (서비스 제외)',금액:rows.filter(p=>p.method!=='서비스').reduce((a,p)=>a+p.amount,0)},{구분:'합계',금액:rows.reduce((a,p)=>a+p.amount,0)}]),'합계');
   X.writeFile(wb,`오토핸즈_입금내역_${r.from}_${r.to}.xlsx`); toast(`${rows.length}건을 엑셀로 받았어요.`); }catch(e){ toast(friendly(e),true); } }
 
 /* ---------- 수금 설정 · 입금 계좌 ---------- */
@@ -2423,7 +2430,7 @@ document.addEventListener('click',async e=>{
         const d=pvNorm(S.pvDraft);
         if(!S.pvDraft.kinds.length){ toast('결제 종류를 1개 이상 체크해 주세요.',true); S.busy=false; render(); return; }
         try{ if(S.pvServer) await q(db.rpc('set_my_ui_pref',{p_key:'pay_view',p_value:d})); else localStorage.setItem('ah-pay-view',JSON.stringify(d));
-          S.pv=d; S.pr.method=d.sec.fMethod?S.pr.method:''; S.pr.acct=d.sec.fAcct?S.pr.acct:''; S.pr.who=d.sec.fWho?S.pr.who:''; toast('내 보기 설정을 저장했어요.'); }
+          S.pv=d; S.pr.method=d.sec.fMethod?S.pr.method:''; S.pr.acct=d.sec.fAcct?S.pr.acct:''; S.pr.apt=d.sec.fApt?S.pr.apt:''; S.pr.mgr=d.sec.fMgr?S.pr.mgr:''; S.pr.who=d.sec.fWho?S.pr.who:''; toast('내 보기 설정을 저장했어요.'); }
         catch(err){ toast(friendly(err),true); }
         S.dialog=null; S.busy=false; S.pvDraft=null; render(); },pvDialogHtml());
       S.dialog.rebuild=pvDialogHtml; break;
@@ -2915,6 +2922,8 @@ document.addEventListener('change',async e=>{
   if(t.id==='prProof'){ S.pr.proof=t.value; render(); return; }
   if(t.id==='prAcct'){ S.pr.acct=t.value; render(); return; }
   if(t.id==='prWho'){ S.pr.who=t.value; render(); return; }
+  if(t.id==='prApt'){ S.pr.apt=t.value; render(); return; }
+  if(t.id==='prMgr'){ S.pr.mgr=t.value; render(); return; }
   if(t.dataset.pvk!==undefined||t.dataset.pvs!==undefined||t.dataset.pvc!==undefined||t.dataset.pvl!==undefined){ const d=S.pvDraft; if(!d) return;
     if(t.dataset.pvk!==undefined){ const k=t.dataset.pvk; d.kinds=t.checked?PAY_METHODS.filter(m=>d.kinds.includes(m)||m===k):d.kinds.filter(m=>m!==k); }
     if(t.dataset.pvs!==undefined) d.sec[t.dataset.pvs]=t.checked?1:0;
