@@ -6,7 +6,7 @@
   "start_url": "/field",
   "scope": "/field",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#F7F5F0",
   "theme_color": "#0C1422",
   "lang": "ko",
