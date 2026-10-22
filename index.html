@@ -17,6 +17,7 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/staffnotice.js" defer></script>
+<script src="/myinfo.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
@@ -2316,6 +2317,7 @@ function Dashboard({ currentUser, onLogout }) {
               🔔
               {inboxMessages.some(m => !m.is_read) && <span style={{ background: '#C98A2E' }} className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full" />}
             </button>
+            <button onClick={() => window.MyInfo && window.MyInfo.open()} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="flex items-center gap-1.5 text-sm rounded-lg px-3 py-2" aria-label="내 정보 수정">👤 내 정보</button>
             <button onClick={onLogout} style={{ background: '#2A362E', color: '#FFFFFF', border: '1px solid #3D4A41' }} className="flex items-center gap-1.5 text-sm rounded-lg px-3 py-2">↩ 로그아웃</button>
           </div>
         </div>
