@@ -1454,7 +1454,8 @@ async function custImportFile(file){
     ask(`${data.length}대를 고객관리에 넣을까요?`,`'${file.name}' 첫 번째 시트를 읽었어요.\n같은 차량번호가 이미 있으면 그 고객 정보를 엑셀 내용으로 고치고, 없으면 계약완료 고객으로 새로 추가해요.\n수금관리에도 함께 연결되고, 청구는 이번 달부터 생겨요. '월요금'을 적으면 수금 명단 요금도 들어가요.`,'넣기',
       ()=>act(async()=>{ let ins=0,upd=0,skip=0,msgs=[]; for(let i=0;i<data.length;i+=200){ const r=await q(db.rpc('import_customers_admin',{p_rows:data.slice(i,i+200)})); ins+=r.inserted||0; upd+=r.updated||0; skip+=r.skipped||0; msgs=msgs.concat(r.messages||[]); }
         S.custImportMsg={head:`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}${msgs.length?` · 확인할 것 ${msgs.length}건`:''}`,list:msgs};
-        await reloadCustomers(); toast(`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}`); },null));
+        await reloadCustomers(); toast(`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}`);
+        if(ownMaster()&&noOwnCnt()){ S.cmNoOwn=true; S.cmSel=[]; S.custImportMsg.head+=` · 담당 총무 없는 고객 ${noOwnCnt()}대 → 아래 목록에서 전체 선택 후 [👤 담당 총무 지정]을 눌러 주세요`; } },null));
   }catch(e){ toast(friendly(e),true); } }
 async function custExport(tpl){
   try{ const X=await loadXLSX();
@@ -1490,7 +1491,7 @@ const CM_COLS=[
 function cmgrView(){
   const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
   const qq=S.cmQ.replace(/\s/g,'').toLowerCase();
-  const base=S.customers.filter(c=>inScope(c.complex)&&aptIn('cmApts',c.complex)&&(!S.cmPlans.length||S.cmPlans.includes(String(c.wash_plan||0)))
+  const base=S.customers.filter(c=>inScope(c.complex)&&(!S.cmNoOwn||!ownMaster()||!ownersOf(c.complex).length)&&aptIn('cmApts',c.complex)&&(!S.cmPlans.length||S.cmPlans.includes(String(c.wash_plan||0)))
     &&(!S.cmDays.length||wdKeys(c).some(d=>S.cmDays.includes(d)))&&(!S.cmStaff.length||S.cmStaff.includes(c.field_staff_id||'none'))
     &&(!qq||[c.car_number,c.name,c.unit,c.phone,c.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq)));
   const planO=[...new Set(S.customers.map(c=>Number(c.wash_plan)||0))].sort((a,b)=>a-b).map(p=>[String(p),p?`월 ${p}회`:'정기권 없음']);
@@ -1529,7 +1530,8 @@ function cmgrView(){
     <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.cmQ||nF?`<button class="link" type="button" data-act="cmClear">초기화</button>`:''}
   </form>
   <div class="chips">${[['all','전체'],['on','세차중'],['new','신규'],['pause','일시정지'],['stop','정지'],['soon','재개 임박'],['move','이관중'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k==='pause'?'pz':k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
-  <div class="selbar"${S.cmMode==='set'?' style="display:none"':''}><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}<span class="grow"></span>
+  <div class="selbar"${S.cmMode==='set'?' style="display:none"':''}><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}${ownMaster()?`<label class="flag" title="엑셀로 넣은 뒤 담당 총무가 없는 단지의 고객만 보여요"><input type="checkbox" id="cmNoOwn" ${S.cmNoOwn?'checked':''}><span>담당 총무 없는 단지만 <b>${noOwnCnt()}</b>대</span></label>`:''}<span class="grow"></span>
+    ${ownMaster()?`<button class="btn2 sm" data-act="cmOwner" ${n?'':'disabled'}>👤 담당 총무 지정</button>`:''}
     <button class="btn2 sm" data-act="cmSet" data-s="세차중" ${n?'':'disabled'}>세차중으로</button>
     <button class="btn2 sm st-pz" data-act="cmPause" data-k="일시정지" ${n?'':'disabled'}>일시정지</button>
     <button class="btn2 sm st-stop" data-act="cmPause" data-k="정지" ${n?'':'disabled'}>정지</button>
@@ -1768,6 +1770,23 @@ const collCanAny=()=>!S.crole||S.crole.is_master||S.crole.is_chongmu;
 function canEditCx(cx){ const R=S.crole; if(!R||R.is_master) return true; if(!R.is_chongmu) return false;
   const c=cxT(cx); if((R.mine||[]).includes(c)) return true; return !((R.owners||{})[c]||[]).length; }
 const ownersOf=cx=>((S.crole&&S.crole.owners)||{})[cxT(cx)]||[];
+// 담당 총무 지정 (마스터만): 고른 고객들의 단지를 한 총무에게 맡겨요 · 한 단지는 한 총무만
+const ownMaster=()=>!!(S.crole&&S.crole.is_master&&!S.crole.view_only);
+const noOwnCnt=()=>S.customers.filter(c=>!ownersOf(c.complex).length).length;
+function ownerDialog(){ const R=S.crole, sel=S.customers.filter(c=>S.cmSel.includes(c.id));
+  const cxs=[...new Set(sel.map(c=>cxT(c.complex)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko')), noCx=sel.filter(c=>!cxT(c.complex)).length;
+  if(!cxs.length){ toast('고른 고객에 아파트(단지) 이름이 없어요. 고객 정보에서 아파트를 먼저 적어 주세요.',true); return; }
+  const ch=(R.chongmu||[]); if(!ch.length){ toast('총무로 지정된 관리자가 없어요. 영업CRM [직원관리]에서 먼저 관리자(총무)로 바꿔 주세요.',true); return; }
+  const cnt=a=>S.customers.filter(c=>cxT(c.complex)===a).length;
+  S.ownPick=undefined; const build=()=>`<div class="tbl" style="max-height:180px;overflow:auto;margin:8px 0"><table><thead><tr><th>단지</th><th>고객</th><th>지금 담당</th></tr></thead><tbody>${cxs.map(a=>`<tr><td><b>${esc(a)}</b></td><td class="sub">${cnt(a)}대</td><td>${ownersOf(a).length?esc(ownersOf(a).join(', ')):'<span class="sub">없음</span>'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="field"><span style="font-weight:700;font-size:13px">맡길 총무</span><div class="pz-reasons">${ch.map(p=>`<label class="auto"><input type="radio" name="ownPick" value="${esc(p.id)}" ${S.ownPick===p.id?'checked':''}><span>${esc(p.name)}</span></label>`).join('')}<label class="auto"><input type="radio" name="ownPick" value="" ${S.ownPick===''?'checked':''}><span>담당 없음</span></label></div></div>
+    ${noCx?`<p class="note">아파트 이름이 없는 ${noCx}대는 빠져요.</p>`:''}`;
+  ask(`단지 ${cxs.length}곳의 담당 총무를 정할까요?`,`고른 ${sel.length}대가 있는 단지 전체가 이 총무 담당이 돼요. 같은 단지의 다른 고객도 함께 맡겨져요.\n한 단지는 한 총무만 맡아요. 다른 총무가 맡던 단지면 새 총무로 옮겨져요.\n담당 총무는 자기 단지 고객만 보고 고칠 수 있어요.`,'지정',
+    ()=>act(async()=>{ const r=S.ownPick===undefined?null:{value:S.ownPick}; if(!r){ toast('맡길 총무를 골라 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
+      const uid=r.value||null, nm=uid?((ch.find(p=>p.id===uid)||{}).name||''):'';
+      await q(db.rpc('assign_complex_owner',{p_complexes:cxs,p_user:uid}));
+      S.crole=await q(db.rpc('get_my_coll_role')); S.cmSel=[];
+      toast(uid?`단지 ${cxs.length}곳을 ${nm} 총무 담당으로 정했어요.`:`단지 ${cxs.length}곳의 담당 총무를 뺐어요.`); },null),build()); S.dialog.rebuild=build; }
 // 10/22: 총무는 자기 담당 단지만 봐요 (끌 수 없음). 마스터 · 보기 전용 관리자는 모든 단지를 봐요.
 const viewOnly=()=>!!(S.crole&&S.crole.view_only);
 const mineForced=()=>!!(S.crole&&S.crole.is_chongmu&&!S.crole.is_master&&!S.crole.view_only);
@@ -2569,6 +2588,7 @@ document.addEventListener('click',async e=>{
       render(); break; }
     case 'custApp': if(window.AppNav&&AppNav.openCustomerApp) AppNav.openCustomerApp(id); break;
     case 'cmSelNone': S.cmSel=[]; render(); break;
+    case 'cmOwner': if(S.cmSel.length) ownerDialog(); break;
     case 'cmSelAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; S.cmSel=t.checked?[...new Set([...S.cmSel,...ids])]:S.cmSel.filter(x=>!ids.includes(x)); render(); break; }
     case 'cmSet': { const ids=[...S.cmSel], st=t.dataset.s; if(!ids.length) break;
       const body=st==='이관중'?'이관중으로 표시만 해요. 세차 일정은 그대로 만들어지고, 그 차량 메모에 기록이 남아요.\n이관이 끝나면 [세차중으로]를 눌러 표시를 풀어 주세요.':st==='해지'?'해지하면 정기세차 일정이 더 이상 만들어지지 않고, 오늘 이후 잡혀 있던 대기 일정도 지워져요. 목록에서는 회색으로 보여요.\n나중에 [세차중으로]를 누르면 다시 일정이 만들어져요.'
@@ -3032,6 +3052,8 @@ document.addEventListener('change',async e=>{
   if(/^nt(Target|Imp|Start|End)$/.test(t.id)){ ntRead(); if(t.id==='ntStart') render(); return; }
   if(t.id==='rdInt'){ S.rdInt=t.checked; render(); return; }
   if(t.id==='rdCancel'){ S.rdCancel=t.checked; render(); return; }
+  if(t.name==='ownPick'){ S.ownPick=t.value; if(S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } return; }
+  if(t.id==='cmNoOwn'){ S.cmNoOwn=t.checked; S.cmSel=[]; render(); return; }
   if(t.dataset.rdsel){ const id=Number(t.dataset.rdsel); S.rdSel=t.checked?[...new Set([...S.rdSel,id])]:S.rdSel.filter(x=>x!==id); render(); return; }
   if((t.id==='lfrom'||t.id==='lto')&&t.value){ if(t.id==='lfrom'){ S.liveFrom=t.value; if(t.value>lTo()) S.liveTo=t.value; } else { S.liveTo=t.value; if(t.value<lFrom()) S.liveFrom=t.value; }
     { const a=new Date(lFrom()), b=new Date(lTo()); if((b-a)/864e5>92){ toast('기간은 3개월까지 볼 수 있어요.',true); const x=new Date(b); x.setDate(x.getDate()-92); S.liveFrom=keyOf(x); } }
