@@ -1454,7 +1454,8 @@ async function custImportFile(file){
     ask(`${data.length}대를 고객관리에 넣을까요?`,`'${file.name}' 첫 번째 시트를 읽었어요.\n같은 차량번호가 이미 있으면 그 고객 정보를 엑셀 내용으로 고치고, 없으면 계약완료 고객으로 새로 추가해요.\n수금관리에도 함께 연결되고, 청구는 이번 달부터 생겨요. '월요금'을 적으면 수금 명단 요금도 들어가요.`,'넣기',
       ()=>act(async()=>{ let ins=0,upd=0,skip=0,msgs=[]; for(let i=0;i<data.length;i+=200){ const r=await q(db.rpc('import_customers_admin',{p_rows:data.slice(i,i+200)})); ins+=r.inserted||0; upd+=r.updated||0; skip+=r.skipped||0; msgs=msgs.concat(r.messages||[]); }
         S.custImportMsg={head:`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}${msgs.length?` · 확인할 것 ${msgs.length}건`:''}`,list:msgs};
-        await reloadCustomers(); toast(`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}`); },null));
+        await reloadCustomers(); toast(`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}`);
+        if(ownMaster()&&noOwnCnt()){ S.cmNoOwn=true; S.cmSel=[]; S.custImportMsg.head+=` · 담당 총무 없는 고객 ${noOwnCnt()}대 → 아래 목록에서 전체 선택 후 [👤 담당 총무 지정]을 눌러 주세요`; } },null));
   }catch(e){ toast(friendly(e),true); } }
 async function custExport(tpl){
   try{ const X=await loadXLSX();
@@ -1490,7 +1491,7 @@ const CM_COLS=[
 function cmgrView(){
   const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
   const qq=S.cmQ.replace(/\s/g,'').toLowerCase();
-  const base=S.customers.filter(c=>inScope(c.complex)&&aptIn('cmApts',c.complex)&&(!S.cmPlans.length||S.cmPlans.includes(String(c.wash_plan||0)))
+  const base=S.customers.filter(c=>inScope(c.complex)&&(!S.cmNoOwn||!ownMaster()||!ownersOf(c.complex).length)&&aptIn('cmApts',c.complex)&&(!S.cmPlans.length||S.cmPlans.includes(String(c.wash_plan||0)))
     &&(!S.cmDays.length||wdKeys(c).some(d=>S.cmDays.includes(d)))&&(!S.cmStaff.length||S.cmStaff.includes(c.field_staff_id||'none'))
     &&(!qq||[c.car_number,c.name,c.unit,c.phone,c.complex].join('').replace(/\s/g,'').toLowerCase().includes(qq)));
   const planO=[...new Set(S.customers.map(c=>Number(c.wash_plan)||0))].sort((a,b)=>a-b).map(p=>[String(p),p?`월 ${p}회`:'정기권 없음']);
@@ -1529,7 +1530,8 @@ function cmgrView(){
     <button class="btn2" type="submit">${ic('check',14)}검색</button>${S.cmQ||nF?`<button class="link" type="button" data-act="cmClear">초기화</button>`:''}
   </form>
   <div class="chips">${[['all','전체'],['on','세차중'],['new','신규'],['pause','일시정지'],['stop','정지'],['soon','재개 임박'],['move','이관중'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k==='pause'?'pz':k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
-  <div class="selbar"${S.cmMode==='set'?' style="display:none"':''}><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}<span class="grow"></span>
+  <div class="selbar"${S.cmMode==='set'?' style="display:none"':''}><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}${ownMaster()?`<label class="flag" title="엑셀로 넣은 뒤 담당 총무가 없는 단지의 고객만 보여요"><input type="checkbox" id="cmNoOwn" ${S.cmNoOwn?'checked':''}><span>담당 총무 없는 단지만 <b>${noOwnCnt()}</b>대</span></label>`:''}<span class="grow"></span>
+    ${ownMaster()?`<button class="btn2 sm" data-act="cmOwner" ${n?'':'disabled'}>👤 담당 총무 지정</button>`:''}
     <button class="btn2 sm" data-act="cmSet" data-s="세차중" ${n?'':'disabled'}>세차중으로</button>
     <button class="btn2 sm st-pz" data-act="cmPause" data-k="일시정지" ${n?'':'disabled'}>일시정지</button>
     <button class="btn2 sm st-stop" data-act="cmPause" data-k="정지" ${n?'':'disabled'}>정지</button>
@@ -1768,17 +1770,41 @@ const collCanAny=()=>!S.crole||S.crole.is_master||S.crole.is_chongmu;
 function canEditCx(cx){ const R=S.crole; if(!R||R.is_master) return true; if(!R.is_chongmu) return false;
   const c=cxT(cx); if((R.mine||[]).includes(c)) return true; return !((R.owners||{})[c]||[]).length; }
 const ownersOf=cx=>((S.crole&&S.crole.owners)||{})[cxT(cx)]||[];
-const scopeOn=()=>!!(S.crole&&S.crole.is_chongmu&&S.mineOnly&&(S.crole.mine||[]).length);
-const inScope=cx=>!scopeOn()||S.crole.mine.includes(cxT(cx));
+// 담당 총무 지정 (마스터만): 고른 고객들의 단지를 한 총무에게 맡겨요 · 한 단지는 한 총무만
+const ownMaster=()=>!!(S.crole&&S.crole.is_master&&!S.crole.view_only);
+const noOwnCnt=()=>S.customers.filter(c=>!ownersOf(c.complex).length).length;
+function ownerDialog(){ const R=S.crole, sel=S.customers.filter(c=>S.cmSel.includes(c.id));
+  const cxs=[...new Set(sel.map(c=>cxT(c.complex)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko')), noCx=sel.filter(c=>!cxT(c.complex)).length;
+  if(!cxs.length){ toast('고른 고객에 아파트(단지) 이름이 없어요. 고객 정보에서 아파트를 먼저 적어 주세요.',true); return; }
+  const ch=(R.chongmu||[]); if(!ch.length){ toast('총무로 지정된 관리자가 없어요. 영업CRM [직원관리]에서 먼저 관리자(총무)로 바꿔 주세요.',true); return; }
+  const cnt=a=>S.customers.filter(c=>cxT(c.complex)===a).length;
+  S.ownPick=undefined; const build=()=>`<div class="tbl" style="max-height:180px;overflow:auto;margin:8px 0"><table><thead><tr><th>단지</th><th>고객</th><th>지금 담당</th></tr></thead><tbody>${cxs.map(a=>`<tr><td><b>${esc(a)}</b></td><td class="sub">${cnt(a)}대</td><td>${ownersOf(a).length?esc(ownersOf(a).join(', ')):'<span class="sub">없음</span>'}</td></tr>`).join('')}</tbody></table></div>
+    <div class="field"><span style="font-weight:700;font-size:13px">맡길 총무</span><div class="pz-reasons">${ch.map(p=>`<label class="auto"><input type="radio" name="ownPick" value="${esc(p.id)}" ${S.ownPick===p.id?'checked':''}><span>${esc(p.name)}</span></label>`).join('')}<label class="auto"><input type="radio" name="ownPick" value="" ${S.ownPick===''?'checked':''}><span>담당 없음</span></label></div></div>
+    ${noCx?`<p class="note">아파트 이름이 없는 ${noCx}대는 빠져요.</p>`:''}`;
+  ask(`단지 ${cxs.length}곳의 담당 총무를 정할까요?`,`고른 ${sel.length}대가 있는 단지 전체가 이 총무 담당이 돼요. 같은 단지의 다른 고객도 함께 맡겨져요.\n한 단지는 한 총무만 맡아요. 다른 총무가 맡던 단지면 새 총무로 옮겨져요.\n담당 총무는 자기 단지 고객만 보고 고칠 수 있어요.`,'지정',
+    ()=>act(async()=>{ const r=S.ownPick===undefined?null:{value:S.ownPick}; if(!r){ toast('맡길 총무를 골라 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
+      const uid=r.value||null, nm=uid?((ch.find(p=>p.id===uid)||{}).name||''):'';
+      await q(db.rpc('assign_complex_owner',{p_complexes:cxs,p_user:uid}));
+      S.crole=await q(db.rpc('get_my_coll_role')); S.cmSel=[];
+      toast(uid?`단지 ${cxs.length}곳을 ${nm} 총무 담당으로 정했어요.`:`단지 ${cxs.length}곳의 담당 총무를 뺐어요.`); },null),build()); S.dialog.rebuild=build; }
+// 10/22: 총무는 자기 담당 단지만 봐요 (끌 수 없음). 마스터 · 보기 전용 관리자는 모든 단지를 봐요.
+const viewOnly=()=>!!(S.crole&&S.crole.view_only);
+const mineForced=()=>!!(S.crole&&S.crole.is_chongmu&&!S.crole.is_master&&!S.crole.view_only);
+const scopeOn=()=>mineForced()||!!(S.crole&&S.crole.is_chongmu&&S.mineOnly&&(S.crole.mine||[]).length);
+const inScope=cx=>!scopeOn()||(S.crole.mine||[]).includes(cxT(cx));
 const SCOPE_TABS=['req','live','field','round','cmgr','jobs','slots','notice'];   // 아파트로 나뉘는 탭 (11번)
-function mineBar(){ const R=S.crole, mine=(R&&R.mine)||[]; if(!R||!R.is_chongmu||!mine.length||!SCOPE_TABS.includes(S.tab)) return '';
+function voBar(){ return viewOnly()?`<div class="role-bar"><span class="rp v">보기 전용</span><span class="grow">이 계정은 정보를 <b>볼 수만</b> 있어요. 고치거나 보내는 일은 할 수 없어요.</span></div>`:''; }
+function mineBar(){ const R=S.crole, mine=(R&&R.mine)||[];
+  if(mineForced()&&SCOPE_TABS.includes(S.tab)) return `<div class="role-bar mine-bar"><span class="rp c">내 담당</span><span class="grow">${mine.length?`담당 단지 <b>${mine.length}곳</b>만 보여요 (${esc(mine.join(', '))})`:'아직 담당 단지가 없어서 보이는 고객이 없어요. 수금관리 [⚙ 내 수금 설정]에서 담당 단지를 체크해 주세요.'}</span></div>`;
+  if(!R||!R.is_chongmu||!mine.length||!SCOPE_TABS.includes(S.tab)) return '';
   return `<div class="role-bar mine-bar"><span class="rp c">내 담당</span><span class="grow">${S.mineOnly?`<b>${mine.length}곳</b>만 보고 있어요 (${esc(mine.join(', '))})`:'모든 아파트를 보고 있어요'}</span><label class="flag"><input type="checkbox" id="mineOnly" ${S.mineOnly?'checked':''}><span>내 담당 아파트만 보기</span></label></div>`; }
 function roleBar(){ const R=S.crole; if(!R) return '';
   const mine=R.mine||[];
   const head=R.is_master?'<span class="rp m">마스터</span><span>모든 아파트 수금을 수정할 수 있어요.</span>'
-    :R.is_chongmu?`<span class="rp c">관리자(총무)</span><span>${mine.length?`내 담당 <b>${mine.length}곳</b>(${esc(mine.join(', '))})과 담당 총무가 없는 아파트를 수정할 수 있어요. 다른 총무 아파트는 보기만 돼요.`:'아직 담당 아파트가 없어요. 아래 [⚙ 내 수금 설정]에서 담당 아파트를 체크해 주세요.'}</span>`
+    :R.view_only?'<span class="rp v">보기 전용</span><span>모든 아파트를 볼 수 있지만 고칠 수는 없어요.</span>'
+    :R.is_chongmu?`<span class="rp c">관리자(총무)</span><span>${mine.length?`내 담당 <b>${mine.length}곳</b>(${esc(mine.join(', '))})만 보이고 고칠 수 있어요.`:'아직 담당 아파트가 없어요. 아래 [⚙ 내 수금 설정]에서 담당 아파트를 체크해 주세요.'}</span>`
     :'<span class="rp v">보기 전용</span><span>수금관리는 마스터와 총무만 수정할 수 있어요. (영업CRM 직원관리에서 마스터가 총무로 지정)</span>';
-  return `<div class="role-bar">${head}${R.is_chongmu&&mine.length?`<span class="grow"></span><label class="flag"><input type="checkbox" id="mineOnly" ${S.mineOnly?'checked':''}><span>내 담당 아파트만 보기</span></label>`:''}</div>`; }
+  return `<div class="role-bar">${head}${R.is_chongmu&&mine.length&&!mineForced()?`<span class="grow"></span><label class="flag"><input type="checkbox" id="mineOnly" ${S.mineOnly?'checked':''}><span>내 담당 아파트만 보기</span></label>`:''}</div>`; }
 const noticeMiss=r=>r.coll_state!=='수금완료'&&r.coll_state!=='청구없음'&&(r.cur_remaining>0||r.overdue_months>0)&&(!r.notice1_at||(!r.notice2_at&&(Date.now()-new Date(r.notice1_at))/864e5>=(Number(S.cset.notice2_days)||5)));
 function noticeChips(r){ const miss=noticeMiss(r);
   const chip=(st,at,via)=>`<button class="nchip ${at?'on':miss&&(st===1||r.notice1_at)?'miss':''}" data-act="nMark" data-id="${r.id}" data-s="${st}" data-on="${at?1:0}" title="${at?`${via==='앱'?'고객 앱으로 보냄':'직접 체크'} · ${when(at)}`:'눌러서 보냄 체크'}">${st}차${at?` ✓ <small>${ymd(at).slice(3)}</small>`:''}</button>`;
@@ -2347,7 +2373,7 @@ function renderMain(){
     R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div><span id="pres" class="pres">${presHtml()}</span>
       ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<button class="tl" data-act="push-on" aria-label="휴대폰 알림" style="${pushState==='on'?'color:var(--gold-2)':''}">${ic('bell',14)}<span${pushState==='on'?' class="lbl"':''}>${pushState==='on'?'알림 켜짐':'알림 켜기'}</span></button><a href="/" aria-label="영업 CRM">${ic('arrow',14)}<span class="lbl">영업 CRM</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="myinfo" aria-label="내 정보 수정">${ic('userc',14)}<span class="lbl">내 정보</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
     <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${tabsView().map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}<span class="pres-tab" data-pt="${k}">${presTabHtml(k)}</span>${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}${k==='today'&&S.cntTodo?`<span class="cnt">${S.cntTodo}</span>`:''}</button>`).join('')}<button type="button" class="tab-set" data-act="tabSet" title="메뉴 순서 · 숨기기 (나만 적용)" aria-label="메뉴 순서 바꾸기">⚙</button></div></nav>
-    <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${mineBar()}${views[S.tab]()}</main>`;
+    <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${voBar()}${mineBar()}${views[S.tab]()}</main>`;
   }
   if(window.AppNav&&!AppNav.getToken) AppNav.getToken=async()=>{ const {data}=await db.auth.getSession(); return data&&data.session?data.session.access_token:null; };
   if(window.AppNav) AppNav.set('admin', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
@@ -2360,6 +2386,7 @@ function renderMain(){
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2000);}
 function ask(title,body,ok,run,extra){ S.dialog={title,body,ok,run,extra}; render(); }
 async function act(fn,okMsg,after){
+  if(viewOnly()){ S.dialog=null; S.busy=false; render(); toast('보기 전용 계정이라 수정할 수 없어요.',true); return; }
   try{ await fn(); kickPush(); if(okMsg) toast(okMsg); }catch(e){ if(e&&e.keep){ S.busy=false; render(); return; } toast(friendly(e),true); }
   S.dialog=null; S.busy=false;
   if(after) await after(); await refreshCounts(); await loadTab();
@@ -2417,7 +2444,7 @@ document.addEventListener('click',async e=>{
       setTab('coll'); S.collTab='전체'; S.aF=''; S.cRd=''; S.collApt=''; S.collQ=S.collQin=car; S.collOpen=[]; S.coll=null; render(); await loadTab();
       const m=(S.coll||[]).find(x=>x.customer_id===id)||(car&&(S.coll||[]).find(x=>_nc(x.car_number)===_nc(car)));
       if(!m){ S.collQ=S.collQin=''; render(); toast('수금 명단에서 이 고객을 찾지 못했어요. 수금관리에서 [고객관리에서 불러오기]를 눌러 주세요.',true); break; }
-      if(!inScope(m.complex)){ S.mineOnly=false; }
+      if(!inScope(m.complex)){ if(mineForced()){ S.collQ=S.collQin=''; render(); toast('내 담당 단지가 아닌 고객이에요.',true); break; } S.mineOnly=false; }
       S.collOpen=[m.id]; await Promise.all([loadCBills(m.id),loadCNotes(m.id)]); render();
       setTimeout(()=>{ const tr=document.querySelector(`tr[data-mid="${m.id}"]`); if(tr) tr.scrollIntoView({block:'center',behavior:'smooth'}); },60);
       toast(`${car||m.name||''} 수금 화면이에요. [입금 확인]으로 받은 금액을 기록하세요.`); break; }
@@ -2561,6 +2588,7 @@ document.addEventListener('click',async e=>{
       render(); break; }
     case 'custApp': if(window.AppNav&&AppNav.openCustomerApp) AppNav.openCustomerApp(id); break;
     case 'cmSelNone': S.cmSel=[]; render(); break;
+    case 'cmOwner': if(S.cmSel.length) ownerDialog(); break;
     case 'cmSelAll': { const ids=t.dataset.ids?t.dataset.ids.split(',').map(Number):[]; S.cmSel=t.checked?[...new Set([...S.cmSel,...ids])]:S.cmSel.filter(x=>!ids.includes(x)); render(); break; }
     case 'cmSet': { const ids=[...S.cmSel], st=t.dataset.s; if(!ids.length) break;
       const body=st==='이관중'?'이관중으로 표시만 해요. 세차 일정은 그대로 만들어지고, 그 차량 메모에 기록이 남아요.\n이관이 끝나면 [세차중으로]를 눌러 표시를 풀어 주세요.':st==='해지'?'해지하면 정기세차 일정이 더 이상 만들어지지 않고, 오늘 이후 잡혀 있던 대기 일정도 지워져요. 목록에서는 회색으로 보여요.\n나중에 [세차중으로]를 누르면 다시 일정이 만들어져요.'
@@ -3024,6 +3052,8 @@ document.addEventListener('change',async e=>{
   if(/^nt(Target|Imp|Start|End)$/.test(t.id)){ ntRead(); if(t.id==='ntStart') render(); return; }
   if(t.id==='rdInt'){ S.rdInt=t.checked; render(); return; }
   if(t.id==='rdCancel'){ S.rdCancel=t.checked; render(); return; }
+  if(t.name==='ownPick'){ S.ownPick=t.value; if(S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); render(); } return; }
+  if(t.id==='cmNoOwn'){ S.cmNoOwn=t.checked; S.cmSel=[]; render(); return; }
   if(t.dataset.rdsel){ const id=Number(t.dataset.rdsel); S.rdSel=t.checked?[...new Set([...S.rdSel,id])]:S.rdSel.filter(x=>x!==id); render(); return; }
   if((t.id==='lfrom'||t.id==='lto')&&t.value){ if(t.id==='lfrom'){ S.liveFrom=t.value; if(t.value>lTo()) S.liveTo=t.value; } else { S.liveTo=t.value; if(t.value<lFrom()) S.liveFrom=t.value; }
     { const a=new Date(lFrom()), b=new Date(lTo()); if((b-a)/864e5>92){ toast('기간은 3개월까지 볼 수 있어요.',true); const x=new Date(b); x.setDate(x.getDate()-92); S.liveFrom=keyOf(x); } }
