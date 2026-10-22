@@ -1768,17 +1768,24 @@ const collCanAny=()=>!S.crole||S.crole.is_master||S.crole.is_chongmu;
 function canEditCx(cx){ const R=S.crole; if(!R||R.is_master) return true; if(!R.is_chongmu) return false;
   const c=cxT(cx); if((R.mine||[]).includes(c)) return true; return !((R.owners||{})[c]||[]).length; }
 const ownersOf=cx=>((S.crole&&S.crole.owners)||{})[cxT(cx)]||[];
-const scopeOn=()=>!!(S.crole&&S.crole.is_chongmu&&S.mineOnly&&(S.crole.mine||[]).length);
-const inScope=cx=>!scopeOn()||S.crole.mine.includes(cxT(cx));
+// 10/22: 총무는 자기 담당 단지만 봐요 (끌 수 없음). 마스터 · 보기 전용 관리자는 모든 단지를 봐요.
+const viewOnly=()=>!!(S.crole&&S.crole.view_only);
+const mineForced=()=>!!(S.crole&&S.crole.is_chongmu&&!S.crole.is_master&&!S.crole.view_only);
+const scopeOn=()=>mineForced()||!!(S.crole&&S.crole.is_chongmu&&S.mineOnly&&(S.crole.mine||[]).length);
+const inScope=cx=>!scopeOn()||(S.crole.mine||[]).includes(cxT(cx));
 const SCOPE_TABS=['req','live','field','round','cmgr','jobs','slots','notice'];   // 아파트로 나뉘는 탭 (11번)
-function mineBar(){ const R=S.crole, mine=(R&&R.mine)||[]; if(!R||!R.is_chongmu||!mine.length||!SCOPE_TABS.includes(S.tab)) return '';
+function voBar(){ return viewOnly()?`<div class="role-bar"><span class="rp v">보기 전용</span><span class="grow">이 계정은 정보를 <b>볼 수만</b> 있어요. 고치거나 보내는 일은 할 수 없어요.</span></div>`:''; }
+function mineBar(){ const R=S.crole, mine=(R&&R.mine)||[];
+  if(mineForced()&&SCOPE_TABS.includes(S.tab)) return `<div class="role-bar mine-bar"><span class="rp c">내 담당</span><span class="grow">${mine.length?`담당 단지 <b>${mine.length}곳</b>만 보여요 (${esc(mine.join(', '))})`:'아직 담당 단지가 없어서 보이는 고객이 없어요. 수금관리 [⚙ 내 수금 설정]에서 담당 단지를 체크해 주세요.'}</span></div>`;
+  if(!R||!R.is_chongmu||!mine.length||!SCOPE_TABS.includes(S.tab)) return '';
   return `<div class="role-bar mine-bar"><span class="rp c">내 담당</span><span class="grow">${S.mineOnly?`<b>${mine.length}곳</b>만 보고 있어요 (${esc(mine.join(', '))})`:'모든 아파트를 보고 있어요'}</span><label class="flag"><input type="checkbox" id="mineOnly" ${S.mineOnly?'checked':''}><span>내 담당 아파트만 보기</span></label></div>`; }
 function roleBar(){ const R=S.crole; if(!R) return '';
   const mine=R.mine||[];
   const head=R.is_master?'<span class="rp m">마스터</span><span>모든 아파트 수금을 수정할 수 있어요.</span>'
-    :R.is_chongmu?`<span class="rp c">관리자(총무)</span><span>${mine.length?`내 담당 <b>${mine.length}곳</b>(${esc(mine.join(', '))})과 담당 총무가 없는 아파트를 수정할 수 있어요. 다른 총무 아파트는 보기만 돼요.`:'아직 담당 아파트가 없어요. 아래 [⚙ 내 수금 설정]에서 담당 아파트를 체크해 주세요.'}</span>`
+    :R.view_only?'<span class="rp v">보기 전용</span><span>모든 아파트를 볼 수 있지만 고칠 수는 없어요.</span>'
+    :R.is_chongmu?`<span class="rp c">관리자(총무)</span><span>${mine.length?`내 담당 <b>${mine.length}곳</b>(${esc(mine.join(', '))})만 보이고 고칠 수 있어요.`:'아직 담당 아파트가 없어요. 아래 [⚙ 내 수금 설정]에서 담당 아파트를 체크해 주세요.'}</span>`
     :'<span class="rp v">보기 전용</span><span>수금관리는 마스터와 총무만 수정할 수 있어요. (영업CRM 직원관리에서 마스터가 총무로 지정)</span>';
-  return `<div class="role-bar">${head}${R.is_chongmu&&mine.length?`<span class="grow"></span><label class="flag"><input type="checkbox" id="mineOnly" ${S.mineOnly?'checked':''}><span>내 담당 아파트만 보기</span></label>`:''}</div>`; }
+  return `<div class="role-bar">${head}${R.is_chongmu&&mine.length&&!mineForced()?`<span class="grow"></span><label class="flag"><input type="checkbox" id="mineOnly" ${S.mineOnly?'checked':''}><span>내 담당 아파트만 보기</span></label>`:''}</div>`; }
 const noticeMiss=r=>r.coll_state!=='수금완료'&&r.coll_state!=='청구없음'&&(r.cur_remaining>0||r.overdue_months>0)&&(!r.notice1_at||(!r.notice2_at&&(Date.now()-new Date(r.notice1_at))/864e5>=(Number(S.cset.notice2_days)||5)));
 function noticeChips(r){ const miss=noticeMiss(r);
   const chip=(st,at,via)=>`<button class="nchip ${at?'on':miss&&(st===1||r.notice1_at)?'miss':''}" data-act="nMark" data-id="${r.id}" data-s="${st}" data-on="${at?1:0}" title="${at?`${via==='앱'?'고객 앱으로 보냄':'직접 체크'} · ${when(at)}`:'눌러서 보냄 체크'}">${st}차${at?` ✓ <small>${ymd(at).slice(3)}</small>`:''}</button>`;
@@ -2347,7 +2354,7 @@ function renderMain(){
     R.innerHTML=`<header class="top"><div class="in"><div class="logo"><span class="mark">${ic('drop')}</span><span><b>AUTOHANDS</b><small>ADMIN MODE</small></span></div><span id="pres" class="pres">${presHtml()}</span>
       ${deferredInstall&&!isStandalone()?`<button class="tl" data-act="install" style="color:var(--gold-2)">${ic('check',14)}<span>앱 설치</span></button>`:''}<button class="tl" data-act="push-on" aria-label="휴대폰 알림" style="${pushState==='on'?'color:var(--gold-2)':''}">${ic('bell',14)}<span${pushState==='on'?' class="lbl"':''}>${pushState==='on'?'알림 켜짐':'알림 켜기'}</span></button><a href="/" aria-label="영업 CRM">${ic('arrow',14)}<span class="lbl">영업 CRM</span></a><button class="tl" data-act="reload" aria-label="새로고침">${ic('refresh',14)}<span class="lbl">새로고침</span></button><button class="tl" data-act="myinfo" aria-label="내 정보 수정">${ic('userc',14)}<span class="lbl">내 정보</span></button><button class="tl" data-act="logout" aria-label="로그아웃">${ic('logout',14)}<span class="lbl">${esc(S.me.name)} 로그아웃</span></button></div></header>
     <nav class="tabs" aria-label="관리자 메뉴"><div class="in" role="tablist">${tabsView().map(([k,l])=>`<button role="tab" aria-selected="${S.tab===k}" data-act="tab" data-t="${k}">${l}<span class="pres-tab" data-pt="${k}">${presTabHtml(k)}</span>${k==='req'&&S.cntReq?`<span class="cnt">${S.cntReq}</span>`:''}${k==='acc'&&S.cntAcc?`<span class="cnt">${S.cntAcc}</span>`:''}${k==='field'&&S.cntFieldAll?`<span class="cnt">${S.cntFieldAll}</span>`:''}${k==='today'&&S.cntTodo?`<span class="cnt">${S.cntTodo}</span>`:''}</button>`).join('')}<button type="button" class="tab-set" data-act="tabSet" title="메뉴 순서 · 숨기기 (나만 적용)" aria-label="메뉴 순서 바꾸기">⚙</button></div></nav>
-    <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${mineBar()}${views[S.tab]()}</main>`;
+    <main class="wrap">${S.err?`<p class="text" style="background:#F8E3DD;color:#7A2E1C">${esc(S.err)}</p>`:''}${voBar()}${mineBar()}${views[S.tab]()}</main>`;
   }
   if(window.AppNav&&!AppNav.getToken) AppNav.getToken=async()=>{ const {data}=await db.auth.getSession(); return data&&data.session?data.session.access_token:null; };
   if(window.AppNav) AppNav.set('admin', !!(S.session&&S.me&&S.me.status==='승인'&&['admin','master'].includes(S.me.role)));
@@ -2360,6 +2367,7 @@ function renderMain(){
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2000);}
 function ask(title,body,ok,run,extra){ S.dialog={title,body,ok,run,extra}; render(); }
 async function act(fn,okMsg,after){
+  if(viewOnly()){ S.dialog=null; S.busy=false; render(); toast('보기 전용 계정이라 수정할 수 없어요.',true); return; }
   try{ await fn(); kickPush(); if(okMsg) toast(okMsg); }catch(e){ if(e&&e.keep){ S.busy=false; render(); return; } toast(friendly(e),true); }
   S.dialog=null; S.busy=false;
   if(after) await after(); await refreshCounts(); await loadTab();
@@ -2417,7 +2425,7 @@ document.addEventListener('click',async e=>{
       setTab('coll'); S.collTab='전체'; S.aF=''; S.cRd=''; S.collApt=''; S.collQ=S.collQin=car; S.collOpen=[]; S.coll=null; render(); await loadTab();
       const m=(S.coll||[]).find(x=>x.customer_id===id)||(car&&(S.coll||[]).find(x=>_nc(x.car_number)===_nc(car)));
       if(!m){ S.collQ=S.collQin=''; render(); toast('수금 명단에서 이 고객을 찾지 못했어요. 수금관리에서 [고객관리에서 불러오기]를 눌러 주세요.',true); break; }
-      if(!inScope(m.complex)){ S.mineOnly=false; }
+      if(!inScope(m.complex)){ if(mineForced()){ S.collQ=S.collQin=''; render(); toast('내 담당 단지가 아닌 고객이에요.',true); break; } S.mineOnly=false; }
       S.collOpen=[m.id]; await Promise.all([loadCBills(m.id),loadCNotes(m.id)]); render();
       setTimeout(()=>{ const tr=document.querySelector(`tr[data-mid="${m.id}"]`); if(tr) tr.scrollIntoView({block:'center',behavior:'smooth'}); },60);
       toast(`${car||m.name||''} 수금 화면이에요. [입금 확인]으로 받은 금액을 기록하세요.`); break; }
