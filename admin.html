@@ -1771,7 +1771,7 @@ function collSettingsPanel(){
 const cxT=c=>String(c||'').trim();
 const collCanAny=()=>!S.crole||S.crole.is_master||S.crole.is_chongmu;
 function canEditCx(cx){ const R=S.crole; if(!R||R.is_master) return true; if(!R.is_chongmu) return false;
-  const c=cxT(cx); if((R.mine||[]).includes(c)) return true; return !((R.owners||{})[c]||[]).length; }
+  const c=cxT(cx); if((R.mine||[]).includes(c)) return true; if(voEdit()) return false; return !((R.owners||{})[c]||[]).length; }
 const ownersOf=cx=>((S.crole&&S.crole.owners)||{})[cxT(cx)]||[];
 // 담당 총무 지정 (마스터만): 고른 고객들의 단지를 한 총무에게 맡겨요 · 한 단지는 한 총무만
 const ownMaster=()=>!!(S.crole&&S.crole.is_master&&!S.crole.view_only);
@@ -1792,11 +1792,14 @@ function ownerDialog(){ const R=S.crole, sel=S.customers.filter(c=>S.cmSel.inclu
       toast(uid?`단지 ${cxs.length}곳을 ${nm} 총무 담당으로 정했어요.`:`단지 ${cxs.length}곳의 담당 총무를 뺐어요.`); },null),build()); S.dialog.rebuild=build; }
 // 10/22: 총무는 자기 담당 단지만 봐요 (끌 수 없음). 마스터 · 보기 전용 관리자는 모든 단지를 봐요.
 const viewOnly=()=>!!(S.crole&&S.crole.view_only);
+// 10/25: 보기 전용 + 총무(신윤섭) = 모든 단지를 보고, 내 담당 단지 고객만 고쳐요 (DB가 줄마다 막아요 · SQL 79)
+const voEdit=()=>!!(S.crole&&S.crole.view_only&&S.crole.is_chongmu&&!S.crole.is_master);
 const mineForced=()=>!!(S.crole&&S.crole.is_chongmu&&!S.crole.is_master&&!S.crole.view_only);
 const scopeOn=()=>mineForced()||!!(S.crole&&S.crole.is_chongmu&&S.mineOnly&&(S.crole.mine||[]).length);
 const inScope=cx=>!scopeOn()||(S.crole.mine||[]).includes(cxT(cx));
 const SCOPE_TABS=['req','live','field','round','cmgr','jobs','slots','notice'];   // 아파트로 나뉘는 탭 (11번)
-function voBar(){ return viewOnly()?`<div class="role-bar"><span class="rp v">보기 전용</span><span class="grow">이 계정은 정보를 <b>볼 수만</b> 있어요. 고치거나 보내는 일은 할 수 없어요.</span></div>`:''; }
+function voBar(){ if(voEdit()){ const mine=S.crole.mine||[]; return `<div class="role-bar"><span class="rp v">보기 + 내 담당 수정</span><span class="grow">모든 아파트를 볼 수 있고, ${mine.length?`내 담당 단지 <b>${mine.length}곳</b>(${esc(mine.join(', '))}) 고객만 고칠 수 있어요.`:'고칠 수 있는 담당 단지가 아직 없어요. 사장님이 고객관리에서 지정해요.'}</span></div>`; }
+  return viewOnly()?`<div class="role-bar"><span class="rp v">보기 전용</span><span class="grow">이 계정은 정보를 <b>볼 수만</b> 있어요. 고치거나 보내는 일은 할 수 없어요.</span></div>`:''; }
 function mineBar(){ const R=S.crole, mine=(R&&R.mine)||[];
   if(mineForced()&&SCOPE_TABS.includes(S.tab)) return `<div class="role-bar mine-bar"><span class="rp c">내 담당</span><span class="grow">${mine.length?`담당 단지 <b>${mine.length}곳</b>만 보여요 (${esc(mine.join(', '))})`:'아직 담당 단지가 없어서 보이는 고객이 없어요. 수금관리 [⚙ 내 수금 설정]에서 담당 단지를 체크해 주세요.'}</span></div>`;
   if(!R||!R.is_chongmu||!mine.length||!SCOPE_TABS.includes(S.tab)) return '';
@@ -1804,6 +1807,7 @@ function mineBar(){ const R=S.crole, mine=(R&&R.mine)||[];
 function roleBar(){ const R=S.crole; if(!R) return '';
   const mine=R.mine||[];
   const head=R.is_master?'<span class="rp m">마스터</span><span>모든 아파트 수금을 수정할 수 있어요.</span>'
+    :R.view_only&&voEdit()?'<span class="rp v">보기 + 내 담당 수정</span><span>모든 아파트를 볼 수 있고, 내 담당 단지만 고칠 수 있어요.</span>'
     :R.view_only?'<span class="rp v">보기 전용</span><span>모든 아파트를 볼 수 있지만 고칠 수는 없어요.</span>'
     :R.is_chongmu?`<span class="rp c">관리자(총무)</span><span>${mine.length?`내 담당 <b>${mine.length}곳</b>(${esc(mine.join(', '))})만 보이고 고칠 수 있어요.`:'아직 담당 아파트가 없어요. 아래 [⚙ 내 수금 설정]에서 담당 아파트를 체크해 주세요.'}</span>`
     :'<span class="rp v">보기 전용</span><span>수금관리는 마스터와 총무만 수정할 수 있어요. (영업CRM 직원관리에서 마스터가 총무로 지정)</span>';
@@ -2389,7 +2393,7 @@ function renderMain(){
 let tt;function toast(m,err){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');document.body.appendChild(t);}t.className='toast'+(err?' err':'');t.innerHTML=`<span>${esc(m)}</span>`;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2000);}
 function ask(title,body,ok,run,extra){ S.dialog={title,body,ok,run,extra}; render(); }
 async function act(fn,okMsg,after){
-  if(viewOnly()){ S.dialog=null; S.busy=false; render(); toast('보기 전용 계정이라 수정할 수 없어요.',true); return; }
+  if(viewOnly()&&!voEdit()){ S.dialog=null; S.busy=false; render(); toast('보기 전용 계정이라 수정할 수 없어요.',true); return; }
   try{ await fn(); kickPush(); if(okMsg) toast(okMsg); }catch(e){ if(e&&e.keep){ S.busy=false; render(); return; } toast(friendly(e),true); }
   S.dialog=null; S.busy=false;
   if(after) await after(); await refreshCounts(); await loadTab();
