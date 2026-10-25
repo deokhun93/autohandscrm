@@ -492,7 +492,7 @@ async function loadBase(){
   ]);
   S.staff=staff||[]; S.customers=cust||[];
   await loadCls();
-  try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){ S.crole=null; }   // 총무 담당 아파트 — 모든 탭의 '내 담당 아파트만 보기'
+  for(let i=0;i<2&&!S.crole;i++){ try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){ S.crole=null; } }   // 총무 담당 아파트 (실패하면 한 번 더) — 모든 탭의 '내 담당 아파트만 보기'
   if(!S.slotApt) S.slotApt=complexes()[0]||'';
   return true;
 }
@@ -1452,8 +1452,12 @@ async function custImportFile(file){
     const data=custParse(X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:true}));
     if(!data.length){ toast('엑셀에서 읽을 줄을 찾지 못했어요. 첫 줄에 아파트 · 차량번호 · 고객 같은 제목이 있는지 확인해 주세요.',true); return; }
     ask(`${data.length}대를 고객관리에 넣을까요?`,`'${file.name}' 첫 번째 시트를 읽었어요.\n같은 차량번호가 이미 있으면 그 고객 정보를 엑셀 내용으로 고치고, 없으면 계약완료 고객으로 새로 추가해요.\n수금관리에도 함께 연결되고, 청구는 이번 달부터 생겨요. '월요금'을 적으면 수금 명단 요금도 들어가요.`,'넣기',
-      ()=>act(async()=>{ let ins=0,upd=0,skip=0,msgs=[]; for(let i=0;i<data.length;i+=200){ const r=await q(db.rpc('import_customers_admin',{p_rows:data.slice(i,i+200)})); ins+=r.inserted||0; upd+=r.updated||0; skip+=r.skipped||0; msgs=msgs.concat(r.messages||[]); }
-        S.custImportMsg={head:`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}${msgs.length?` · 확인할 것 ${msgs.length}건`:''}`,list:msgs};
+      ()=>act(async()=>{ let ins=0,upd=0,skip=0,msgs=[],claimed=[],taken=[]; for(let i=0;i<data.length;i+=200){ const r=await q(db.rpc('import_customers_admin',{p_rows:data.slice(i,i+200)})); ins+=r.inserted||0; upd+=r.updated||0; skip+=r.skipped||0; msgs=msgs.concat(r.messages||[]); claimed=claimed.concat(r.claimed||[]); taken=taken.concat(r.taken||[]); }
+        // 10/25: 총무가 넣은 단지 중 담당 총무가 없던 곳은 자동으로 그 총무 담당 (78번 SQL)
+        if(claimed.length) msgs=msgs.concat([{row:'-',car:'',msg:`담당 단지로 자동 지정: ${[...new Set(claimed)].join(', ')}`}]);
+        if(taken.length) msgs=msgs.concat([...new Map(taken.map(t=>[t.complex,t])).values()].map(t=>({row:'-',car:'',msg:`${t.complex}은(는) ${t.owner} 총무 담당이라 그대로 두었어요. 옮기려면 사장님께 요청해 주세요.`})));
+        if(claimed.length){ try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){} }
+        S.custImportMsg={head:`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}${claimed.length?` · 내 담당 단지 ${new Set(claimed).size}곳 자동 지정`:''}${msgs.length?` · 확인할 것 ${msgs.length}건`:''}`,list:msgs};
         await reloadCustomers(); toast(`새로 ${ins}대 · 수정 ${upd}대${skip?` · 건너뜀 ${skip}줄`:''}`);
         if(ownMaster()&&noOwnCnt()){ S.cmNoOwn=true; S.cmSel=[]; S.custImportMsg.head+=` · 담당 총무 없는 고객 ${noOwnCnt()}대 → 아래 목록에서 전체 선택 후 [👤 담당 총무 지정]을 눌러 주세요`; } },null));
   }catch(e){ toast(friendly(e),true); } }
@@ -1739,11 +1743,10 @@ function collSettingsPanel(){
   if(R){
     const all=[...new Set([...(R.complexes||[]),...S.coll.map(r=>cxT(r.complex)).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'ko'));
     if(R.is_chongmu){
-      if(!S.cxDraft) S.cxDraft=[...(R.mine||[])];
-      const meName=S.me&&S.me.name;
-      cx=`<h3 class="h3">내 담당 아파트 <span class="sub">(체크한 아파트만 수정할 수 있어요 · 담당 총무가 없는 아파트도 수정 가능)</span></h3>
-        <div class="cx-grid">${all.map(a=>{const on=S.cxDraft.includes(a), oth=ownersOf(a).filter(n=>n!==meName);return `<label class="${on?'on':''}"><input type="checkbox" data-cx="${esc(a)}" ${on?'checked':''}><span>${esc(a)}</span>${oth.length?`<small>· ${esc(oth.join(', '))}</small>`:''}</label>`;}).join('')||'<p class="sub">수금 명단에 아파트가 아직 없어요.</p>'}</div>
-        <div class="row" style="margin-top:8px"><input class="inp" id="cxNew" placeholder="목록에 없는 아파트 이름 추가" style="max-width:240px"><button class="btn2 sm" data-act="cxAdd">추가</button><span class="grow"></span><button class="btn sm" data-act="cxSave">담당 아파트 저장</button></div>`;
+      // 10/25: 담당 단지는 사장님(마스터)만 정해요. 총무는 자기 단지를 보기만 해요.
+      const mine=R.mine||[];
+      cx=`<h3 class="h3">내 담당 아파트 <span class="sub">(사장님이 고객관리에서 지정해요)</span></h3>
+        ${mine.length?`<div class="cx-grid">${mine.map(a=>`<label class="on"><span>${esc(a)}</span></label>`).join('')}</div>`:'<p class="sub">아직 담당 아파트가 없어요. 사장님께 지정을 요청해 주세요.</p>'}`;
     }
     const ch=R.chongmu||[];
     const byC=ch.map(p=>({name:p.name,list:all.filter(a=>ownersOf(a).includes(p.name))}));
