@@ -492,7 +492,7 @@ async function loadBase(){
   ]);
   S.staff=staff||[]; S.customers=cust||[];
   await loadCls();
-  try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){ S.crole=null; }   // 총무 담당 아파트 — 모든 탭의 '내 담당 아파트만 보기'
+  for(let i=0;i<2&&!S.crole;i++){ try{ S.crole=await q(db.rpc('get_my_coll_role')); }catch(_){ S.crole=null; } }   // 총무 담당 아파트 (실패하면 한 번 더) — 모든 탭의 '내 담당 아파트만 보기'
   if(!S.slotApt) S.slotApt=complexes()[0]||'';
   return true;
 }
@@ -1739,11 +1739,10 @@ function collSettingsPanel(){
   if(R){
     const all=[...new Set([...(R.complexes||[]),...S.coll.map(r=>cxT(r.complex)).filter(Boolean)])].sort((a,b)=>a.localeCompare(b,'ko'));
     if(R.is_chongmu){
-      if(!S.cxDraft) S.cxDraft=[...(R.mine||[])];
-      const meName=S.me&&S.me.name;
-      cx=`<h3 class="h3">내 담당 아파트 <span class="sub">(체크한 아파트만 수정할 수 있어요 · 담당 총무가 없는 아파트도 수정 가능)</span></h3>
-        <div class="cx-grid">${all.map(a=>{const on=S.cxDraft.includes(a), oth=ownersOf(a).filter(n=>n!==meName);return `<label class="${on?'on':''}"><input type="checkbox" data-cx="${esc(a)}" ${on?'checked':''}><span>${esc(a)}</span>${oth.length?`<small>· ${esc(oth.join(', '))}</small>`:''}</label>`;}).join('')||'<p class="sub">수금 명단에 아파트가 아직 없어요.</p>'}</div>
-        <div class="row" style="margin-top:8px"><input class="inp" id="cxNew" placeholder="목록에 없는 아파트 이름 추가" style="max-width:240px"><button class="btn2 sm" data-act="cxAdd">추가</button><span class="grow"></span><button class="btn sm" data-act="cxSave">담당 아파트 저장</button></div>`;
+      // 10/25: 담당 단지는 사장님(마스터)만 정해요. 총무는 자기 단지를 보기만 해요.
+      const mine=R.mine||[];
+      cx=`<h3 class="h3">내 담당 아파트 <span class="sub">(사장님이 고객관리에서 지정해요)</span></h3>
+        ${mine.length?`<div class="cx-grid">${mine.map(a=>`<label class="on"><span>${esc(a)}</span></label>`).join('')}</div>`:'<p class="sub">아직 담당 아파트가 없어요. 사장님께 지정을 요청해 주세요.</p>'}`;
     }
     const ch=R.chongmu||[];
     const byC=ch.map(p=>({name:p.name,list:all.filter(a=>ownersOf(a).includes(p.name))}));
