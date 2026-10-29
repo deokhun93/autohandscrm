@@ -1470,8 +1470,10 @@ async function custExport(tpl){
     const d=new Date(); X.writeFile(wb,tpl?'오토핸즈_고객관리_양식.xlsx':`오토핸즈_고객관리_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.xlsx`);
     toast(tpl?'엑셀 양식을 받았어요. 양식에 맞춰 적은 뒤 [📥 엑셀 넣기]로 올려 주세요.':`${rows.length}대를 엑셀로 받았어요.`); }catch(e){ toast(friendly(e),true); } }
 // 고객관리 표 칸 (x: 그 줄 정보 — kind · g · n · shown · st · gx · open · nn)
+// 10/29: 아파트 이름을 누르면 카카오맵에서 그 아파트 위치를 보여줘요 (대구 기준으로 찾아요)
+const aptMapUrl=cx=>{ const n=cxT(cx); return 'https://map.kakao.com/?q='+encodeURIComponent((/대구/.test(n)?'':'대구 ')+n+(/아파트|APT/i.test(n)?'':' 아파트')); };
 const CM_COLS=[
-  ['apt','아파트',c=>`<td>${esc(c.complex||'-')}</td>`,1],
+  ['apt','아파트',c=>`<td>${c.complex?`<a class="cust-btn" href="${aptMapUrl(c.complex)}" target="_blank" rel="noopener" title="지도에서 위치 보기 (카카오맵)">${esc(c.complex)} 📍</a>`:'-'}</td>`,1],
   ['unit','동·호수',c=>`<td>${esc(c.unit||'-')}</td>`,1],
   ['model','차종',c=>`<td>${esc(c.car_model||'-')}${clsTag(c.id)}</td>`,1],
   ['car','차량번호',c=>`<td><button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>${carPhotoBtn(c.id)}${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>`,1],
