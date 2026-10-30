@@ -529,6 +529,7 @@ async function loadTab(){
       try{ const ci=await q(db.rpc('list_customer_interior')); S.cint={}; (ci||[]).forEach(r=>S.cint[r.customer_id]=r); S.cintOk=true; }catch(_){ S.cint={}; S.cintOk=false; } S.intDraft={}; }
     if(S.tab==='cmgr'){
       await loadCols('cmgr');
+      try{ const ad=await q(db.from('complex_addresses').select('complex,address')); S.cxAddr={}; (ad||[]).forEach(r=>S.cxAddr[cxT(r.complex)]=r.address); }catch(_){ S.cxAddr={}; }
       const [rows,st]=await Promise.all([q(db.rpc('list_customer_note_counts')),q(db.rpc('list_customer_status'))]);
       S.noteCnt={}; (rows||[]).forEach(r=>S.noteCnt[r.customer_id]=r);
       try{ const ci=await q(db.rpc('list_customer_interior')); S.cint={}; (ci||[]).forEach(r=>S.cint[r.customer_id]=r); S.cintOk=true; }catch(_){ S.cint={}; S.cintOk=false; }
@@ -1471,9 +1472,20 @@ async function custExport(tpl){
     toast(tpl?'엑셀 양식을 받았어요. 양식에 맞춰 적은 뒤 [📥 엑셀 넣기]로 올려 주세요.':`${rows.length}대를 엑셀로 받았어요.`); }catch(e){ toast(friendly(e),true); } }
 // 고객관리 표 칸 (x: 그 줄 정보 — kind · g · n · shown · st · gx · open · nn)
 // 10/29: 아파트 이름을 누르면 카카오맵에서 그 아파트 위치를 보여줘요 (대구 기준으로 찾아요)
-const aptMapUrl=cx=>{ const n=cxT(cx); return 'https://map.kakao.com/?q='+encodeURIComponent((/대구/.test(n)?'':'대구 ')+n+(/아파트|APT/i.test(n)?'':' 아파트')); };
+// 10/30: 아파트 주소를 저장해 두면 그 주소로 정확한 위치를 열어요 (고객관리 [📍 아파트 주소])
+const aptAddr=cx=>(S.cxAddr||{})[cxT(cx)]||'';
+const aptMapUrl=cx=>{ const n=cxT(cx), a=aptAddr(cx); return 'https://map.kakao.com/?q='+encodeURIComponent(a||((/대구/.test(n)?'':'대구 ')+n+(/아파트|APT/i.test(n)?'':' 아파트'))); };
+const canAddr=cx=>{ const R=S.crole; if(!R) return false; if(R.is_master&&!R.view_only) return true; return !!(R.is_chongmu&&(R.mine||[]).includes(cxT(cx))); };
+function loadPostcode(){ if(window.daum&&window.daum.Postcode) return Promise.resolve(); return new Promise((ok,no)=>{ const sc=document.createElement('script'); sc.src='https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'; sc.onload=()=>ok(); sc.onerror=()=>no(new Error('주소 검색을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.')); document.head.appendChild(sc); }); }
+function addrDialog(){ loadPostcode().catch(()=>{});
+  const apts=complexes().slice().sort((x,y)=>x.localeCompare(y,'ko'));
+  const build=()=>`<div class="tbl" style="max-height:360px;overflow:auto;margin:8px 0"><table><thead><tr><th>아파트</th><th>주소</th><th></th></tr></thead><tbody>${apts.map(a=>{ const ad=aptAddr(a), ed=canAddr(a);
+    return `<tr><td><b>${esc(a)}</b></td><td>${ad?`<a class="cust-btn" href="${aptMapUrl(a)}" target="_blank" rel="noopener" title="지도에서 보기">${esc(ad)} 📍</a>`:'<span class="sub">없음</span>'}</td><td class="nowrap">${ed?`<button class="btn2 sm" data-act="addrFind" data-cx="${esc(a)}">🔍 주소 찾기</button>${ad?` <button class="btn2 sm" data-act="addrDel" data-cx="${esc(a)}">지우기</button>`:''}`:''}</td></tr>`; }).join('')}</tbody></table></div>`;
+  ask('아파트 주소','아파트마다 주소를 저장해 두면, 고객 목록에서 아파트 이름을 눌렀을 때 그 주소로 정확한 위치가 지도에 나와요.\n주소는 사장님과 그 단지 담당 총무가 저장할 수 있어요.','닫기',()=>{ S.dialog=null; S.busy=false; render(); },build()); S.dialog.rebuild=build; }
+async function addrSave(cx,addr){ try{ await q(db.rpc('set_complex_address',{p_complex:cx,p_address:addr})); S.cxAddr=S.cxAddr||{}; if(addr) S.cxAddr[cxT(cx)]=addr; else delete S.cxAddr[cxT(cx)];
+  toast(addr?`${cx} 주소를 저장했어요.`:`${cx} 주소를 지웠어요.`); }catch(e){ toast(friendly(e),true); } if(S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); } render(); }
 const CM_COLS=[
-  ['apt','아파트',c=>`<td>${c.complex?`<a class="cust-btn" href="${aptMapUrl(c.complex)}" target="_blank" rel="noopener" title="지도에서 위치 보기 (카카오맵)">${esc(c.complex)} 📍</a>`:'-'}</td>`,1],
+  ['apt','아파트',c=>`<td>${c.complex?`<a class="cust-btn" href="${aptMapUrl(c.complex)}" target="_blank" rel="noopener" title="${aptAddr(c.complex)?esc(aptAddr(c.complex))+' · ':''}지도에서 위치 보기 (카카오맵)">${esc(c.complex)} 📍</a>`:'-'}</td>`,1],
   ['unit','동·호수',c=>`<td>${esc(c.unit||'-')}</td>`,1],
   ['model','차종',c=>`<td>${esc(c.car_model||'-')}${clsTag(c.id)}</td>`,1],
   ['car','차량번호',c=>`<td><button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>${carPhotoBtn(c.id)}${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>`,1],
@@ -1521,6 +1533,7 @@ function cmgrView(){
     <label class="btn2 sm file-btn">📥 엑셀 넣기<input type="file" id="custFile" accept=".xlsx,.xls,.csv" hidden></label>
     <button class="btn2 sm" data-act="custTpl">엑셀 양식 받기</button>
     <button class="btn2 sm" data-act="custExport">📤 엑셀로 받기</button>
+    <button class="btn2 sm" data-act="addrOpen" title="아파트마다 주소를 저장하면 지도가 정확해져요">📍 아파트 주소${(()=>{const n=complexes().filter(a=>!aptAddr(a)).length;return n?` <span class="sub">(${n}곳 없음)</span>`:'';})()}</button>
     ${colBtn('cmgr')}
     <button class="btn sm" data-act="custNew">+ 직접 추가</button>
     ${S.loginsOk?`<button class="btn2 sm" data-act="loginMakeAll" title="앱 계정이 없는 계약완료 고객 모두">📱 고객 앱 계정 만들기${(()=>{const n=S.customers.filter(c=>!(S.logins||{})[c.id]).length;return n?` <b>${n}</b>`:'';})()}</button>`:''}
@@ -2647,6 +2660,10 @@ document.addEventListener('click',async e=>{
       const K=NK[m.kind||'cust'];
       ask('이 메모를 삭제할까요?','삭제한 메모는 되돌릴 수 없어요.','확인',async()=>{ try{ await q(db.rpc(K.del,{p_id:m.id})); await K.load(m.cid); K.after(m.cid); S.noteModal=null; toast('메모를 삭제했어요.'); }catch(err){ toast(friendly(err),true); } S.dialog=null; S.busy=false; render(); }); break; }
     case 'custTpl': await custExport(true); break;
+    case 'addrOpen': addrDialog(); break;
+    case 'addrFind': { const cx=t.dataset.cx; try{ await loadPostcode(); }catch(e){ toast(e.message,true); break; }
+      new window.daum.Postcode({ oncomplete:d=>{ const a=(d.roadAddress||d.address||'').trim(); if(a) addrSave(cx,a); } }).open({q:(/대구/.test(cx)?'':'대구 ')+cx}); break; }
+    case 'addrDel': addrSave(t.dataset.cx,''); break;
     case 'custExport': await custExport(false); break;
     case 'custMsgClose': S.custImportMsg=null; render(); break;
     case 'cmGrp': { const g=t.dataset.g; S.cmGrpOpen=S.cmGrpOpen||[]; S.cmGrpOpen=S.cmGrpOpen.includes(g)?S.cmGrpOpen.filter(x=>x!==g):[...S.cmGrpOpen,g]; render(); break; }
