@@ -1482,10 +1482,23 @@ function addrDialog(){ loadPostcode().catch(()=>{});
   const build=()=>`<div class="tbl" style="max-height:360px;overflow:auto;margin:8px 0"><table><thead><tr><th>아파트</th><th>주소</th><th></th></tr></thead><tbody>${apts.map(a=>{ const ad=aptAddr(a), ed=canAddr(a);
     return `<tr><td><b>${esc(a)}</b></td><td>${ad?`<a class="cust-btn" href="${aptMapUrl(a)}" target="_blank" rel="noopener" title="지도에서 보기">${esc(ad)} 📍</a>`:'<span class="sub">없음</span>'}</td><td class="nowrap">${ed?`<button class="btn2 sm" data-act="addrFind" data-cx="${esc(a)}">🔍 주소 찾기</button>${ad?` <button class="btn2 sm" data-act="addrDel" data-cx="${esc(a)}">지우기</button>`:''}`:''}</td></tr>`; }).join('')}</tbody></table></div>`;
   ask('아파트 주소','아파트마다 주소를 저장해 두면, 고객 목록에서 아파트 이름을 눌렀을 때 그 주소로 정확한 위치가 지도에 나와요.\n주소는 사장님과 그 단지 담당 총무가 저장할 수 있어요.','닫기',()=>{ S.dialog=null; S.busy=false; render(); },build()); S.dialog.rebuild=build; }
+// 10/30: 고객 목록에서 아파트 이름을 누르면 그 아파트 주소 · 지도 · 주소 찾기를 한 번에 보여줘요
+function aptOneDialog(cx){ loadPostcode().catch(()=>{});
+  const build=()=>{ const ad=aptAddr(cx), ed=canAddr(cx);
+    return `<div style="margin:10px 0;padding:12px;border:1px solid var(--line,#E5E1D6);border-radius:12px">
+      <div class="sub" style="font-size:12px">주소</div>
+      <div style="font-weight:800;margin:4px 0 10px">${ad?esc(ad):'<span class="sub">아직 저장된 주소가 없어요</span>'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn sm" style="text-decoration:none" href="${aptMapUrl(cx)}" target="_blank" rel="noopener">🗺 지도에서 보기</a>
+        ${ed?`<button class="btn2 sm" data-act="addrFind" data-cx="${esc(cx)}">🔍 ${ad?'주소 바꾸기':'주소 찾아서 저장'}</button>${ad?` <button class="btn2 sm" data-act="addrDel" data-cx="${esc(cx)}">주소 지우기</button>`:''}`:''}
+      </div>
+      ${ad?'':`<p class="note" style="margin:8px 0 0">주소가 없으면 지도는 "${esc(cx)}" 이름으로 찾아요.${ed?' 주소를 저장하면 정확한 위치가 나와요.':' 주소는 사장님이나 담당 총무가 저장할 수 있어요.'}</p>`}
+    </div>`; };
+  ask(cx,'','닫기',()=>{ S.dialog=null; S.busy=false; render(); },build()); S.dialog.rebuild=build; }
 async function addrSave(cx,addr){ try{ await q(db.rpc('set_complex_address',{p_complex:cx,p_address:addr})); S.cxAddr=S.cxAddr||{}; if(addr) S.cxAddr[cxT(cx)]=addr; else delete S.cxAddr[cxT(cx)];
   toast(addr?`${cx} 주소를 저장했어요.`:`${cx} 주소를 지웠어요.`); }catch(e){ toast(friendly(e),true); } if(S.dialog&&S.dialog.rebuild){ S.dialog.extra=S.dialog.rebuild(); } render(); }
 const CM_COLS=[
-  ['apt','아파트',c=>`<td>${c.complex?`<a class="cust-btn" href="${aptMapUrl(c.complex)}" target="_blank" rel="noopener" title="${aptAddr(c.complex)?esc(aptAddr(c.complex))+' · ':''}지도에서 위치 보기 (카카오맵)">${esc(c.complex)} 📍</a>`:'-'}</td>`,1],
+  ['apt','아파트',c=>`<td>${c.complex?`<button class="cust-btn" data-act="aptOne" data-cx="${esc(c.complex)}" title="${aptAddr(c.complex)?esc(aptAddr(c.complex))+' · ':''}주소 · 지도 보기">${esc(c.complex)} 📍</button>${aptAddr(c.complex)?'':'<br><span class="sub" style="font-size:11px">주소 없음</span>'}`:'-'}</td>`,1],
   ['unit','동·호수',c=>`<td>${esc(c.unit||'-')}</td>`,1],
   ['model','차종',c=>`<td>${esc(c.car_model||'-')}${clsTag(c.id)}</td>`,1],
   ['car','차량번호',c=>`<td><button class="cust-btn car" style="font-size:14.5px" data-act="custEdit" data-id="${c.id}" title="고객 정보 수정">${esc(c.car_number||'-')}</button>${carPhotoBtn(c.id)}${(()=>{const L=(S.logins||{})[c.id]; return L?`<br><span class="mtag" title="고객 앱 아이디${L.pw_initial?' · 처음 비밀번호 1234 그대로':' · 비밀번호 바꿈'}">📱 ${esc(L.login_id)}${L.pw_initial?' · 1234':''}</span>`:'';})()}</td>`,1],
@@ -2661,6 +2674,7 @@ document.addEventListener('click',async e=>{
       ask('이 메모를 삭제할까요?','삭제한 메모는 되돌릴 수 없어요.','확인',async()=>{ try{ await q(db.rpc(K.del,{p_id:m.id})); await K.load(m.cid); K.after(m.cid); S.noteModal=null; toast('메모를 삭제했어요.'); }catch(err){ toast(friendly(err),true); } S.dialog=null; S.busy=false; render(); }); break; }
     case 'custTpl': await custExport(true); break;
     case 'addrOpen': addrDialog(); break;
+    case 'aptOne': aptOneDialog(t.dataset.cx); break;
     case 'addrFind': { const cx=t.dataset.cx; try{ await loadPostcode(); }catch(e){ toast(e.message,true); break; }
       new window.daum.Postcode({ oncomplete:d=>{ const a=(d.roadAddress||d.address||'').trim(); if(a) addrSave(cx,a); } }).open({q:(/대구/.test(cx)?'':'대구 ')+cx}); break; }
     case 'addrDel': addrSave(t.dataset.cx,''); break;
