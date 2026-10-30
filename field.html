@@ -49,7 +49,7 @@ h1.h{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}h2.h{font-siz
 .chip{min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);font-weight:700;font-size:13px}
 .chip[aria-pressed="true"]{background:var(--ink);color:var(--gold-2);border-color:var(--ink)}
 .chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
-.apt-h{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--sub);display:flex;align-items:center;gap:8px;margin-top:4px}
+.apt-map{color:inherit;font-weight:800;text-decoration:underline;text-decoration-color:#C9C3B3;text-underline-offset:3px}.apt-h{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--sub);display:flex;align-items:center;gap:8px;margin-top:4px}
 .apt-h::after{content:"";flex:1;border-top:1px dashed var(--line-2)}
 .job{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
 .job.picked{outline:2px solid var(--gold)}
@@ -219,6 +219,8 @@ const S={ready:false,session:null,me:null,day:keyOf(new Date()),jobs:[],sum:null
 const normQ=v=>String(v||'').replace(/\s+/g,'').toLowerCase();
 function jobMatch(j,q){ if(!q) return true; const c=j.customers||{}; return [c.car_number,c.name,c.unit,c.car_model].some(x=>normQ(x).includes(q)); }
 const aptOf=j=>(j.customers||{}).complex||'기타';
+// 10/30: 아파트 이름을 누르면 관리자가 저장한 주소로 카카오맵을 열어요 (주소가 없으면 '대구 + 아파트명'으로 찾아요)
+const aptMapUrl=cx=>{ const n=String(cx||'').trim(), a=(S.cxAddr||{})[n]; return 'https://map.kakao.com/?q='+encodeURIComponent(a||((/대구/.test(n)?'':'대구 ')+n+(/아파트|APT/i.test(n)?'':' 아파트'))); };
 
 async function loadMe(){
   const {data,error}=await db.from('profiles').select('id,name,role,status').eq('id',S.session.user.id).maybeSingle();
@@ -241,6 +243,7 @@ async function loadAll(){
     try{ const r=await db.rpc('list_my_field_reports',{p_date:S.day}); S.reps=r.error?[]:(r.data||[]); }catch(_){ S.reps=[]; }
     // 관리자가 '현장직원에게도 보이기'로 표시한 고객 메모 (차주 요청사항 등 · 56 SQL 전이면 건너뜀)
     await loadCarNotes();
+    try{ const r=await db.from('complex_addresses').select('complex,address'); S.cxAddr={}; (r.error?[]:(r.data||[])).forEach(x=>S.cxAddr[String(x.complex||'').trim()]=x.address); }catch(_){ S.cxAddr={}; }
     // 차량 정면 사진 (57 SQL 전이면 건너뜀)
     try{ const ids=[...new Set(S.jobs.map(j=>j.customer_id))]; const r=ids.length?await db.rpc('list_car_photos',{p_customer_ids:ids}):{data:[]}; S.cpOk=!r.error; S.cphoto={};
       const rows=r.error?[]:(r.data||[]), need=rows.map(x=>x.path).filter(p=>!(S.purl||{})[p]); S.purl=S.purl||{};
@@ -314,7 +317,7 @@ function jobCard2(j){
     <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)}"><span class="box">${ic('check')}</span></label>
       <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span><span class="tag">${kind}</span>${j.svc_kind?`<span class="tag svc">${j.svc_kind==='AS'?'AS':tr('서비스','Service')} · ${tr('추가 세차 (수당 지급)','Extra wash (paid)')}</span>`:''}${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')} · ${tr('원래','from')} ${esc(kdate(j.moved_from))}</span>`:''}</div></div>
     ${carPhoto(j)}
-    <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
+    <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${c.complex?`<a class="apt-map" href="${aptMapUrl(c.complex)}" target="_blank" rel="noopener" title="${tr('지도에서 위치 보기','Open map')}">${esc(c.complex)} 📍</a>`:''}${c.unit?' '+esc(c.unit):''}${!c.complex&&!c.unit?'-':''}</dd></dl>
     ${carNotes(j)}
     ${io?'':partRow(j,'ext')}${j.interior?partRow(j,'int'):''}
     ${msgLine(msg)}
@@ -366,7 +369,7 @@ function jobCardOld(j){
     <div class="row"><label class="sel"><input type="checkbox" data-sel="${j.customer_id}" ${picked?'checked':''} aria-label="${esc(c.car_number)}"><span class="box">${ic('check')}</span></label>
       <div class="grow row" style="flex-wrap:wrap;gap:6px"><span class="car">${esc(c.car_number||tr('차량번호 없음','No plate'))}</span>${j.interior?`<span class="tag">${tr('실내세차','Interior')}</span>`:''}${j.svc_kind?`<span class="tag svc">${j.svc_kind==='AS'?'AS':tr('서비스','Service')} · ${tr('추가 세차 (수당 지급)','Extra wash (paid)')}</span>`:''}${j.moved_from?`<span class="tag">${tr('일정 변경','Rescheduled')}</span>`:''}</div>
       <span class="pill ${j.status}">${j.status==='대기'?tr('세차대기','Waiting'):j.status==='완료'?tr('세차완료','Done'):tr('미작업','Not done')}</span></div>
-    <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${esc([c.complex,c.unit].filter(Boolean).join(' '))}</dd></dl>
+    <dl class="kv"><dt>${tr('차종','Model')}</dt><dd>${esc(c.car_model||'-')}</dd><dt>${tr('색상','Color')}</dt><dd>${c.car_color?`<span style="width:14px;height:14px;border-radius:50%;border:1px solid var(--line-2);background:${SWATCH[c.car_color]||'#fff'}"></span>`:''}${esc(c.car_color||'-')}</dd><dt>${tr('아파트단지','Apartment')}</dt><dd>${c.complex?`<a class="apt-map" href="${aptMapUrl(c.complex)}" target="_blank" rel="noopener" title="${tr('지도에서 위치 보기','Open map')}">${esc(c.complex)} 📍</a>`:''}${c.unit?' '+esc(c.unit):''}${!c.complex&&!c.unit?'-':''}</dd></dl>
     ${carNotes(j)}
     ${j.interior?`<label class="int-check ${j.interior_done?'on':''}"><input type="checkbox" data-int="${j.id}" ${j.interior_done?'checked':''} ${open?'':'disabled'}><span class="box">${ic('check')}</span>${tr('실내세차 완료','Interior done')}</label>${open&&needInt?`<p class="note">${tr('실내세차를 체크해야 완료 알림을 보낼 수 있어요.','Check "Interior done" first.')}</p>`:''}`:''}
     ${msgLine(msg)}
@@ -395,7 +398,7 @@ function homeView(){
   ${S.jobs.length?`<div class="find"><input type="search" id="q" value="${esc(S.q)}" placeholder="${tr('차량번호 · 이름 · 동호수 검색 (예: 1234)','Search plate · name · unit (e.g. 1234)')}" aria-label="${tr('차량 검색','Search cars')}" autocomplete="off" enterkeyhint="search">${S.q?`<button type="button" class="link" data-act="q-clear">${tr('지우기','Clear')}</button>`:''}</div>`:''}
   ${apts.length>2?`<div class="chips" role="group" aria-label="${tr('아파트 선택','Apartment')}">${apts.map(a=>`<button class="chip" aria-pressed="${S.apt===a}" data-act="apt" data-a="${esc(a)}">${a==='전체'?tr('전체','All'):esc(a)} <small>${aptCnt(a)}</small></button>`).join('')}</div>`:''}
   ${q&&!list.length?`<div class="empty">${tr(`'${esc(S.q)}'에 맞는 차량이 없어요.`,`No car matches '${esc(S.q)}'.`)}${S.apt!=='전체'?`<p class="note" style="margin-top:8px"><button class="link" data-act="apt" data-a="전체">${tr('전체 아파트에서 찾기','Search all apartments')}</button></p>`:''}</div>`:''}
-  ${list.length?groups.map(g=>`<div class="apt-h">${esc(g)} <small>${aptCnt(g)}</small></div>${list.filter(j=>((j.customers||{}).complex||'기타')===g).map(jobCard).join('')}`).join(''):q?'':`<div class="empty">${tr('이 날 배정된 세차가 없어요.','No cars assigned for this day.')}<p class="note" style="margin-top:8px">${tr('관리자 모드 › 고객관리 › 세차 설정에서 정기권·지정 요일·담당 현장직원이 모두 입력된 고객만, 지정 요일 날짜에 자동으로 보여요. 월 2회 고객은 격주로 보여요.','Cars appear here automatically on their scheduled day once the office assigns them to you.')}</p></div>`}
+  ${list.length?groups.map(g=>`<div class="apt-h">${g!=='기타'?`<a class="apt-map" href="${aptMapUrl(g)}" target="_blank" rel="noopener" title="${tr('지도에서 위치 보기','Open map')}">${esc(g)} 📍</a>`:esc(g)} <small>${aptCnt(g)}</small></div>${list.filter(j=>((j.customers||{}).complex||'기타')===g).map(jobCard).join('')}`).join(''):q?'':`<div class="empty">${tr('이 날 배정된 세차가 없어요.','No cars assigned for this day.')}<p class="note" style="margin-top:8px">${tr('관리자 모드 › 고객관리 › 세차 설정에서 정기권·지정 요일·담당 현장직원이 모두 입력된 고객만, 지정 요일 날짜에 자동으로 보여요. 월 2회 고객은 격주로 보여요.','Cars appear here automatically on their scheduled day once the office assigns them to you.')}</p></div>`}
   ${(()=>{const n=bulkTargets().length; return n?`<button class="btn full bulk-bar" data-act="bulk-done" ${S.busy?'disabled':''}>${tr(`선택한 ${n}대 완료`,`Mark ${n} selected as done`)}<span class="arr">${ic('check')}</span></button>`:'';})()}`;
 }
 function noticeCard(list){
