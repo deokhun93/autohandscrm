@@ -1566,7 +1566,7 @@ function cmgrView(){
   <div class="chips">${[['all','전체'],['on','세차중'],['new','신규'],['pause','일시정지'],['stop','정지'],['soon','재개 임박'],['move','이관중'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k==='pause'?'pz':k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
   <div class="selbar"${S.cmMode==='set'?' style="display:none"':''}><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}${ownMaster()?`<label class="flag" title="엑셀로 넣은 뒤 담당 총무가 없는 단지의 고객만 보여요"><input type="checkbox" id="cmNoOwn" ${S.cmNoOwn?'checked':''}><span>담당 총무 없는 단지만 <b>${noOwnCnt()}</b>대</span></label>`:''}<span class="grow"></span>
     ${ownMaster()?`<button class="btn2 sm" data-act="cmOwner" ${n?'':'disabled'}>👤 담당 총무 지정</button>`:''}
-    ${canXfer()?`<button class="btn2 sm" data-act="cmXfer" title="고른 고객이나 내 담당 단지를 다른 총무에게 넘겨요">🤝 담당 넘기기</button>`:''}
+    ${canXfer()?`<button class="btn2 sm" data-act="cmXfer" title="고른 고객이나 내 담당 단지를 다른 총무에게 넘겨요" ${ownMaster()&&!n?'disabled':''}>🤝 담당 넘기기</button>`:''}
     <button class="btn2 sm" data-act="cmSet" data-s="세차중" ${n?'':'disabled'}>세차중으로</button>
     <button class="btn2 sm st-pz" data-act="cmPause" data-k="일시정지" ${n?'':'disabled'}>일시정지</button>
     <button class="btn2 sm st-stop" data-act="cmPause" data-k="정지" ${n?'':'disabled'}>정지</button>
@@ -1829,11 +1829,11 @@ function ownerDialog(){ const R=S.crole, sel=S.customers.filter(c=>S.cmSel.inclu
       S.crole=await q(db.rpc('get_my_coll_role')); S.cmSel=[];
       toast(uid?`단지 ${cxs.length}곳을 ${nm} 총무 담당으로 정했어요.`:`단지 ${cxs.length}곳의 담당 총무를 뺐어요.`); },null),build()); S.dialog.rebuild=build; }
 // 11/01: 총무끼리 담당 넘기기 — 고른 고객(한 명씩) · 단지째 골라 다른 총무에게 넘기면 바로 그 총무 담당이 돼요 (SQL 81)
-const canXfer=()=>!!(S.crole&&S.crole.is_chongmu&&!S.crole.is_master&&!S.crole.view_only);
-function xferDialog(){ const R=S.crole, me=S.me&&S.me.id, mineCx=[...(R.mine||[])].sort((a,b)=>a.localeCompare(b,'ko'));
+const canXfer=()=>!!(S.crole&&S.crole.is_chongmu&&!S.crole.is_master&&!S.crole.view_only)||ownMaster();   // 11/01: 마스터도 고른 고객을 총무에게 넘길 수 있어요
+function xferDialog(){ const R=S.crole, me=S.me&&S.me.id, M=ownMaster(), mineCx=M?[]:[...(R.mine||[])].sort((a,b)=>a.localeCompare(b,'ko'));   // 마스터는 단지째는 [👤 담당 총무 지정]으로
   const to=(R.chongmu||[]).filter(p=>p.id!==me); if(!to.length){ toast('넘겨받을 다른 총무가 없어요.',true); return; }
   const sel=S.customers.filter(c=>S.cmSel.includes(c.id));   // 총무 화면의 고객은 모두 내 담당이에요 (DB가 걸러 줘요)
-  if(!sel.length&&!mineCx.length){ toast('넘길 고객을 먼저 골라 주세요.',true); return; }
+  if(!sel.length&&(M||!mineCx.length)){ toast('넘길 고객을 먼저 체크해 주세요.',true); return; }
   const cnt=a=>S.customers.filter(c=>cxT(c.complex)===a).length;
   S.xfer={cx:[],to:undefined};
   const build=()=>{ const X=S.xfer, one=sel.filter(c=>!X.cx.includes(cxT(c.complex))), tot=X.cx.reduce((n,a)=>n+cnt(a),0)+one.length, nm=X.to?((to.find(p=>p.id===X.to)||{}).name||''):'';
@@ -1843,7 +1843,7 @@ function xferDialog(){ const R=S.crole, me=S.me&&S.me.id, mineCx=[...(R.mine||[]
     ${mineCx.length?`<p class="note" style="margin:10px 0 4px">단지째 넘기기 <span class="sub">(고르면 그 단지 고객 모두 · 이후 새로 등록되는 고객도)</span> <button class="link" type="button" data-act="xferAll">${X.cx.length===mineCx.length?'전체 해제':'전체 선택'}</button></p>
     <div style="max-height:180px;overflow:auto">${mineCx.map(a=>`<label class="auto" style="display:flex;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin:4px 0"><input type="checkbox" name="xferCx" value="${esc(a)}" ${X.cx.includes(a)?'checked':''}><b style="flex:1">${esc(a)}</b><span class="sub">고객 ${cnt(a)}명</span></label>`).join('')}</div>`:''}
     <div class="field" style="margin-top:8px"><span style="font-weight:700;font-size:13px">받을 총무</span><div class="pz-reasons">${to.map(p=>`<label class="auto"><input type="radio" name="xferTo" value="${esc(p.id)}" ${X.to===p.id?'checked':''}><span>${esc(p.name)}</span></label>`).join('')}</div></div>
-    ${tot&&X.to?`<div class="note" style="background:#FFF7E6;border-radius:8px;padding:8px 10px;margin-top:8px;color:var(--text)">${X.cx.length?`단지 <b>${X.cx.length}곳</b> · `:''}고객 <b>${tot}명</b>이 <b>${esc(nm)}</b> 총무 담당이 돼요.<br>넘기면 이 고객들은 내 화면에서 사라지고, 다시 받으려면 ${esc(nm)} 총무가 넘겨줘야 해요.</div>`:''}`; };
+    ${tot&&X.to?`<div class="note" style="background:#FFF7E6;border-radius:8px;padding:8px 10px;margin-top:8px;color:var(--text)">${X.cx.length?`단지 <b>${X.cx.length}곳</b> · `:''}고객 <b>${tot}명</b>이 <b>${esc(nm)}</b> 총무 담당이 돼요.${M?'':`<br>넘기면 이 고객들은 내 화면에서 사라지고, 다시 받으려면 ${esc(nm)} 총무가 넘겨줘야 해요.`}</div>`:''}`; };
   ask('담당을 다른 총무에게 넘길까요?','고객 · 수금 · 세차 정보가 함께 넘어가요. 받은 총무에게는 알림창이 떠요.','넘기기',
     ()=>act(async()=>{ const X=S.xfer, ids=sel.filter(c=>!X.cx.includes(cxT(c.complex))).map(c=>c.id);
       if(!X.cx.length&&!ids.length){ toast('넘길 고객이나 단지를 골라 주세요.',true); throw Object.assign(new Error('keep'),{keep:true}); }
