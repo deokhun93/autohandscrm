@@ -1575,7 +1575,7 @@ function cmgrView(){
   <div class="chips">${[['all','전체'],['on','세차중'],['new','신규'],['pause','일시정지'],['stop','정지'],['soon','재개 임박'],['move','이관중'],['cancel','해지']].map(([k,l])=>`<button class="chip cst-${k==='pause'?'pz':k}" aria-pressed="${S.cmSt===k}" data-act="cmSt" data-f="${k}">${l} <b>${cnt[k]}</b></button>`).join('')}</div>
   <div class="selbar"${S.cmMode==='set'?' style="display:none"':''}><b class="sub" style="color:var(--text)">${n?`${n}대 선택됨`:'체크박스로 차량을 고른 뒤 처리하세요'}</b>${n?`<button class="link" data-act="cmSelNone">선택 해제</button>`:''}${ownMaster()?`<label class="flag" title="엑셀로 넣은 뒤 담당 총무가 없는 단지의 고객만 보여요"><input type="checkbox" id="cmNoOwn" ${S.cmNoOwn?'checked':''}><span>담당 총무 없는 단지만 <b>${noOwnCnt()}</b>대</span></label>`:''}<span class="grow"></span>
     ${ownMaster()?`<button class="btn2 sm" data-act="cmOwner" ${n?'':'disabled'}>👤 담당 총무 지정</button>`:''}
-    ${canXfer()?`<button class="btn2 sm" data-act="cmXfer" title="${ownMaster()?'총무끼리 고객을 넘기는 기능이에요 (마스터는 보기만)':'고른 고객이나 내 담당 단지를 다른 총무에게 넘겨요'}">🤝 담당 넘기기</button>`:''}
+    ${canXfer()?`<button class="btn2 sm" data-act="cmXfer" title="${ownMaster()&&isOwner()?'총무끼리 고객을 넘기는 기능이에요 (마스터는 보기만)':'고른 고객이나 내 담당 단지를 다른 총무에게 넘겨요'}">🤝 담당 넘기기</button>`:''}
     <button class="btn2 sm" data-act="cmSet" data-s="세차중" ${n?'':'disabled'}>세차중으로</button>
     <button class="btn2 sm st-pz" data-act="cmPause" data-k="일시정지" ${n?'':'disabled'}>일시정지</button>
     <button class="btn2 sm st-stop" data-act="cmPause" data-k="정지" ${n?'':'disabled'}>정지</button>
@@ -1814,7 +1814,7 @@ function canEditCx(cx){ const R=S.crole; if(!R||R.is_master) return true; if(!R.
   const c=cxT(cx); if((R.mine||[]).includes(c)) return true; if(voEdit()) return false; return !((R.owners||{})[c]||[]).length; }
 const ownersOf=cx=>((S.crole&&S.crole.owners)||{})[cxT(cx)]||[];
 // 11/01: 추가세차는 그 고객 담당 총무만 고쳐요 (마스터 · 다른 총무는 보기만 · SQL 84)
-function xtraEd(r){ const R=S.crole; if(!R||!R.is_chongmu||R.is_master||(R.view_only&&!voEdit())||!r) return false;
+function xtraEd(r){ const R=S.crole; if(!R||!R.is_chongmu||isOwner()||(R.view_only&&!voEdit())||!r) return false;
   const o=ovrOf(r.customer_id); return o?o.owner===(S.me&&S.me.id):(R.mine||[]).includes(cxT(r.complex)); }
 // 11/01: 고객 한 명씩 담당 (SQL 81) — 고객에 따로 정한 총무(S.ovr)가 있으면 단지 담당보다 먼저 봐요
 const ovrOf=cid=>cid!=null&&S.ovr?S.ovr[cid]||null:null;
@@ -1825,6 +1825,8 @@ function canEditC(cx,cid){ const R=S.crole; if(!R||R.is_master) return true; if(
 async function loadOvr(){ try{ const {data,error}=await db.rpc('list_customer_owners'); if(error) return; const m={}; (data||[]).forEach(r=>m[r.customer_id]={owner:r.owner_id,name:r.owner_name}); S.ovr=m; }catch(_){ } }
 // 담당 총무 지정 (마스터만): 고른 고객들의 단지를 한 총무에게 맡겨요 · 한 단지는 한 총무만
 const ownMaster=()=>!!(S.crole&&S.crole.is_master&&!S.crole.view_only);
+// 11/06: 진짜 마스터(사장님 계정)인지 — 마스터 권한을 받은 총무(김민선)는 총무 일도 계속 해요 (SQL 87)
+const isOwner=()=>!!(S.crole&&(S.crole.is_owner===undefined?S.crole.is_master:S.crole.is_owner));
 const noOwnCnt=()=>S.customers.filter(c=>!ownersOf(c.complex).length).length;
 function ownerDialog(){ const R=S.crole, sel=S.customers.filter(c=>S.cmSel.includes(c.id));
   const cxs=[...new Set(sel.map(c=>cxT(c.complex)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ko')), noCx=sel.filter(c=>!cxT(c.complex)).length;
@@ -1841,8 +1843,8 @@ function ownerDialog(){ const R=S.crole, sel=S.customers.filter(c=>S.cmSel.inclu
       S.crole=await q(db.rpc('get_my_coll_role')); S.cmSel=[];
       toast(uid?`단지 ${cxs.length}곳을 ${nm} 총무 담당으로 정했어요.`:`단지 ${cxs.length}곳의 담당 총무를 뺐어요.`); },null),build()); S.dialog.rebuild=build; }
 // 11/01: 총무끼리 담당 넘기기 — 고른 고객(한 명씩) · 단지째 골라 다른 총무에게 넘기면 바로 그 총무 담당이 돼요 (SQL 81)
-const canXfer=()=>!!(S.crole&&S.crole.is_chongmu&&!S.crole.is_master&&!S.crole.view_only)||ownMaster();   // 11/01: 마스터는 버튼 · 창만 보여요 (넘기기는 총무만 · DB도 막음 SQL 83)
-function xferDialog(){ const R=S.crole, me=S.me&&S.me.id, M=ownMaster(), mineCx=M?[]:[...(R.mine||[])].sort((a,b)=>a.localeCompare(b,'ko'));   // 마스터는 단지째는 [👤 담당 총무 지정]으로
+const canXfer=()=>!!(S.crole&&S.crole.is_chongmu&&!isOwner()&&!S.crole.view_only)||ownMaster();   // 11/01: 마스터는 버튼 · 창만 보여요 (넘기기는 총무만 · DB도 막음 SQL 83)
+function xferDialog(){ const R=S.crole, me=S.me&&S.me.id, M=ownMaster()&&isOwner(), mineCx=M?[]:[...(R.mine||[])].sort((a,b)=>a.localeCompare(b,'ko'));   // 마스터는 단지째는 [👤 담당 총무 지정]으로
   if(M){ const sel=S.customers.filter(c=>S.cmSel.includes(c.id)), line=(l,r)=>`<div style="display:flex;gap:8px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin:4px 0"><b style="flex:1">${l}</b><span class="sub">${r}</span></div>`;
     ask('🤝 담당 넘기기 (보기만)','총무가 자기 고객관리에서 고객을 체크하거나 단지를 골라 다른 총무에게 넘겨요. 받은 총무에게는 알림창이 떠요.\n마스터 계정은 넘길 수 없고 담당만 확인할 수 있어요.','닫기',()=>{ S.dialog=null; S.busy=false; render(); },
       sel.length?`<p class="note" style="margin:8px 0 4px">고른 고객의 지금 담당</p><div style="max-height:240px;overflow:auto">${sel.map(c=>line(esc(c.car_number||'')+(c.name?' · '+esc(c.name):''),esc([c.complex,c.unit].filter(Boolean).join(' '))+' · '+esc(ownersOfC(c.complex,c.id).join(', ')||'담당 없음'))).join('')}</div>`:'<p class="note">고객을 체크하고 누르면 지금 담당 총무를 볼 수 있어요.</p>'); return; }

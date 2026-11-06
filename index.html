@@ -1823,7 +1823,7 @@ function QRCategoryPanel({ qrCodes, onAdd, onDelete, isMaster }) {
 }
 
 function Dashboard({ currentUser, onLogout }) {
-  const isRealMaster = currentUser.role === 'master';
+  const isRealMaster = currentUser.role === 'master' || !!currentUser.master_rights;   // 11/06: 마스터 권한을 받은 관리자 (SQL 87)
   const isRealAdmin = currentUser.role === 'admin' || isRealMaster;
   // previewMode: 'none' | 'admin' | 'sales' - 마스터는 관리자/영업사원 화면을 각각 미리볼 수 있고, 일반 관리자는 영업사원 화면만 미리볼 수 있음
   const [previewMode, setPreviewMode] = useState('none');
