@@ -2244,11 +2244,12 @@ async function ledgerExport(){
     ws.mergeCells(3,c0+7,5,c0+7); put(3,c0+7,'당월\n미납',{b:true,fc:'FFFFFFFF',bg:'FF4A86E8'});
     ws.mergeCells(3,c0+8,5,c0+8); put(3,c0+8,'총\n미납',{b:true,fc:'FFFFFFFF',bg:'FF666666'}); });
   [3,4,5].forEach(r=>ws.getRow(r).height=r===3?22:18);
-  list.forEach((r,n)=>{ const rr=6+n, pd=(S.pdef||{})[r.id]||{}, mi=(S.mint||{})[r.id]||{}, inv=pd.pay_method==='세금계산서', b0=(by[r.id]||{})[mk(months[0])], owe=b0&&((b0.unpaid_before||0)+(b0.remaining||0))>0, bg=owe?'FFEDEDED':inv?'FFC9DAF8':undefined;   // 11/06: 미납 있는 줄은 연한 회색
+  list.forEach((r,n)=>{ const rr=6+n, pd=(S.pdef||{})[r.id]||{}, mi=(S.mint||{})[r.id]||{}, inv=pd.pay_method==='세금계산서', b0=(by[r.id]||{})[mk(months[0])], owe=b0&&((b0.unpaid_before||0)+(b0.remaining||0))>0, bg=owe?'FFEDEDED':inv?'FFC9DAF8':undefined;   // 11/06: 앞쪽 고정 칸은 최신 달 총미납 기준
     const fx=[n+1,lgStatus(r.wash_status),r.complex||'',r.unit||'',r.car_number||'',r.car_model||'',r.car_color||'',r.wash_weekday||'',lgPlan(r.wash_plan),
       r.payer_name&&r.payer_name!==r.name?`${r.name||''}\n${r.payer_name}`:(r.name||''),r.phone||'',[pd.pay_note,inv?'계산서 발행':''].filter(Boolean).join(' · '),r.fee??'',mi.plan_label||(mi.interior_fee?mi.interior_fee:''),pd.pay_account||'',lgKind(pd.pay_method),''];
     fx.forEach((v,i)=>put(rr,i+1,v,{b:i===2||i===4,bg:i===1?'FFFFE599':bg,nf:i===12||i===13?NUM:undefined,al:i===11?{vertical:'middle',wrapText:true}:C,sz:i===11?9:10}));
     months.forEach((d,m)=>{ const c0=NF+1+m*BW, b=(by[r.id]||{})[mk(d)], pv=(by[r.id]||{})[prevK(d)], [pe,pi]=split(pv);
+      const bg=b&&((b.unpaid_before||0)+(b.remaining||0))>0?'FFEDEDED':inv?'FFC9DAF8':undefined;   // 11/06: 달마다 그 달 총미납이 있을 때만 회색
       const day=b?(b.paid_days||'')+(b.paid&&!b.done?` (일부 ${Math.round(b.paid/10000*10)/10}만)`:'')+(inv&&b.paid_days?' 계산서':''):'';
       put(rr,c0,b&&b.total>0?(b.done?'☑':'☐'):'',{sz:14,fc:'FFE00000',bg});
       put(rr,c0+1,b&&b.paused?'정지':day,{b:true,bg,sz:9});
